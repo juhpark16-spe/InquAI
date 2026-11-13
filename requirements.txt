@@ -1,0 +1,28 @@
+# InquAI 파이썬 패키지 (Python 3.12, 1주차 기준 실제 설치 버전)
+#
+# 설치 (프로젝트 루트에서)
+#   python -m venv .venv
+#   .venv\Scripts\activate          (Windows)  /  source .venv/bin/activate (macOS·Linux)
+#   pip install -r requirements.txt
+#
+# PyTorch는 GPU(CUDA 13.2) 버전을 아래 주소에서 받습니다.
+# GPU가 없는 PC에서는 이 줄을 지우고 torch 버전 뒤의 +cu132를 빼면 CPU 버전이 설치됩니다.
+--extra-index-url https://download.pytorch.org/whl/cu132
+
+# 분류 모델 학습·추론
+torch==2.15.0+cu132
+transformers==5.22.2
+datasets==5.2.0
+accelerate==1.15.0
+scikit-learn==1.9.1
+
+# 데이터 처리
+pandas==3.1.1
+numpy==2.5.4
+
+# LLM (감정 라벨링, 기타 문의 생성, 처리 방식 판단·FAQ 답변)
+openai==3.49.0
+python-dotenv==1.2.4
+
+# 2주차부터 추가 예정: fastapi, uvicorn, sqlalchemy, pydantic-settings, pyjwt, pwdlib[argon2]
+# 3주차부터 추가 예정: langgraph, chromadb, sentence-transformers, langsmith

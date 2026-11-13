@@ -1,0 +1,21 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+
+# AI Hub 원본·정제 데이터 (이용 약관상 재배포 금지)
+data/raw/
+data/processed/
+
+# 학습된 모델·체크포인트 (용량이 큼)
+models/
+
+# 외부 테스트(AI Hub 소상공인 데이터)와, 그 문장이 오답 목록에 들어 있는 평가 보고서
+data/test/external_test.csv
+evaluation/*external*
+evaluation/cur_c4ext*
+
+# 리뷰 데이터를 섞은 실험용 파일 (AI Hub 감정분석 데이터)
+data/raw/inquiries_sentiment_reviews.csv

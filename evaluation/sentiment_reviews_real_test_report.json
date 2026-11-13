@@ -1,0 +1,131 @@
+{
+  "model_dir": "models/sentiment_reviews",
+  "test_file": "data/test/real_inquiries_100.csv",
+  "num_samples": 100,
+  "accuracy": 0.9,
+  "macro_f1": 0.9070813771517997,
+  "accuracy_by_difficulty": {
+    "보통": 0.8974358974358975,
+    "애매": 0.9090909090909091
+  },
+  "avg_latency_ms": 7.760838999529369,
+  "classification_report": {
+    "긍정": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 5.0
+    },
+    "중립": {
+      "precision": 0.9565217391304348,
+      "recall": 0.9041095890410958,
+      "f1-score": 0.9295774647887324,
+      "support": 73.0
+    },
+    "부정": {
+      "precision": 0.7307692307692307,
+      "recall": 0.8636363636363636,
+      "f1-score": 0.7916666666666666,
+      "support": 22.0
+    },
+    "accuracy": 0.9,
+    "macro avg": {
+      "precision": 0.8957636566332218,
+      "recall": 0.9225819842258199,
+      "f1-score": 0.9070813771517997,
+      "support": 100.0
+    },
+    "weighted avg": {
+      "precision": 0.9090301003344482,
+      "recall": 0.9,
+      "f1-score": 0.9027582159624413,
+      "support": 100.0
+    }
+  },
+  "confusion_matrix": {
+    "labels": [
+      "긍정",
+      "중립",
+      "부정"
+    ],
+    "matrix": [
+      [
+        5,
+        0,
+        0
+      ],
+      [
+        0,
+        66,
+        7
+      ],
+      [
+        0,
+        3,
+        19
+      ]
+    ]
+  },
+  "errors": [
+    {
+      "text": "송장번호가 조회가 안 됩니다. 택배사 사이트에 아무 정보도 안 떠요.",
+      "sentiment": "중립",
+      "pred": "부정",
+      "confidence": 0.9418
+    },
+    {
+      "text": "배송 조회하니까 3일째 같은 터미널에 멈춰 있어요 확인 부탁드려요",
+      "sentiment": "중립",
+      "pred": "부정",
+      "confidence": 0.9518
+    },
+    {
+      "text": "선물용으로 샀는데 필요 없어져서 취소하고 싶어요",
+      "sentiment": "중립",
+      "pred": "부정",
+      "confidence": 0.6394
+    },
+    {
+      "text": "주문을 취소했는데 취소 완료 문자가 안 왔어요",
+      "sentiment": "중립",
+      "pred": "부정",
+      "confidence": 0.7768
+    },
+    {
+      "text": "가족이 같은 걸 이미 사와서요 ㅠㅠ 주문 취소할 수 있을까요?",
+      "sentiment": "중립",
+      "pred": "부정",
+      "confidence": 0.939
+    },
+    {
+      "text": "받은 상품 단추가 하나 떨어져 있어요. 새 제품으로 교환해 주세요.",
+      "sentiment": "부정",
+      "pred": "중립",
+      "confidence": 0.8703
+    },
+    {
+      "text": "같은 주문이 두 번 결제됐어요. 하나 취소해 주세요.",
+      "sentiment": "부정",
+      "pred": "중립",
+      "confidence": 0.8726
+    },
+    {
+      "text": "쿠폰 적용하려는데 '사용 불가 상품'이라고 떠요.",
+      "sentiment": "중립",
+      "pred": "부정",
+      "confidence": 0.9484
+    },
+    {
+      "text": "구매 확정했는데 포인트 적립이 안 됐어요.",
+      "sentiment": "중립",
+      "pred": "부정",
+      "confidence": 0.942
+    },
+    {
+      "text": "회원 등급이 VIP에서 일반으로 내려갔어요. 이유가 뭔가요?",
+      "sentiment": "부정",
+      "pred": "중립",
+      "confidence": 0.873
+    }
+  ]
+}

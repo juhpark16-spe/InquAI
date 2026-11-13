@@ -1,0 +1,113 @@
+{
+  "model_dir": "models/sent_new",
+  "test_file": "data/test/real_inquiries_100.csv",
+  "num_samples": 100,
+  "accuracy": 0.93,
+  "macro_f1": 0.9274294756370383,
+  "accuracy_by_difficulty": {
+    "보통": 0.9358974358974359,
+    "애매": 0.9090909090909091
+  },
+  "avg_latency_ms": 11.414469000010286,
+  "classification_report": {
+    "긍정": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 5.0
+    },
+    "중립": {
+      "precision": 0.9342105263157895,
+      "recall": 0.9726027397260274,
+      "f1-score": 0.9530201342281879,
+      "support": 73.0
+    },
+    "부정": {
+      "precision": 0.8947368421052632,
+      "recall": 0.7727272727272727,
+      "f1-score": 0.8292682926829268,
+      "support": 22.0
+    },
+    "accuracy": 0.93,
+    "macro avg": {
+      "precision": 0.9429824561403509,
+      "recall": 0.9151100041510999,
+      "f1-score": 0.9274294756370383,
+      "support": 100.0
+    },
+    "weighted avg": {
+      "precision": 0.9288157894736843,
+      "recall": 0.93,
+      "f1-score": 0.9281437223768211,
+      "support": 100.0
+    }
+  },
+  "confusion_matrix": {
+    "labels": [
+      "긍정",
+      "중립",
+      "부정"
+    ],
+    "matrix": [
+      [
+        5,
+        0,
+        0
+      ],
+      [
+        0,
+        71,
+        2
+      ],
+      [
+        0,
+        5,
+        17
+      ]
+    ]
+  },
+  "errors": [
+    {
+      "text": "송장번호가 조회가 안 됩니다. 택배사 사이트에 아무 정보도 안 떠요.",
+      "sentiment": "중립",
+      "pred": "부정",
+      "confidence": 0.6141
+    },
+    {
+      "text": "배송 조회하니까 3일째 같은 터미널에 멈춰 있어요 확인 부탁드려요",
+      "sentiment": "중립",
+      "pred": "부정",
+      "confidence": 0.913
+    },
+    {
+      "text": "받은 상품 단추가 하나 떨어져 있어요. 새 제품으로 교환해 주세요.",
+      "sentiment": "부정",
+      "pred": "중립",
+      "confidence": 0.7219
+    },
+    {
+      "text": "반품 신청했는데 거절됐다고 나와요. 이유가 뭔가요?",
+      "sentiment": "부정",
+      "pred": "중립",
+      "confidence": 0.6524
+    },
+    {
+      "text": "결제하다가 오류가 났는데 돈은 빠져나갔어요.",
+      "sentiment": "부정",
+      "pred": "중립",
+      "confidence": 0.619
+    },
+    {
+      "text": "같은 주문이 두 번 결제됐어요. 하나 취소해 주세요.",
+      "sentiment": "부정",
+      "pred": "중립",
+      "confidence": 0.5686
+    },
+    {
+      "text": "회원 등급이 VIP에서 일반으로 내려갔어요. 이유가 뭔가요?",
+      "sentiment": "부정",
+      "pred": "중립",
+      "confidence": 0.7335
+    }
+  ]
+}

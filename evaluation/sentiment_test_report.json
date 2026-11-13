@@ -1,0 +1,79 @@
+{
+  "label_column": "sentiment",
+  "model_name": "monologg/koelectra-base-v3-discriminator",
+  "revision": null,
+  "num_samples": {
+    "train": 12764,
+    "valid": 1595,
+    "test": 1598
+  },
+  "accuracy": 0.9468085106382979,
+  "macro_f1": 0.8922969977505523,
+  "classification_report": {
+    "긍정": {
+      "precision": 0.9565217391304348,
+      "recall": 1.0,
+      "f1-score": 0.9777777777777777,
+      "support": 22.0
+    },
+    "중립": {
+      "precision": 0.9745403111739745,
+      "recall": 0.9656622284512965,
+      "f1-score": 0.970080957409363,
+      "support": 1427.0
+    },
+    "부정": {
+      "precision": 0.7018633540372671,
+      "recall": 0.7583892617449665,
+      "f1-score": 0.7290322580645161,
+      "support": 149.0
+    },
+    "accuracy": 0.9468085106382979,
+    "macro avg": {
+      "precision": 0.8776418014472255,
+      "recall": 0.9080171633987543,
+      "f1-score": 0.8922969977505523,
+      "support": 1598.0
+    },
+    "weighted avg": {
+      "precision": 0.9488674230648837,
+      "recall": 0.9468085106382979,
+      "f1-score": 0.9477111663240834,
+      "support": 1598.0
+    }
+  },
+  "confusion_matrix": {
+    "labels": [
+      "긍정",
+      "중립",
+      "부정"
+    ],
+    "matrix": [
+      [
+        22,
+        0,
+        0
+      ],
+      [
+        1,
+        1378,
+        48
+      ],
+      [
+        0,
+        36,
+        113
+      ]
+    ]
+  },
+  "hyperparameters": {
+    "epochs": 5,
+    "lr": 2e-05,
+    "batch_size": 16,
+    "max_length": 256,
+    "class_weight": true,
+    "class_weight_power": 0.5,
+    "label_smoothing": 0.1,
+    "seed": 42
+  }
+}

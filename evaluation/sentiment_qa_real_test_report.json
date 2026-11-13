@@ -1,0 +1,137 @@
+{
+  "model_dir": "models/sentiment_qa",
+  "test_file": "data/test/real_inquiries_100.csv",
+  "num_samples": 100,
+  "accuracy": 0.89,
+  "macro_f1": 0.8963447899618112,
+  "accuracy_by_difficulty": {
+    "보통": 0.9102564102564102,
+    "애매": 0.8181818181818182
+  },
+  "avg_latency_ms": 7.867632999914349,
+  "classification_report": {
+    "긍정": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 5.0
+    },
+    "중립": {
+      "precision": 0.9428571428571428,
+      "recall": 0.9041095890410958,
+      "f1-score": 0.9230769230769231,
+      "support": 73.0
+    },
+    "부정": {
+      "precision": 0.72,
+      "recall": 0.8181818181818182,
+      "f1-score": 0.7659574468085106,
+      "support": 22.0
+    },
+    "accuracy": 0.89,
+    "macro avg": {
+      "precision": 0.8876190476190476,
+      "recall": 0.9074304690743048,
+      "f1-score": 0.8963447899618112,
+      "support": 100.0
+    },
+    "weighted avg": {
+      "precision": 0.8966857142857143,
+      "recall": 0.89,
+      "f1-score": 0.8923567921440262,
+      "support": 100.0
+    }
+  },
+  "confusion_matrix": {
+    "labels": [
+      "긍정",
+      "중립",
+      "부정"
+    ],
+    "matrix": [
+      [
+        5,
+        0,
+        0
+      ],
+      [
+        0,
+        66,
+        7
+      ],
+      [
+        0,
+        4,
+        18
+      ]
+    ]
+  },
+  "errors": [
+    {
+      "text": "송장번호가 조회가 안 됩니다. 택배사 사이트에 아무 정보도 안 떠요.",
+      "sentiment": "중립",
+      "pred": "부정",
+      "confidence": 0.7916
+    },
+    {
+      "text": "배송 조회하니까 3일째 같은 터미널에 멈춰 있어요 확인 부탁드려요",
+      "sentiment": "중립",
+      "pred": "부정",
+      "confidence": 0.8199
+    },
+    {
+      "text": "주문을 취소했는데 취소 완료 문자가 안 왔어요",
+      "sentiment": "중립",
+      "pred": "부정",
+      "confidence": 0.5828
+    },
+    {
+      "text": "받은 상품 단추가 하나 떨어져 있어요. 새 제품으로 교환해 주세요.",
+      "sentiment": "부정",
+      "pred": "중립",
+      "confidence": 0.659
+    },
+    {
+      "text": "교환 접수했는데 회수 기사님이 아직 안 오셨어요.",
+      "sentiment": "중립",
+      "pred": "부정",
+      "confidence": 0.4637
+    },
+    {
+      "text": "환불 금액이 결제한 금액보다 적게 들어왔어요. 왜 그런가요?",
+      "sentiment": "부정",
+      "pred": "중립",
+      "confidence": 0.4877
+    },
+    {
+      "text": "같은 주문이 두 번 결제됐어요. 하나 취소해 주세요.",
+      "sentiment": "부정",
+      "pred": "중립",
+      "confidence": 0.692
+    },
+    {
+      "text": "가상계좌로 입금했는데 아직 입금 확인이 안 됐다고 나와요.",
+      "sentiment": "중립",
+      "pred": "부정",
+      "confidence": 0.7565
+    },
+    {
+      "text": "비밀번호를 잊어버렸어요. 재설정 메일이 안 와요.",
+      "sentiment": "중립",
+      "pred": "부정",
+      "confidence": 0.572
+    },
+    {
+      "text": "구매 확정했는데 포인트 적립이 안 됐어요.",
+      "sentiment": "중립",
+      "pred": "부정",
+      "confidence": 0.7353
+    },
+    {
+      "text": "회원 등급이 VIP에서 일반으로 내려갔어요. 이유가 뭔가요?",
+      "sentiment": "부정",
+      "pred": "중립",
+      "confidence": 0.6881
+    }
+  ]
+}
