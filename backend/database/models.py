@@ -170,7 +170,7 @@ class AgentLog(TimestampMixin, Base):
     used_faq_ids: Mapped[list] = mapped_column(JSON, default=list)
     reason: Mapped[str | None] = mapped_column(Text)
     response_text: Mapped[str | None] = mapped_column(Text)
-    llm_model: Mapped[str | None] = mapped_column(String(30))
+    llm_model: Mapped[str | None] = mapped_column(String(50))
     tokens: Mapped[dict | None] = mapped_column(JSON)
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     trace_url: Mapped[str | None] = mapped_column(String(500))

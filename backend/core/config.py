@@ -14,9 +14,12 @@ class Settings(BaseSettings):
     app_name: str = "InquAI"
     database_url: str = "sqlite:///./data/inquai.db"
 
-    # OpenAI
+    # OpenAI (추론 강도 low: 1주차 프롬프트 검증에서 정확도·속도 균형이 가장 좋았음)
     openai_api_key: str = ""
     openai_model: str = "gpt-5-mini"
+    llm_reasoning_effort: str = "low"
+    # 문의 등록 1건의 에이전트 처리 제한 시간. 넘으면 자동 답변 없이 '검토 대기' (docs/api_spec.md 3장)
+    agent_timeout_seconds: float = 20.0
 
     # 로그인 (기획서 6장, docs/api_spec.md 1장)
     jwt_secret_key: str = ""
@@ -30,9 +33,12 @@ class Settings(BaseSettings):
     # CORS: 쉼표로 여러 주소
     frontend_origins: str = "http://localhost:5173"
 
-    # 분류 모델 폴더
+    # 분류 모델 폴더와 버전 이름 (docs/model_card.md). 테스트에서는 load_models=false 로 불러오지 않음
+    load_models: bool = True
     category_model_dir: Path = PROJECT_ROOT / "models" / "category_classifier"
     sentiment_model_dir: Path = PROJECT_ROOT / "models" / "sentiment_classifier"
+    category_model_version: str = "category_ev_s123"
+    sentiment_model_version: str = "sentiment_v1"
 
     # 초기 계정 비밀번호 (seed_admin.py)
     seed_admin_password: str = ""

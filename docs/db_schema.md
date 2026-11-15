@@ -192,7 +192,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | **used_faq_ids** | JSON | **답변에 쓴 FAQ 번호** |
 | **reason** | TEXT | **판단 이유** |
 | response_text | TEXT NULL | 생성된 답변 |
-| **llm_model** | VARCHAR(30) | **예: `gpt-5-mini (reasoning_effort=low)`** |
+| **llm_model** | VARCHAR(50) | **예: `gpt-5-mini (reasoning_effort=low)`** |
 | **tokens** | JSON | **입력·출력 토큰 수** (비용 계산) |
 | latency_ms | INT | 에이전트 전체 처리 시간 |
 | trace_url | VARCHAR(500) NULL | LangSmith 추적 링크 |

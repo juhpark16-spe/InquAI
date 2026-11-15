@@ -13,10 +13,13 @@ _tmp = Path(tempfile.mkdtemp(prefix="inquai_test_"))
 os.environ["DATABASE_URL"] = f"sqlite:///{(_tmp / 'test.db').as_posix()}"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-only-for-pytest-0123456789"
 os.environ["COOKIE_SECURE"] = "false"
+os.environ["LOAD_MODELS"] = "false"   # 분류 모델·LLM은 테스트마다 가짜로 끼움 (test_inquiries.py)
+os.environ["OPENAI_API_KEY"] = ""
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+from backend.core import rate_limit  # noqa: E402
 from backend.core.security import hash_password  # noqa: E402
 from backend.database.models import AdminUser  # noqa: E402
 from backend.database.session import Base, SessionLocal, engine  # noqa: E402
@@ -40,5 +43,6 @@ def db():
 
 @pytest.fixture()
 def client(db):
+    rate_limit.reset()
     with TestClient(app) as c:
         yield c

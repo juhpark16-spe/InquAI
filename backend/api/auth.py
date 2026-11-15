@@ -11,8 +11,9 @@ from backend.core.dependencies import DB, LoginUser, verify_csrf
 from backend.core.errors import AppError
 from backend.core.security import (REFRESH_COOKIE, clear_auth_cookies, create_access_token, create_refresh_token,
                                    decode_token, set_auth_cookies, verify_password)
-from backend.database.models import AdminAuditLog, AdminUser, RefreshToken, as_utc, utcnow
+from backend.database.models import AdminUser, RefreshToken, as_utc, utcnow
 from backend.schemas.auth import LoginRequest, LoginResponse, UserOut
+from backend.services.audit import add_audit
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -20,10 +21,8 @@ LOGIN_FAILED_MESSAGE = "아이디 또는 비밀번호가 올바르지 않습니�
 
 
 def _audit(db, request: Request, action: str, user: AdminUser | None, **detail) -> None:
-    detail["ip"] = request.client.host if request.client else None
-    db.add(AdminAuditLog(admin_id=user.id if user else None, action=action,
-                         target_type="admin_user" if user else None, target_id=user.id if user else None,
-                         detail=detail))
+    add_audit(db, request, action, user, target_type="admin_user" if user else None,
+              target_id=user.id if user else None, **detail)
 
 
 def _issue_tokens(db, response: Response, user: AdminUser) -> None:

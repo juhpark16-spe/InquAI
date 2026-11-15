@@ -114,6 +114,11 @@
 - **실패 처리:** LLM 오류나 20초 초과 시 자동 답변 없이 `검토 대기`로 저장하고 `agent_logs.error`에 기록합니다. 고객 응답은 위의 "접수되었습니다" 형식입니다.
 - **주문번호가 있으면** 배송 조회·티켓 접수 전에 주문의 고객 이메일과 `customer_email`이 같은지 확인합니다. 다르면 도구를 실행하지 않고 `담당자 처리`로 보냅니다 (기획서 2-4).
 - **입력 제한:** content 5~2,000자, title 1~200자, 이메일 형식 확인. 같은 IP에서 1분에 5건 초과 시 429.
+- **2주차 구현 범위** (`backend/services/inquiries.py`, `backend/agents/pipeline.py`):
+  - 처리 흐름은 위 순서대로 동작하고, FAQ 검색은 임시 TF-IDF입니다 (3주차에 ChromaDB로 교체).
+  - 답변 초안(검토 대기)은 도구 결과(배송 조회 결과, 티켓 번호)만 `agent_logs.tool_output`에 남기고, 초안 문장 작성은 3주차에 붙입니다. 자동 답변이었다가 근거 부족으로 내려간 경우에만 초안 문장이 `responses`에 들어갑니다.
+  - 티켓 접수는 주문번호가 있을 때만 만들고, 없으면 `tool_success=false`로 남겨 상담원이 고객에게 확인합니다.
+  - 분류 모델이 준비되지 않았으면 503 `MODEL_NOT_READY`.
 
 ### POST /api/inquiries/lookup — 본인 문의 조회
 ```json
@@ -192,12 +197,16 @@
 { "assigned_to": 2 }      // null이면 배정 해제
 ```
 - status가 `검토 대기`·`접수`이면 `담당자 처리`로 바꿉니다. audit_logs (assign)
+- 없는 계정·비활성 계정에 배정하면 400 `INVALID_ASSIGNEE`. 배정자와 상태가 그대로면 기록하지 않습니다.
+- 응답: `{ "id", "inquiry_number", "status", "assigned_to": {id, display_name} | null, "updated_at" }` (상태 변경도 같음)
 
 ### PATCH /api/inquiries/{id}/status — 상태 변경 (로그인, **추가**)
 ```json
 { "status": "완료" }
 ```
 - 답변 없이 끝내는 경우(중복 문의, 스팸 등)용. audit_logs (status_change)
+- 바꿀 수 있는 값: `검토 대기`, `담당자 처리`, `완료` (완료한 문의 다시 열기 포함). `접수`·`자동 처리`는 시스템만 정하므로 422
+- 지금과 같은 상태로 바꾸면 400 `INVALID_STATE`. 상담원은 배정된 문의만 (아니면 403)
 
 ## 5. 답변 API (로그인)
 
