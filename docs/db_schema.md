@@ -202,7 +202,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 
 | 컬럼 | 타입 | 설명 |
 | --- | --- | --- |
-| admin_id | FK → admin_users | 작업한 사람 |
+| admin_id | FK → admin_users NULL | 작업한 사람. 없는 아이디로 로그인 실패하면 NULL이고, 시도한 아이디는 `detail`에 남김 |
 | action | VARCHAR(30) | 아래 값 |
 | target_type | VARCHAR(20) | inquiry / response / ticket / faq / analysis |
 | target_id | INT | |

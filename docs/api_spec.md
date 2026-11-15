@@ -15,7 +15,9 @@
 | --- | --- | --- | --- |
 | `access_token` | O | 30분 | JWT (`sub`=사용자 id, `role`, `exp`) |
 | `refresh_token` | O | 7일 | JWT (`sub`, `jti`). `jti`를 `refresh_tokens` 테이블에 기록 |
-| `csrf_token` | **X** (React가 읽음) | access와 같음 | 무작위 문자열 |
+| `csrf_token` | **X** (React가 읽음) | refresh와 같음 (7일) | 무작위 문자열. 로그인·재발급 때마다 새로 만듦 |
+
+- `csrf_token`을 access(30분)와 같게 두면 access가 만료된 뒤 `/api/auth/refresh`를 부를 때 CSRF 값이 없어 재발급할 수 없어서, refresh와 같은 7일로 정했습니다 (2주차 구현 시 변경).
 
 - 모든 쿠키: `SameSite=Lax`, `Secure`(개발 환경에서는 `.env`의 `COOKIE_SECURE=false`로 끔), `Path=/api`
 - **CSRF:** 로그인이 필요한 POST·PUT·PATCH·DELETE 요청은 헤더 `X-CSRF-Token`에 `csrf_token` 쿠키 값을 넣어야 합니다. 값이 다르면 403.
@@ -57,15 +59,18 @@
 ```
 - 실패하면 `failed_login_count`를 올리고, 5회째에 `locked_until = 지금 + 15분` → 423
 - 잠금 시각이 지나면 자동 해제. 성공하면 실패 횟수 0
-- 성공·실패 모두 `admin_audit_logs`에 기록 (login / login_failed)
+- 성공·실패 모두 `admin_audit_logs`에 기록 (login / login_failed). 실패 이유(`wrong_password`, `unknown_user`, `locked`, `inactive`)와 IP를 `detail`에 남김
+- 잠금은 아이디 기준이라, 없는 아이디는 실패 횟수를 세지 않습니다 (기록만 남김)
 - 아이디가 없을 때와 비밀번호가 틀릴 때 같은 메시지: "아이디 또는 비밀번호가 올바르지 않습니다."
 
 ### POST /api/auth/refresh — Access Token 재발급 (refresh_token 쿠키)
+- `X-CSRF-Token` 헤더 필요. 응답은 로그인과 같은 `{ "user": ... }` + 새 쿠키 세 개
 - 기존 `jti`를 무효화(`revoked_at`)하고 새 refresh_token을 발급 (토큰 회전)
-- 무효화된 토큰으로 요청하면 401 → 다시 로그인
+- 무효화된 토큰으로 요청하면 401 → 다시 로그인. **이미 회전된 토큰이 다시 오면 토큰이 새어 나간 것으로 보고 그 사용자의 refresh_token을 모두 무효화**
 
-### POST /api/auth/logout — 로그아웃 (로그인)
+### POST /api/auth/logout — 로그아웃 (refresh_token 쿠키)
 - 세 쿠키 삭제, refresh_token의 `jti` 무효화. 응답 204
+- access_token이 만료된 상태에서도 로그아웃할 수 있게 refresh_token 쿠키로 사용자를 찾습니다. refresh_token 쿠키가 있으면 `X-CSRF-Token` 헤더 필요
 
 ### GET /api/auth/me — 내 정보 (로그인)
 ```json

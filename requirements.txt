@@ -24,5 +24,16 @@ numpy==2.5.4
 openai==3.49.0
 python-dotenv==1.2.4
 
-# 2주차부터 추가 예정: fastapi, uvicorn, sqlalchemy, pydantic-settings, pyjwt, pwdlib[argon2]
+# 백엔드 서버·DB·인증 (2주차)
+fastapi==0.162.5
+uvicorn[standard]==0.54.0
+sqlalchemy==2.1.8
+pydantic-settings==2.16.3
+pyjwt==2.15.1
+pwdlib[argon2]==0.3.1
+
+# 테스트 (python -m pytest backend/tests -q)
+pytest==9.2.0
+httpx==0.28.1
+
 # 3주차부터 추가 예정: langgraph, chromadb, sentence-transformers, langsmith
