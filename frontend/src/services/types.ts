@@ -50,6 +50,8 @@ export interface InquiryCreate {
   title: string;
   content: string;
   password: string;
+  privacy_agreed: boolean;
+  attachment_tokens: string[];
 }
 
 export interface InquiryCreated {
@@ -67,6 +69,11 @@ export interface InquiryPublic {
   answer: string | null;
   created_at: string;
   answered_at: string | null;
+  answers: { id: number; text: string; answered_at: string; by: string; rating: number | null }[]; // 보낸 답변 전부 (시간순)
+  messages: { id: number; text: string; at: string }[]; // 고객 추가 문의
+  attachment_count: number;
+  attachments: { url: string; filename: string; message_id: number | null }[]; // 30분짜리 사진 주소
+  can_follow_up: boolean;
 }
 
 // ---- 관리 ----
@@ -82,6 +89,8 @@ export interface InquiryListItem {
   decision: string | null;
   assigned_to: Assignee | null;
   created_at: string;
+  due_at: string;
+  overdue: boolean;
 }
 
 export interface Analysis {
@@ -107,6 +116,7 @@ export interface ResponseItem {
   used_faq_ids: string[];
   grounded: boolean | null;
   is_edited: boolean;
+  rating: number | null;
   approved_by: number | null;
   approved_at: string | null;
   created_at: string;
@@ -157,6 +167,35 @@ export interface InquiryDetail {
   tickets: Ticket[];
   agent_logs: AgentLog[];
   corrections: { id: number; field: string; before_label: string; after_label: string; created_at: string }[];
+  order: OrderCard | null;
+  email_orders: OrderCard[]; // 문의 이메일로 찾은 다른 주문 (본인 확인 필요)
+  customer_history: { id: number; inquiry_number: string; title: string; status: string; created_at: string }[];
+  faq_titles: Record<string, string>;
+  history: { at: string; actor: string; text: string; kind: "received" | "followup" | "ai" | "assign" | "status" | "draft" | "sent" }[];
+  due_at: string;
+  overdue: boolean;
+  messages: { id: number; text: string; created_at: string }[];
+  notes: { id: number; author: string; text: string; created_at: string }[];
+  attachments: { id: number; filename: string; content_type: string; size: number; message_id: number | null; created_at: string }[];
+  notifications: { channel: string; recipient: string; subject: string; status: string; created_at: string }[];
+}
+
+export interface OrderCard {
+  found: boolean;
+  order_number: string;
+  email_match: boolean | null;
+  orderer: string | null;
+  product_name: string | null;
+  amount: number | null;
+  order_status: string | null;
+  shipping_status: string | null;
+  tracking_number: string | null;
+  ordered_at: string | null;
+  delivered_at: string | null;
+  cancellable: boolean | null;
+  return_until: string | null;
+  returnable: boolean | null;
+  defect_return_until: string | null;
 }
 
 export interface InquiryState {

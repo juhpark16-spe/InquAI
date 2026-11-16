@@ -22,3 +22,6 @@ data/raw/inquiries_sentiment_reviews.csv
 
 # 개발용 SQLite DB
 data/inquai.db*
+
+# 고객이 올린 첨부 사진 (개인정보 포함 가능)
+data/uploads/

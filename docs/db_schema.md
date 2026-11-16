@@ -129,6 +129,17 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 
 처음 데이터는 `data/faq/faqs.csv`로 넣습니다.
 
+### 고객센터 기능 테이블 (2주차 추가)
+
+| 테이블 | 주요 컬럼 | 쓰임 |
+| --- | --- | --- |
+| customer_messages | inquiry_id, content | 고객 추가 문의 (같은 문의에 이어서) |
+| inquiry_notes | inquiry_id, author_id, text | 상담원 내부 메모 (고객에게 안 보임) |
+| attachments | token(UNIQUE), inquiry_id NULL, message_id NULL, filename, content_type, size, path | 고객 사진. 먼저 올려 token 을 받고 문의 등록 때 연결. 파일은 `data/uploads/`(Git 제외) |
+| notifications | inquiry_id, channel, recipient, subject, body, status | 답변 알림 기록 (메일 서버 없이 시연용으로 기록만) |
+
+- inquiries에 **privacy_agreed_at**(개인정보 동의 시각), responses에 **rating**(1 / -1)·**rated_at** 추가
+
 ### label_corrections — 관리자가 고친 분류 결과 (재학습 데이터)
 
 | 컬럼 | 타입 | 설명 |
@@ -210,7 +221,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | target_id | INT | |
 | detail | JSON | 바뀌기 전·후 값 (예: `{"before": "검토 대기", "after": "완료"}`) |
 
-**action 값:** login, login_failed, logout, status_change, assign, response_edit, response_approve, ticket_approve, ticket_reject, label_correct, faq_create, faq_update, faq_deactivate, user_create, user_update, user_password_reset, password_change (본인 변경), auto_assign (시스템 자동 배정, admin_id 없음)
+**action 값:** login, login_failed, logout, status_change, assign, response_create, response_edit, response_approve, ticket_approve, ticket_reject, label_correct, faq_create, faq_update, faq_deactivate, user_create, user_update, user_password_reset, password_change (본인 변경), note_create, auto_assign (시스템 자동 배정, admin_id 없음)
 
 ## 3. 인덱스
 

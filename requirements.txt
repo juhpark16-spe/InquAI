@@ -31,6 +31,7 @@ sqlalchemy==2.1.8
 pydantic-settings==2.16.3
 pyjwt==2.15.1
 pwdlib[argon2]==0.3.1
+python-multipart==0.0.33   # 문의 사진 첨부 (파일 업로드)
 
 # 테스트 (python -m pytest backend/tests -q)
 pytest==9.2.0

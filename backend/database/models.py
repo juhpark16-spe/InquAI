@@ -36,9 +36,10 @@ TICKET_TYPES = ("환불", "교환", "취소", "이관")
 TICKET_STATUSES = ("접수", "처리 중", "승인", "반려")
 TOOLS = ("FAQ 검색", "배송 조회", "티켓 접수", "상담원 이관")
 AUDIT_ACTIONS = (
-    "login", "login_failed", "logout", "status_change", "assign", "response_edit", "response_approve",
+    "login", "login_failed", "logout", "status_change", "assign", "response_create", "response_edit",
+    "response_approve",
     "ticket_approve", "ticket_reject", "label_correct", "faq_create", "faq_update", "faq_deactivate",
-    "user_create", "user_update", "user_password_reset", "auto_assign", "password_change",
+    "user_create", "user_update", "user_password_reset", "auto_assign", "password_change", "note_create",
 )
 
 
@@ -104,6 +105,7 @@ class Inquiry(TimestampMixin, Base):
     title: Mapped[str] = mapped_column(String(200))
     content: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(10), default="접수")
+    privacy_agreed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 개인정보 수집·이용 동의 시각
     assigned_to: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
@@ -112,6 +114,9 @@ class Inquiry(TimestampMixin, Base):
     responses: Mapped[list["Response"]] = relationship(back_populates="inquiry", order_by="Response.id")
     tickets: Mapped[list["Ticket"]] = relationship(back_populates="inquiry")
     agent_logs: Mapped[list["AgentLog"]] = relationship(back_populates="inquiry", order_by="AgentLog.id")
+    messages: Mapped[list["CustomerMessage"]] = relationship(order_by="CustomerMessage.id")
+    notes: Mapped[list["InquiryNote"]] = relationship(order_by="InquiryNote.id")
+    attachments: Mapped[list["Attachment"]] = relationship(order_by="Attachment.id")
 
 
 class AnalysisResult(TimestampMixin, Base):
@@ -147,6 +152,8 @@ class Response(TimestampMixin, Base):
     approved_by: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"))
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     is_edited: Mapped[bool] = mapped_column(Boolean, default=False)
+    rating: Mapped[int | None] = mapped_column(Integer)  # 고객 평가: 1 도움됨, -1 도움 안 됨, None 평가 전
+    rated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     inquiry: Mapped[Inquiry] = relationship(back_populates="responses")
 
@@ -185,6 +192,48 @@ class AgentLog(TimestampMixin, Base):
     error: Mapped[str | None] = mapped_column(Text)
 
     inquiry: Mapped[Inquiry] = relationship(back_populates="agent_logs")
+
+
+class CustomerMessage(TimestampMixin, Base):
+    """고객의 추가 문의 (답변을 본 뒤 같은 문의에 이어서 남긴 글)"""
+    __tablename__ = "customer_messages"
+
+    inquiry_id: Mapped[int] = mapped_column(ForeignKey("inquiries.id"), index=True)
+    content: Mapped[str] = mapped_column(Text)
+
+
+class InquiryNote(TimestampMixin, Base):
+    """상담원 내부 메모 (고객에게는 보이지 않음)"""
+    __tablename__ = "inquiry_notes"
+
+    inquiry_id: Mapped[int] = mapped_column(ForeignKey("inquiries.id"), index=True)
+    author_id: Mapped[int] = mapped_column(ForeignKey("admin_users.id"))
+    text: Mapped[str] = mapped_column(Text)
+
+
+class Attachment(TimestampMixin, Base):
+    """고객이 올린 사진. 먼저 올려 token 을 받고, 문의를 등록할 때 token 으로 문의에 연결"""
+    __tablename__ = "attachments"
+
+    token: Mapped[str] = mapped_column(String(64), unique=True)
+    inquiry_id: Mapped[int | None] = mapped_column(ForeignKey("inquiries.id"), index=True)
+    message_id: Mapped[int | None] = mapped_column(ForeignKey("customer_messages.id"))  # 추가 문의에 붙은 사진
+    filename: Mapped[str] = mapped_column(String(200))   # 고객이 올린 원래 이름 (화면 표시용)
+    content_type: Mapped[str] = mapped_column(String(30))
+    size: Mapped[int] = mapped_column(Integer)
+    path: Mapped[str] = mapped_column(String(300))        # 서버 저장 위치 (무작위 이름)
+
+
+class Notification(TimestampMixin, Base):
+    """고객 알림 기록. 실제 메일 서버 없이 '보낼 메일'을 기록만 함 (시연용)"""
+    __tablename__ = "notifications"
+
+    inquiry_id: Mapped[int] = mapped_column(ForeignKey("inquiries.id"), index=True)
+    channel: Mapped[str] = mapped_column(String(10), default="email")
+    recipient: Mapped[str] = mapped_column(String(255))
+    subject: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(10), default="기록")  # 기록(시연) / 발송 / 실패
 
 
 # ---- FAQ -------------------------------------------------------------------

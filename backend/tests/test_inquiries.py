@@ -67,7 +67,7 @@ PW = "my-lookup-pw"
 
 def post(client, content="배송은 보통 며칠 걸려요?", **extra):
     body = {"customer_name": "김민준", "customer_email": "Customer01@Example.com", "title": "문의",
-            "content": content, "password": PW, **extra}
+            "content": content, "password": PW, "privacy_agreed": True, **extra}
     return client.post("/api/inquiries", json=body)
 
 
@@ -146,7 +146,8 @@ def test_order_email_mismatch_escalates(client, db, ai):
     ai["llm"].replies = {"route": route_reply("답변 초안", "배송 조회")}
     r = client.post("/api/inquiries", json={"customer_name": "남", "customer_email": "other@example.com",
                                             "title": "문의", "content": "제 주문 어디쯤 왔어요?",
-                                            "order_number": "20261110-0001", "password": PW})
+                                            "order_number": "20261110-0001", "password": PW,
+                                            "privacy_agreed": True})
     body = r.json()
     assert body["status"] == "담당자 처리"
     _, log = saved(db, body["inquiry_number"])

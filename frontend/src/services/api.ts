@@ -5,7 +5,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 
 import type {
-  FaqPublic, InquiryCreate, InquiryCreated, InquiryDetail, InquiryListItem, InquiryPublic, InquiryState, Page, Role, User,
+  FaqPublic, InquiryCreate, ResponseItem, InquiryCreated, InquiryDetail, InquiryListItem, InquiryPublic, InquiryState, Page, Role, User,
   UserDetail,
 } from "./types";
 
@@ -73,7 +73,18 @@ export const customerApi = {
   create: (body: InquiryCreate) =>
     http.post<InquiryCreated>("/inquiries", body, { timeout: 30000 }).then((r) => r.data),
   lookup: (customer_email: string, password: string) =>
-    http.post<{ items: InquiryPublic[] }>("/inquiries/lookup", { customer_email, password }).then((r) => r.data.items),
+    http.post<{ items: InquiryPublic[]; notice: string }>("/inquiries/lookup", { customer_email, password }).then((r) => r.data),
+  upload: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return http.post<{ token: string; filename: string; size: number }>("/inquiries/uploads", form).then((r) => r.data);
+  },
+  followUp: (customer_email: string, password: string, inquiry_number: string, content: string, attachment_tokens: string[]) =>
+    http.post<{ status: string; message: string }>("/inquiries/follow-up",
+      { customer_email, password, inquiry_number, content, attachment_tokens }).then((r) => r.data),
+  rate: (answerId: number, inquiry_number: string, customer_email: string, password: string, helpful: boolean) =>
+    http.post<{ rating: number }>(`/inquiries/answers/${answerId}/rating`, { customer_email, password, helpful },
+      { params: { inquiry_number } }).then((r) => r.data),
   faqs: () => http.get<FaqPublic[]>("/public/faqs").then((r) => r.data),
   suggestFaqs: (q: string, signal?: AbortSignal) =>
     http.get<FaqPublic[]>("/public/faqs/suggest", { params: { q }, signal }).then((r) => r.data),
@@ -86,6 +97,7 @@ export interface InquiryFilters {
   status?: string;
   decision?: string;
   open?: string;
+  overdue?: string;
   assigned_to?: string;
   q?: string;
   sort?: "urgency" | "-created_at";
@@ -104,13 +116,25 @@ export const inquiryApi = {
   setStatus: (id: number, status: string) =>
     http.patch<InquiryState>(`/inquiries/${id}/status`, { status }).then((r) => r.data),
   staff: () => http.get<User[]>("/admin/staff").then((r) => r.data),
+  addNote: (id: number, text: string) => http.post(`/inquiries/${id}/notes`, { text }).then((r) => r.data),
+  attachmentUrl: (inquiryId: number, attachmentId: number) => `/api/inquiries/${inquiryId}/attachments/${attachmentId}`,
+};
+
+// ---- 답변 (상담원 직접 작성·초안 수정·발송) ----
+export const responseApi = {
+  create: (inquiryId: number, text: string, send: boolean) =>
+    http.post<ResponseItem>(`/inquiries/${inquiryId}/responses`, { text, send }).then((r) => r.data),
+  update: (id: number, text: string) => http.put<ResponseItem>(`/responses/${id}`, { text }).then((r) => r.data),
+  approve: (id: number, text?: string) =>
+    http.post<ResponseItem>(`/responses/${id}/approve`, text === undefined ? undefined : { text }).then((r) => r.data),
 };
 
 // ---- 대시보드 통계 (관리자) ----
 export interface StatsSummary {
   range: { from: string; to: string; days: number };
   kpi: { total: number; today: number | null; auto_rate: number | null; approval_without_edit_rate: number | null };
-  now: { open: number; urgent_open: number; review_waiting: number; unassigned_open: number };
+  now: { open: number; urgent_open: number; review_waiting: number; unassigned_open: number; overdue_open: number };
+  ratings: Record<"ai" | "agent", { up: number; down: number; satisfaction: number | null }>;
   daily: { date: string; total: number; open: number; done: number; by_category: Record<string, number> }[];
   by_status: Record<string, number>;
   by_category: Record<string, number>;

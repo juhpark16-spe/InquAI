@@ -27,7 +27,7 @@ export default function InquiryListPage() {
     inquiryApi
       .list({
         category: params.get("category") ?? "", urgency: params.get("urgency") ?? "",
-        status: params.get("status") ?? "", decision: params.get("decision") ?? "", open: params.get("open") ?? "",
+        status: params.get("status") ?? "", decision: params.get("decision") ?? "", open: params.get("open") ?? "", overdue: params.get("overdue") ?? "",
         assigned_to: params.get("assigned_to") ?? "", q: params.get("q") ?? "",
         sort: (params.get("sort") as "urgency" | "-created_at") ?? "urgency", page, size: SIZE,
       })
@@ -79,6 +79,10 @@ export default function InquiryListPage() {
           <input type="checkbox" checked={params.get("open") === "true"} onChange={(e) => update("open", e.target.checked ? "true" : "")} />
           미처리만
         </label>
+        <label className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700">
+          <input type="checkbox" checked={params.get("overdue") === "true"} onChange={(e) => update("overdue", e.target.checked ? "true" : "")} />
+          기한 초과만
+        </label>
         {filter("status", "상태", STATUSES)}
         {filter("urgency", "긴급도", URGENCIES)}
         {filter("category", "유형", CATEGORIES)}
@@ -122,7 +126,10 @@ export default function InquiryListPage() {
                 <td className="px-3 py-2"><Badge value={i.urgency} /></td>
                 <td className="px-3 py-2"><Badge value={i.sentiment} /></td>
                 <td className="px-3 py-2"><Badge value={i.decision} /></td>
-                <td className="px-3 py-2"><Badge value={i.status} /></td>
+                <td className="whitespace-nowrap px-3 py-2">
+                  <Badge value={i.status} />
+                  {i.overdue && <span className="ml-1 text-xs font-semibold text-rose-700" title={`답변 기한 ${formatDate(i.due_at)}`}>⏰ 기한 초과</span>}
+                </td>
                 <td className="whitespace-nowrap px-3 py-2 text-slate-600">{i.assigned_to?.display_name ?? "-"}</td>
                 <td className="whitespace-nowrap px-3 py-2 text-slate-500">{formatDate(i.created_at)}</td>
               </tr>

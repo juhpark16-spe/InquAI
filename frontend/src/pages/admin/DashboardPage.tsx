@@ -117,7 +117,9 @@ export default function DashboardPage() {
 
       <section>
         <h2 className="mb-2 text-sm font-semibold text-slate-700">지금 처리할 일 <span className="font-normal text-slate-400">(기간과 관계없이 현재)</span></h2>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <Tile label="답변 기한 초과" value={data.now.overdue_open} sub="긴급 4시간 · 그 외 24시간을 넘긴 미처리"
+            tone={data.now.overdue_open ? "critical" : undefined} to="/admin/inquiries?overdue=true" />
           <Tile label="긴급 미처리" value={data.now.urgent_open} sub="긴급도 높음 · 아직 처리 안 됨" tone={data.now.urgent_open ? "critical" : undefined}
             to="/admin/inquiries?open=true&urgency=높음" />
           <Tile label="미처리 전체" value={data.now.open} sub="접수 · 검토 대기 · 담당자 처리" to="/admin/inquiries?open=true" />
@@ -207,8 +209,18 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="AI 처리 현황">
+        <Card title="AI 처리 현황 · 고객 만족도">
           <dl className="grid grid-cols-2 gap-y-3 text-sm">
+            <dt className="text-slate-500">AI 자동 답변 만족도</dt>
+            <dd className="text-right tabular-nums">
+              <b className="text-slate-900">{pct(data.ratings.ai.satisfaction)}</b>
+              <span className="ml-1 text-xs text-slate-500">👍 {data.ratings.ai.up} · 👎 {data.ratings.ai.down}</span>
+            </dd>
+            <dt className="text-slate-500">상담원 답변 만족도</dt>
+            <dd className="text-right tabular-nums">
+              <b className="text-slate-900">{pct(data.ratings.agent.satisfaction)}</b>
+              <span className="ml-1 text-xs text-slate-500">👍 {data.ratings.agent.up} · 👎 {data.ratings.agent.down}</span>
+            </dd>
             <dt className="text-slate-500">확신도 0.8 미만 → 담당자 연결</dt><dd className="text-right tabular-nums">{data.ai.low_confidence}건</dd>
             <dt className="text-slate-500">LLM 오류·시간 초과</dt><dd className="text-right tabular-nums">{data.ai.errors}건</dd>
             <dt className="text-slate-500">LLM 호출</dt><dd className="text-right tabular-nums">{data.ai.llm_calls}회</dd>

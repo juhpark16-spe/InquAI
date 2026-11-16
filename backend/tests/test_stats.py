@@ -79,7 +79,9 @@ def test_now_counts_ignore_range(client, data):
     """미처리 현황은 기간과 관계없이 지금 쌓여 있는 일 (10일 전 미처리 문의도 포함)"""
     login(client)
     now = client.get("/api/stats/summary", params={"from": "2020-01-01", "to": "2020-01-02"}).json()["now"]
+    overdue = now.pop("overdue_open")
     assert now == {"open": 4, "urgent_open": 1, "review_waiting": 1, "unassigned_open": 3}
+    assert overdue >= 1  # 10일 전 미처리(#6)는 24시간 기한을 넘김 (#3은 테스트 시각에 따라 달라 범위로 확인)
 
 
 def test_staff_counts(client, data):

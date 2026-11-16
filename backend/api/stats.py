@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 
 from backend.core.dependencies import DB, AdminOnly
 from backend.core.errors import AppError
+from backend.services import sla
 from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminUser, Inquiry, as_utc)
 from backend.training.labels import CATEGORY_LABELS
 
@@ -58,6 +59,7 @@ def summary(
     status_c, urgency_c, category_c, decision_c, decided_by_c = Counter(), Counter(), Counter(), Counter(), Counter()
     latencies, tokens_in, tokens_out, llm_calls, errors, low_conf = [], 0, 0, 0, 0, 0
     edited = approved = 0
+    ratings = {"ai": Counter(), "agent": Counter()}  # 고객 평가: AI 자동 답변 / 상담원 답변
 
     for i in rows:
         d = as_utc(i.created_at).astimezone(KST).date()
@@ -83,8 +85,11 @@ def summary(
             tokens_out += t.get("output", 0)
             llm_calls += t.get("calls", 0)
             errors += bool(log.error)
-        for r in i.responses:  # 상담원이 승인한 초안 (자동 발송은 approved_by 없음)
-            if r.status == "발송" and r.approved_by is not None:
+        for r in i.responses:
+            if r.status == "발송" and r.rating:
+                ratings["ai" if r.approved_by is None else "agent"]["up" if r.rating > 0 else "down"] += 1
+        for r in i.responses:  # 상담원이 승인한 AI 초안 (자동 발송은 approved_by 없음, 직접 작성은 제외)
+            if r.status == "발송" and r.approved_by is not None and r.generated_by == "llm":
                 approved += 1
                 edited += r.is_edited
 
@@ -116,6 +121,8 @@ def summary(
             "urgent_open": urgent_open,
             "review_waiting": sum(1 for i in open_rows if i.status == "검토 대기"),
             "unassigned_open": sum(1 for i in open_rows if i.assigned_to is None),
+            "overdue_open": sum(1 for i in open_rows
+                                if sla.is_overdue(i.status, i.created_at, i.analysis.urgency if i.analysis else None)),
         },
         "daily": [{"date": d.isoformat(), "total": v["total"], "open": v["open"], "done": v["done"],
                    "by_category": {c: v["by_category"].get(c, 0) for c in CATEGORY_LABELS}}
@@ -125,6 +132,9 @@ def summary(
         "by_urgency": {u: urgency_c.get(u, 0) for u in URGENCIES},
         "by_decision": {d: decision_c.get(d, 0) for d in DECISIONS},
         "by_decided_by": {"규칙": decided_by_c.get("규칙", 0), "LLM": decided_by_c.get("LLM", 0)},
+        # 고객 평가 (도움됨 / 도움 안 됨). satisfaction = 도움됨 비율 (평가가 없으면 null)
+        "ratings": {k: {"up": c["up"], "down": c["down"], "satisfaction": _rate(c["up"], c["up"] + c["down"])}
+                    for k, c in ratings.items()},
         "ai": {
             "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else None,  # LLM이 판단한 문의만
             "low_confidence": low_conf,      # 확신도 0.8 미만 → 담당자 연결

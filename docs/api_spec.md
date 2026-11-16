@@ -99,7 +99,8 @@
 {
   "customer_name": "홍길동",
   "customer_email": "hong@example.com",
-  "order_number": "20261103-0042",      // 선택
+  "order_number": "20261103-0042",      // 선택 (필수로 하지 않음: 주문과 무관한 문의가 많고 고객이 번호를 모르는 경우가 많음.
+                                        //  화면에서 배송·취소·교환·반품 같은 내용을 쓰면 입력을 권유)
   "title": "배송 문의",
   "content": "지금 주문하면 보통 며칠 만에 받을 수 있어요?",
   "password": "••••••"                    // 조회 비밀번호 6~64자 (Argon2 해시로 저장)
@@ -146,8 +147,10 @@
     "title": "배송 문의",
     "content": "...",
     "status": "완료",
-    "answer": "주문하신 패딩은 현재 대전 HUB에 도착해 ...",   // 발송된 답변만 (초안은 보이지 않음)
-    "created_at": "...", "answered_at": "..."
+    "answer": "주문하신 패딩은 현재 대전 HUB에 도착해 ...",   // 마지막으로 보낸 답변 (초안은 보이지 않음)
+    "created_at": "...", "answered_at": "...",
+    "answers": [ { "text": "...", "answered_at": "...", "by": "AI 상담원" },   // 보낸 답변 전부, 시간순 (대화형 화면)
+                 { "text": "...", "answered_at": "...", "by": "상담원" } ]     // 상담원 이름은 고객에게 알리지 않음
 } ] }
 ```
 - 고객이 문의 번호를 기억하지 않아도 되도록 2주차에 "문의 번호 + 이메일"에서 바꿨습니다. 문의 번호는 계속 발급하고 화면에 보여 줍니다.
@@ -155,6 +158,22 @@
 - 일치하는 문의가 없으면 이메일이 없든 비밀번호가 틀리든 같은 404. 이메일이 없을 때도 비밀번호 확인을 한 번 해서 응답 시간으로 구분할 수 없게 합니다.
 - 같은 이메일로 15분 안에 5번 틀리면 15분 동안 429 (비밀번호 맞히기 방지, 서버 메모리 기록). 같은 IP 1분 10회 초과도 429
 - 한 이메일에서 최근 30건까지 확인합니다. 비밀번호는 되찾을 수 없어, 화면에서 "새 문의에 이전 문의 내용을 적어 달라"고 안내합니다.
+
+### 실제 쇼핑몰 고객센터 기능 (2주차 추가)
+
+| 기능 | API | 내용 |
+| --- | --- | --- |
+| 개인정보 동의 | `POST /api/inquiries` 의 `privacy_agreed` | 반드시 `true` (빼거나 false 면 422). 동의 시각을 `inquiries.privacy_agreed_at`에 저장. 화면에 수집 항목·목적·보관 기간(3년, 전자상거래법)·외부 AI 처리 안내 |
+| 사진 올리기 | `POST /api/inquiries/uploads` (multipart `file`) → `{ token, filename, size }` | JPG·PNG·WEBP만 (파일 앞부분으로 형식 확인, 확장자는 믿지 않음), 1장 5MB, 문의당 3장, IP 1분 10회. 저장 이름은 무작위, `data/uploads/`(Git 제외) |
+| 사진 연결 | `POST /api/inquiries` 의 `attachment_tokens: [token]` | 올린 뒤 1시간 안, 한 번만 연결 가능. 잘못되면 문의도 저장하지 않음 |
+| 답변 평가 | `POST /api/inquiries/answers/{response_id}/rating?inquiry_number=` `{ customer_email, password, helpful }` | 본인 확인 후 `responses.rating` = 1 / -1 (다시 누르면 변경). 대시보드 "AI 자동 답변 만족도" |
+| 추가 문의 | `POST /api/inquiries/follow-up` `{ customer_email, password, inquiry_number, content, attachment_tokens }` | 같은 문의에 이어서. 자동 처리·완료된 문의는 `담당자 처리`로 다시 열고, 미배정이면 자동 배정. AI 재분석은 하지 않음. 문의당 10개까지, IP 1분 5회 |
+| 답변 시간 안내 | `/lookup` 응답의 `notice` | "영업일 기준 1일 이내에 답변드립니다 (평일 10:00~17:00)" |
+| 답변 알림 | (자동) | 자동 답변·상담원 발송 때 "답변이 등록되었습니다" 이메일을 `notifications`에 **기록만** 함 (메일 서버 없음, 시연용). 본문에 답변 내용은 넣지 않음 |
+
+- 추가 문의·평가도 조회와 같은 잠금(같은 이메일 15분 5회 실패)을 씁니다.
+- `/lookup` 응답 항목에 `answers[].id`, `answers[].rating`, `messages`(추가 문의), `attachment_count`, `attachments`, `can_follow_up`이 추가됐습니다.
+- **고객이 자기 사진 보기:** 고객은 로그인 쿠키가 없어 `<img>`로 사진을 부를 때 본인 확인을 할 수 없습니다. 그래서 본인 확인(이메일 + 비밀번호)을 통과한 `/lookup` 응답에만 `attachments[].url`로 **30분짜리 서명 주소**(`GET /api/inquiries/attachments/{id}?exp=&sig=`, JWT 키로 HMAC 서명)를 넣어 줍니다. 서명이 틀리거나 시간이 지나면 404
 
 ## 4. 문의 관리 API (로그인)
 
@@ -198,9 +217,31 @@
   "tickets": [],
   "agent_logs": [ { "selected_tool": "배송 조회", "tool_success": true,
                     "tool_output": { "shipping_status": "대전 HUB 도착" }, "latency_ms": 8200 } ],
-  "corrections": []
+  "corrections": [],
+  // 2주차 추가: 한 화면에서 판단·처리하기 위한 업무 정보 (backend/services/inquiry_context.py)
+  "order": { "found": true, "order_number": "20261103-0042", "email_match": true, "product_name": "...",
+             "amount": 59000, "order_status": "배송 완료", "shipping_status": "...", "tracking_number": "...",
+             "ordered_at": "...", "delivered_at": "...", "cancellable": false,
+             "return_until": "...", "returnable": true, "defect_return_until": "..." },   // 주문번호 없으면 null
+  "customer_history": [ { "id": 3, "inquiry_number": "...", "title": "...", "status": "완료", "created_at": "..." } ],
+  "faq_titles": { "F17": "반품 배송비는 얼마인가요?" },
+  "history": [ { "at": "...", "actor": "AI", "text": "담당자 연결 판단 (규칙) · 상담원 이관" } ]
 }
 ```
+- `order`: 취소 가능(출고 전), 반품 기한(배송 완료 + 7일, 불량·오배송 30일)을 정책 기준으로 계산. `email_match=false`면 주문자와 문의자가 다를 수 있어 화면에 경고
+- `email_orders`: 문의 이메일과 같은 이메일로 주문한 내역 최근 5건 (`order`의 주문은 제외, 각 항목은 `order`와 같은 형식). 주문번호를 적지 않은 문의도 어떤 주문인지 짐작할 수 있게 함. 문의 이메일은 본인 인증 전이라 화면에 "본인 확인 후 안내" 경고를 함께 표시하며, 관리자 화면에만 보이고 고객에게는 나가지 않음
+- `customer_history`: 같은 이메일의 다른 문의 최근 5건. 상담원은 자신에게 배정된 것만
+- `history`: 접수 → AI 판단 → 자동 배정·답변 발송 → 사람의 배정·상태 변경 (시간순)
+- 추가 필드: `due_at`·`overdue`(답변 기한: 긴급 4시간, 그 외 24시간), `messages`(고객 추가 문의), `notes`(내부 메모), `attachments`(사진 목록, token 은 내보내지 않음), `notifications`(알림 기록), `responses[].rating`
+
+### 내부 메모·첨부 사진·기한 (2주차 추가)
+| 메서드 | 경로 | 설명 |
+| --- | --- | --- |
+| POST | /api/inquiries/{id}/notes | `{ "text": "택배사 확인 중" }` 상담원 내부 메모. 고객 API에는 절대 나가지 않음. audit `note_create` |
+| GET | /api/inquiries/{id}/attachments/{attachment_id} | 사진 보기 (로그인, 상담원은 배정된 문의만). 저장 때 확인한 형식으로만 응답, `nosniff` |
+| GET | /api/inquiries?overdue=true | 답변 기한을 넘긴 미처리만. 목록 항목에도 `due_at`, `overdue` |
+
+- 대시보드 `now.overdue_open`(기한 초과 미처리), `ratings.ai / ratings.agent`(👍·👎 수와 만족도) 추가
 
 ### PATCH /api/inquiries/{id}/analysis — 분류 결과 수정 (재학습 데이터)
 ```json
@@ -227,19 +268,29 @@
 - 바꿀 수 있는 값: `검토 대기`, `담당자 처리`, `완료` (완료한 문의 다시 열기 포함). `접수`·`자동 처리`는 시스템만 정하므로 422
 - 지금과 같은 상태로 바꾸면 400 `INVALID_STATE`. 상담원은 배정된 문의만 (아니면 403)
 
-## 5. 답변 API (로그인)
+## 5. 답변 API (로그인, 2주차 구현)
+
+권한은 문의와 같습니다 (관리자 전체, 상담원은 배정된 문의만). 구현: `backend/api/responses.py`
+
+### POST /api/inquiries/{id}/responses — 상담원 직접 작성 (추가)
+```json
+{ "text": "고객님, 답변이 늦어져 죄송합니다. ...", "send": true }   // send=false 면 초안으로 저장
+```
+- `generated_by = agent_user`. 보내지 않은 초안이 이미 있으면 409 `DRAFT_EXISTS` (`response_id` 함께 반환, 그 초안을 수정)
+- 발송 후에도 추가 답변을 새로 작성할 수 있습니다 (문의 1건에 답변 여러 개). audit_logs (response_create)
 
 ### PUT /api/responses/{id} — 답변 초안 수정
 ```json
-{ "final_text": "고객님, 주문하신 패딩은 현재 대전 HUB에 도착해 ..." }
+{ "text": "고객님, 주문하신 패딩은 현재 대전 HUB에 도착해 ..." }   // final_text 로 저장
 ```
-- status가 `초안`일 때만 (발송된 답변은 400 `INVALID_STATE`). audit_logs (response_edit)
+- status가 `초안`일 때만 (발송된 답변은 400 `INVALID_STATE`). 내용이 바뀌었을 때만 audit_logs (response_edit)
 
 ### POST /api/responses/{id}/approve — 승인·발송
+- 본문에 `{ "text": "..." }`를 함께 보내면 그 내용으로 고친 뒤 바로 발송 (화면의 [발송] 버튼)
 - `final_text`가 없으면 `draft_text`를 그대로 발송
-- `is_edited = (final_text != draft_text)`, `approved_by`, `approved_at` 기록
-- `responses.status = 발송`, `inquiries.status = 완료`. audit_logs (response_approve)
-- 발송은 실제 메일이 아니라 DB 저장입니다. 고객은 `/api/inquiries/lookup`으로 확인합니다.
+- `is_edited`: **AI 초안(llm)을 고쳐서 보냈는지**. 상담원이 직접 쓴 답변은 항상 false이고, 대시보드 "초안 무수정 승인율"도 AI 초안만 셉니다.
+- `approved_by`, `approved_at` 기록, `responses.status = 발송`, `inquiries.status = 완료`. audit_logs (response_approve)
+- 발송은 실제 메일이 아니라 DB 저장입니다. 고객은 `/api/inquiries/lookup`(이메일 + 조회 비밀번호)으로 확인합니다.
 
 ## 6. 티켓 API
 

@@ -21,6 +21,9 @@ import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
 from backend.core import rate_limit  # noqa: E402
+from backend.services import uploads  # noqa: E402
+
+uploads.UPLOAD_DIR = _tmp / "uploads"  # 테스트 사진은 임시 폴더에 (data/uploads 를 건드리지 않게)
 from backend.core.security import hash_password  # noqa: E402
 from backend.database.models import AdminUser  # noqa: E402
 from backend.database.session import Base, SessionLocal, engine  # noqa: E402

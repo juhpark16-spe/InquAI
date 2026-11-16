@@ -2,7 +2,7 @@
 
 from typing import Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.schemas.common import UTCDateTime
 
@@ -36,6 +36,42 @@ class InquiryListItem(BaseModel):
     sentiment: str | None
     decision: str | None
     assigned_to: Assignee | None
+    created_at: UTCDateTime
+    due_at: UTCDateTime   # 답변 기한 (긴급 4시간, 그 외 24시간)
+    overdue: bool         # 미처리인데 기한을 넘김
+
+
+class NoteCreate(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class NoteOut(BaseModel):
+    id: int
+    author: str
+    text: str
+    created_at: UTCDateTime
+
+
+class AttachmentOut(BaseModel):
+    id: int
+    filename: str
+    content_type: str
+    size: int
+    message_id: int | None  # 추가 문의에 붙은 사진이면 그 메시지
+    created_at: UTCDateTime
+
+
+class MessageOut(BaseModel):
+    id: int
+    text: str
+    created_at: UTCDateTime
+
+
+class NotificationOut(BaseModel):
+    channel: str
+    recipient: str
+    subject: str
+    status: str
     created_at: UTCDateTime
 
 
@@ -89,6 +125,7 @@ class ResponseOut(ORM):
     used_faq_ids: list
     grounded: bool | None
     is_edited: bool
+    rating: int | None = None  # 고객 평가 1 / -1
     approved_by: int | None
     approved_at: UTCDateTime | None
     created_at: UTCDateTime
@@ -133,6 +170,39 @@ class CorrectionOut(ORM):
     created_at: UTCDateTime
 
 
+class OrderCard(BaseModel):
+    found: bool
+    order_number: str
+    email_match: bool | None = None
+    orderer: str | None = None
+    product_name: str | None = None
+    amount: int | None = None
+    order_status: str | None = None
+    shipping_status: str | None = None
+    tracking_number: str | None = None
+    ordered_at: UTCDateTime | None = None
+    delivered_at: UTCDateTime | None = None
+    cancellable: bool | None = None
+    return_until: UTCDateTime | None = None
+    returnable: bool | None = None
+    defect_return_until: UTCDateTime | None = None
+
+
+class HistoryItem(BaseModel):
+    id: int
+    inquiry_number: str
+    title: str
+    status: str
+    created_at: UTCDateTime
+
+
+class Event(BaseModel):
+    at: UTCDateTime
+    actor: str
+    text: str
+    kind: str  # received / ai / assign / status / draft / sent (대화형 화면에서 안내 줄을 고를 때 씀)
+
+
 class InquiryDetail(BaseModel):
     id: int
     inquiry_number: str
@@ -148,3 +218,14 @@ class InquiryDetail(BaseModel):
     tickets: list[TicketOut]
     agent_logs: list[AgentLogOut]
     corrections: list[CorrectionOut]
+    order: OrderCard | None
+    email_orders: list[OrderCard]  # 문의 이메일로 찾은 다른 주문 (본인 확인 필요)
+    customer_history: list[HistoryItem]
+    faq_titles: dict[str, str]
+    history: list[Event]
+    due_at: UTCDateTime
+    overdue: bool
+    messages: list[MessageOut]          # 고객 추가 문의
+    notes: list[NoteOut]                # 상담원 내부 메모 (고객에게 안 보임)
+    attachments: list[AttachmentOut]
+    notifications: list[NotificationOut]  # 고객 알림 기록 (시연용)

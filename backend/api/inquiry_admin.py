@@ -3,18 +3,22 @@
 권한: 관리자는 모든 문의, 상담원은 자신에게 배정된 문의만 봅니다.
 """
 
+from datetime import timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Query, Request
-from sqlalchemy import case, func, or_, select
+from fastapi.responses import FileResponse
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.core.dependencies import DB, AdminOnly, LoginUser
 from backend.core.errors import AppError
-from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminUser, AnalysisResult, Inquiry,
-                                     LabelCorrection)
-from backend.schemas.inquiry_admin import (AssignRequest, InquiryDetail, InquiryListItem, InquiryState, Page,
-                                           StatusRequest)
+from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminUser, AnalysisResult, Attachment,
+                                     Inquiry, InquiryNote, LabelCorrection, Notification, utcnow)
+from backend.schemas.inquiry_admin import (AssignRequest, InquiryDetail, InquiryListItem, InquiryState, NoteCreate,
+                                           NoteOut, Page, StatusRequest)
+from backend.services import inquiry_context as ctx
+from backend.services import sla, uploads
 from backend.services.audit import add_audit
 from backend.training.labels import CATEGORY_LABELS
 
@@ -46,6 +50,7 @@ def list_inquiries(
     status: Literal[INQUIRY_STATUSES] | None = None,
     decision: Literal[DECISIONS] | None = None,
     open: bool | None = Query(None, description="true 면 미처리(접수·검토 대기·담당자 처리)만"),
+    overdue: bool | None = Query(None, description="true 면 답변 기한(긴급 4시간, 그 외 24시간)을 넘긴 미처리만"),
     assigned_to: str | None = Query(None, description="상담원 id, me, none (관리자만 지정 가능)"),
     q: str | None = Query(None, max_length=100, description="제목·내용·문의 번호·이메일 검색"),
     sort: Literal["urgency", "-created_at"] = "urgency",
@@ -67,8 +72,15 @@ def list_inquiries(
 
     if status:
         stmt = stmt.where(Inquiry.status == status)
-    if open:
-        stmt = stmt.where(Inquiry.status.in_(("접수", "검토 대기", "담당자 처리")))
+    if open or overdue:
+        stmt = stmt.where(Inquiry.status.in_(sla.OPEN_STATUSES))
+    if overdue:
+        now = utcnow()
+        urgent_due = now - timedelta(hours=sla.SLA_HOURS["높음"])
+        normal_due = now - timedelta(hours=sla.DEFAULT_HOURS)
+        stmt = stmt.where(or_(and_(AnalysisResult.urgency == "높음", Inquiry.created_at < urgent_due),
+                              and_(or_(AnalysisResult.urgency.is_(None), AnalysisResult.urgency != "높음"),
+                                   Inquiry.created_at < normal_due)))
     if category:
         stmt = stmt.where(AnalysisResult.category == category)
     if urgency:
@@ -90,6 +102,8 @@ def list_inquiries(
         "status": i.status, "category": a.category if a else None, "urgency": a.urgency if a else None,
         "sentiment": a.sentiment if a else None, "decision": a.decision if a else None,
         "assigned_to": _assignee(i.assignee), "created_at": i.created_at,
+        "due_at": sla.due_at(i.created_at, a.urgency if a else None),
+        "overdue": sla.is_overdue(i.status, i.created_at, a.urgency if a else None),
     } for i, a in rows]
     return {"items": items, "total": total, "page": page, "size": size}
 
@@ -139,6 +153,8 @@ def get_inquiry(inquiry_id: int, user: LoginUser, db: DB):
     inquiry = get_inquiry_for_user(db, inquiry_id, user)
     corrections = db.scalars(select(LabelCorrection).where(LabelCorrection.inquiry_id == inquiry.id)
                              .order_by(LabelCorrection.id)).all()
+    urgency = inquiry.analysis.urgency if inquiry.analysis else None
+    names = {u.id: u.display_name for u in db.scalars(select(AdminUser))}
     return {
         "id": inquiry.id, "inquiry_number": inquiry.inquiry_number,
         "customer": {"name": inquiry.customer_name, "email": inquiry.customer_email,
@@ -148,4 +164,42 @@ def get_inquiry(inquiry_id: int, user: LoginUser, db: DB):
         "updated_at": inquiry.updated_at, "analysis": inquiry.analysis, "responses": inquiry.responses,
         "tickets": sorted(inquiry.tickets, key=lambda t: t.id), "agent_logs": inquiry.agent_logs,
         "corrections": corrections,
+        # 한 화면에서 판단·처리할 수 있도록 함께 보내는 업무 정보
+        "order": ctx.order_card(db, inquiry),
+        "email_orders": ctx.email_orders(db, inquiry),
+        "customer_history": ctx.customer_history(db, inquiry, user),
+        "faq_titles": ctx.faq_titles(db, inquiry),
+        "history": ctx.history(db, inquiry),
+        "due_at": sla.due_at(inquiry.created_at, urgency),
+        "overdue": sla.is_overdue(inquiry.status, inquiry.created_at, urgency),
+        "messages": [{"id": m.id, "text": m.content, "created_at": m.created_at} for m in inquiry.messages],
+        "notes": [{"id": n.id, "author": names.get(n.author_id, "?"), "text": n.text, "created_at": n.created_at}
+                  for n in inquiry.notes],
+        "attachments": inquiry.attachments,
+        "notifications": db.scalars(select(Notification).where(Notification.inquiry_id == inquiry.id)
+                                    .order_by(Notification.id)).all(),
     }
+
+
+@router.post("/{inquiry_id}/notes", response_model=NoteOut, status_code=201, summary="내부 메모 남기기 (로그인)")
+def add_note(inquiry_id: int, body: NoteCreate, request: Request, user: LoginUser, db: DB):
+    """고객에게는 보이지 않는 상담원끼리의 메모 (인계 사항, 확인 중인 내용 등)"""
+    inquiry = get_inquiry_for_user(db, inquiry_id, user)
+    note = InquiryNote(inquiry_id=inquiry.id, author_id=user.id, text=body.text.strip())
+    db.add(note)
+    db.flush()
+    add_audit(db, request, "note_create", user, "inquiry", inquiry.id, note_id=note.id)
+    db.commit()
+    return {"id": note.id, "author": user.display_name, "text": note.text, "created_at": note.created_at}
+
+
+@router.get("/{inquiry_id}/attachments/{attachment_id}", summary="첨부 사진 보기 (로그인)")
+def get_attachment(inquiry_id: int, attachment_id: int, user: LoginUser, db: DB):
+    inquiry = get_inquiry_for_user(db, inquiry_id, user)  # 상담원은 배정된 문의의 사진만
+    att = db.get(Attachment, attachment_id)
+    if att is None or att.inquiry_id != inquiry.id or not uploads.file_path(att).exists():
+        raise AppError(404, "사진을 찾을 수 없습니다.", "NOT_FOUND")
+    # 저장할 때 검사한 형식으로만 보내고, 브라우저가 다른 형식으로 해석하지 않게 함
+    return FileResponse(uploads.file_path(att), media_type=att.content_type,
+                        headers={"Content-Disposition": "inline", "Cache-Control": "private, max-age=300",
+                                 "X-Content-Type-Options": "nosniff"})
