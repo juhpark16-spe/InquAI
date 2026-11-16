@@ -21,5 +21,6 @@ def health(request: Request, db: DB):
         "seed": {"admin_users": count(AdminUser), "faqs": count(Faq), "orders": count(Order)},
         "ai": {"classifier": getattr(state, "analyzer", None) is not None,
                "llm": getattr(state, "llm", None) is not None,
-               "faqs_indexed": len(getattr(state, "faq_search", None).faqs) if getattr(state, "faq_search", None) else 0},
+               "faqs_indexed": len(getattr(state, "faq_search", None).faqs) if getattr(state, "faq_search", None) else 0,
+               "faq_engine": getattr(getattr(state, "faq_search", None), "engine", None)},
     }

@@ -132,7 +132,7 @@
 - **주문번호가 있으면** 배송 조회·티켓 접수 전에 주문의 고객 이메일과 `customer_email`이 같은지 확인합니다. 다르면 도구를 실행하지 않고 `담당자 처리`로 보냅니다 (기획서 2-4).
 - **입력 제한:** content 5~2,000자, title 1~200자, 이메일 형식 확인. 같은 IP에서 1분에 5건 초과 시 429.
 - **2주차 구현 범위** (`backend/services/inquiries.py`, `backend/agents/pipeline.py`):
-  - 처리 흐름은 위 순서대로 동작하고, FAQ 검색은 임시 TF-IDF입니다 (3주차에 ChromaDB로 교체).
+  - 처리 흐름은 위 순서대로 동작하고, FAQ 검색은 KURE-v1 임베딩 + ChromaDB입니다 (모델을 못 불러오면 TF-IDF로 대신, docs/faq_search_eval.md).
   - 답변 초안(검토 대기)은 도구 결과(배송 조회 결과, 티켓 번호)만 `agent_logs.tool_output`에 남기고, 초안 문장 작성은 3주차에 붙입니다. 자동 답변이었다가 근거 부족으로 내려간 경우에만 초안 문장이 `responses`에 들어갑니다.
   - 티켓 접수는 주문번호가 있을 때만 만들고, 없으면 `tool_success=false`로 남겨 상담원이 고객에게 확인합니다.
   - 분류 모델이 준비되지 않았으면 503 `MODEL_NOT_READY`.
@@ -387,9 +387,9 @@
 | 메서드 | 경로 | 설명 |
 | --- | --- | --- |
 | GET | /api/public/faqs | 활성 FAQ 목록 `[{code, category, question, answer}]` (고객 FAQ 화면 `/faq`) |
-| GET | /api/public/faqs/suggest?q=&k=3 | 문의 작성 중 비슷한 FAQ 추천. 유사도 0.18 미만은 빼서 관계없는 FAQ를 보여 주지 않음. 같은 IP 1분 30회 초과 시 429 |
+| GET | /api/public/faqs/suggest?q=&k=3 | 문의 작성 중 비슷한 FAQ 추천. 유사도가 기준값(KURE 0.6) 미만이면 빼서 관계없는 FAQ를 보여 주지 않음. 같은 IP 1분 30회 초과 시 429 |
 
-- 추천은 에이전트와 같은 FAQ 검색(지금은 임시 TF-IDF, 3주차에 ChromaDB)을 씁니다. 기준값 0.18은 검색 방식을 바꾸면 다시 정합니다.
+- 추천은 에이전트와 같은 FAQ 검색(KURE-v1 + ChromaDB)을 씁니다. 기준값은 검색 방식마다 점수 범위가 달라 평가 세트로 정했습니다 (KURE 0.6, 대체용 TF-IDF 0.18, `docs/faq_search_eval.md`).
 - 다른 고객의 문의는 목록으로 보여 주지 않습니다 (문의에 주문번호·개인 사정이 들어 있어 개인정보 문제).
 
 ## 9-1. 계정 관리 API (관리자, 2주차 추가)

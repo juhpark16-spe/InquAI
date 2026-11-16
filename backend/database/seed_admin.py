@@ -27,12 +27,7 @@ ACCOUNTS = [
 ]
 
 
-def main():
-    sys.stdout.reconfigure(encoding="utf-8")
-    p = argparse.ArgumentParser(description="관리자·상담원 계정 만들기")
-    p.add_argument("--reset-password", action="store_true", help="이미 있는 계정의 비밀번호도 .env 값으로 바꿈")
-    args = p.parse_args()
-
+def check_passwords() -> None:
     settings = get_settings()
     min_len = settings.password_min_length
     for _, _, _, key, _ in ACCOUNTS:
@@ -41,22 +36,36 @@ def main():
     if min_len < 8:
         print(f"[주의] 비밀번호 최소 길이가 {min_len}자입니다. 시연용 로컬 환경에서만 쓰고, 배포할 때는 8자 이상으로 바꿔 주세요.")
 
+
+def seed_accounts(db, reset_password: bool = False) -> None:
+    """ACCOUNTS 계정을 만듭니다 (커밋은 부르는 쪽에서). seed_demo 에서도 씀"""
+    settings = get_settings()
+    for username, role, name, key, categories in ACCOUNTS:
+        user = db.scalar(select(AdminUser).where(AdminUser.username == username))
+        if user is None:
+            db.add(AdminUser(username=username, role=role, display_name=name, categories=categories,
+                             password_hash=hash_password(getattr(settings, key))))
+            print(f"[생성] {username} ({role})")
+        elif reset_password:
+            user.password_hash = hash_password(getattr(settings, key))
+            user.failed_login_count, user.locked_until = 0, None
+            user.password_changed_at = utcnow()
+            user.token_version = (user.token_version or 0) + 1
+            print(f"[비밀번호 변경] {username}")
+        else:
+            print(f"[건너뜀] {username} 이미 있음")
+
+
+def main():
+    sys.stdout.reconfigure(encoding="utf-8")
+    p = argparse.ArgumentParser(description="관리자·상담원 계정 만들기")
+    p.add_argument("--reset-password", action="store_true", help="이미 있는 계정의 비밀번호도 .env 값으로 바꿈")
+    args = p.parse_args()
+
+    check_passwords()
     init_db()
     with SessionLocal() as db:
-        for username, role, name, key, categories in ACCOUNTS:
-            user = db.scalar(select(AdminUser).where(AdminUser.username == username))
-            if user is None:
-                db.add(AdminUser(username=username, role=role, display_name=name, categories=categories,
-                                 password_hash=hash_password(getattr(settings, key))))
-                print(f"[생성] {username} ({role})")
-            elif args.reset_password:
-                user.password_hash = hash_password(getattr(settings, key))
-                user.failed_login_count, user.locked_until = 0, None
-                user.password_changed_at = utcnow()
-                user.token_version = (user.token_version or 0) + 1
-                print(f"[비밀번호 변경] {username}")
-            else:
-                print(f"[건너뜀] {username} 이미 있음")
+        seed_accounts(db, args.reset_password)
         db.commit()
 
 

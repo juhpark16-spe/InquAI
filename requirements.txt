@@ -37,4 +37,8 @@ python-multipart==0.0.33   # 문의 사진 첨부 (파일 업로드)
 pytest==9.2.0
 httpx==0.28.1
 
-# 3주차부터 추가 예정: langgraph, chromadb, sentence-transformers, langsmith
+# FAQ 검색: KURE-v1 임베딩 + ChromaDB (3주차, docs/faq_search_eval.md)
+sentence-transformers==6.3.0
+chromadb==1.5.9
+
+# 3주차부터 추가 예정: langgraph, langsmith

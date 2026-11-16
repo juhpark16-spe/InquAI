@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     category_model_version: str = "category_ev_s123"
     sentiment_model_version: str = "sentiment_v1"
 
+    # FAQ 검색 (docs/faq_search_eval.md). kure: KURE-v1 + ChromaDB, tfidf: 글자 단위 (모델 없이 가벼움)
+    # load_models=false(테스트) 이거나 KURE를 불러오지 못하면 tfidf 로 동작
+    faq_search_engine: str = "kure"
+
     # 초기 계정 비밀번호 (seed_admin.py)
     seed_admin_password: str = ""
     seed_agent_password: str = ""

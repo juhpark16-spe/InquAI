@@ -13,9 +13,8 @@ from backend.database.models import Faq
 
 router = APIRouter(prefix="/public/faqs", tags=["고객 FAQ"])
 
-# 추천에 띄울 최소 유사도 (임시 TF-IDF 기준. 맞는 FAQ는 보통 0.2 이상, "이 옷 이쁜가요?" 같은
-# 관계없는 문장도 0.15까지 나와서 0.18로 둠. 3주차에 임베딩 검색으로 바꾸면 다시 정함)
-SUGGEST_MIN_SCORE = 0.18
+# 추천에 띄울 최소 유사도는 검색 방식마다 점수 범위가 달라 검색 객체가 정합니다
+# (KURE 0.6, TF-IDF 0.18 — 평가 세트로 정한 값, docs/faq_search_eval.md)
 
 
 class FaqPublic(BaseModel):
@@ -37,5 +36,5 @@ def suggest_faqs(request: Request, q: str = Query(min_length=2, max_length=2000)
     search = getattr(request.app.state, "faq_search", None)
     if search is None:
         return []
-    hits = [f for f in search.search(q, k) if f["score"] >= SUGGEST_MIN_SCORE]
+    hits = [f for f in search.search(q, k) if f["score"] >= search.suggest_min_score]
     return [{"code": f["id"], "category": f["category"], "question": f["question"], "answer": f["answer"]} for f in hits]

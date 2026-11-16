@@ -22,11 +22,23 @@ settings = get_settings()
 logger = logging.getLogger("inquai")
 
 
+def load_faq_search(db):
+    """FAQ 검색 준비: KURE-v1 + ChromaDB (기본). 모델을 쓰지 않는 설정이거나 불러오지 못하면 TF-IDF"""
+    if settings.load_models and settings.faq_search_engine == "kure":
+        try:
+            from backend.rag.embedding_search import KureFaqSearch, load_model
+
+            return KureFaqSearch.from_db(db, load_model())
+        except Exception:  # noqa: BLE001  모델 다운로드 실패 등 → 서비스는 계속
+            logger.exception("KURE FAQ 검색을 준비하지 못해 TF-IDF 검색으로 동작합니다.")
+    return FaqSearch.from_db(db)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()  # 테이블이 없으면 만듦
     with SessionLocal() as db:
-        app.state.faq_search = FaqSearch.from_db(db)
+        app.state.faq_search = load_faq_search(db)
 
     app.state.analyzer = None
     if settings.load_models:
