@@ -127,6 +127,7 @@ class ResponseOut(ORM):
     grounded: bool | None
     is_edited: bool
     rating: int | None = None  # 고객 평가 1 / -1
+    check_points: list | None = None  # AI 초안에서 상담원이 확인할 것
     approved_by: int | None
     approved_at: UTCDateTime | None
     created_at: UTCDateTime

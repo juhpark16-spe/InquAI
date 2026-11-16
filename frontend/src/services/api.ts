@@ -127,6 +127,9 @@ export const responseApi = {
   update: (id: number, text: string) => http.put<ResponseItem>(`/responses/${id}`, { text }).then((r) => r.data),
   approve: (id: number, text?: string) =>
     http.post<ResponseItem>(`/responses/${id}/approve`, text === undefined ? undefined : { text }).then((r) => r.data),
+  // AI 초안 만들기: 보내지 않은 초안 자리에 씀. 상담원이 고친 초안이 있으면 replace=true 일 때만 바꿈 (아니면 409)
+  draft: (inquiryId: number, replace = false) =>
+    http.post<ResponseItem>(`/inquiries/${inquiryId}/draft`, { replace }, { timeout: 30000 }).then((r) => r.data),
 };
 
 // ---- 대시보드 통계 (관리자) ----

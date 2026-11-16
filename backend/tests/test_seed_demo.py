@@ -6,7 +6,9 @@ from sqlalchemy import func, select
 
 from backend.database import seed_data
 from backend.database.models import AdminUser, Inquiry, Response
-from backend.database.seed_demo import DEMO_LOOKUP_PASSWORD, seed_inquiries
+from backend.database.models import Order, as_utc
+from backend.database.seed_data import PRODUCTS
+from backend.database.seed_demo import DEMO_LOOKUP_PASSWORD, product_kind, seed_inquiries, short_name
 from backend.tests.conftest import TEST_PASSWORD
 
 
@@ -59,3 +61,19 @@ def test_dashboard_and_lookup_show_demo_data(client, db):
     r = client.post("/api/inquiries/lookup", json={"customer_email": done.customer_email, "password": DEMO_LOOKUP_PASSWORD})
     assert r.status_code == 200
     assert done.inquiry_number in [i["inquiry_number"] for i in r.json()["items"]]
+
+
+def test_inquiry_text_matches_ordered_product(db):
+    assert all(product_kind(name) for name, _ in PRODUCTS)           # 모든 모의 상품에 종류가 있음
+    seeded(db)
+    with_order = db.scalars(select(Inquiry).where(Inquiry.order_number.is_not(None))).all()
+    assert with_order
+    for i in with_order:
+        order = db.scalar(select(Order).where(Order.order_number == i.order_number))
+        assert order.customer.email == i.customer_email              # 본인 주문
+        assert short_name(order.product_name) in i.content, (i.content, order.product_name)
+        assert as_utc(order.ordered_at) < as_utc(i.created_at)            # 주문한 뒤에 문의함
+        if order.delivered_at:
+            assert as_utc(order.delivered_at) < as_utc(i.created_at)
+    broken = [i.content for i in with_order if "불량" in i.title or "불량 같" in i.content]
+    assert not any("전원" in t and "이어폰" not in t for t in broken)  # 이불에 "전원이 안 켜져요" 같은 문장 없음

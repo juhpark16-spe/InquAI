@@ -5,6 +5,7 @@
     → 주문 본인 확인 (배송 조회·티켓 접수 전에, 주문번호가 있을 때)
     → 도구 실행: FAQ 답변 생성 / 배송 조회 / 티켓 접수 / 상담원 이관
     → 자동 답변인데 FAQ 근거가 부족하면 초안으로 내림
+    → 답변 초안이면 상담원이 검토할 초안을 미리 써 둠 (drafting.generate_draft, 실패해도 문의 처리는 계속)
 
 1주차 프롬프트 검증(backend/ai/prompt_check.py)과 같은 순서·같은 프롬프트를 씁니다.
 LLM 오류나 제한 시간 초과는 자동 답변 없이 '답변 초안'(검토 대기)으로 돌리고 오류를 기록합니다.
@@ -15,6 +16,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
+from backend.agents.drafting import generate_draft
 from backend.ai.prompts import (ANSWER_PROMPT, ANSWER_SCHEMA, ROUTE_PROMPT, ROUTE_SCHEMA, decide_by_rule,
                                 format_answer_input, format_route_input)
 from backend.database.models import Inquiry
@@ -37,6 +39,7 @@ class AgentResult:
     used_faq_ids: list = field(default_factory=list)
     answer: str | None = None          # LLM이 만든 답변 (자동 답변이면 발송, 근거 부족이면 초안)
     grounded: bool | None = None
+    check_points: list = field(default_factory=list)   # 초안에서 상담원이 확인할 것
     llm_model: str | None = None
     tokens: dict = field(default_factory=lambda: {"input": 0, "output": 0, "calls": 0})
     latency_ms: int = 0
@@ -121,7 +124,7 @@ def run_agent(db: Session, inquiry: Inquiry, analysis: dict, faq_search, llm, ti
             ticket = create_ticket(db, inquiry, "이관", reason=plan["reason"])
             result.tool_success, result.tool_output = True, {"ticket_id": ticket.id}
 
-        else:  # 답변 초안 + FAQ 검색 (FAQ형): 검색 결과만 기록, 초안 작성은 3주차
+        else:  # 답변 초안 + FAQ 검색 (FAQ형): 검색 결과 기록 (초안은 아래 5번에서)
             result.tool_success = True
             result.tool_output = {"faq_ids": plan["faq_ids"] or [f["id"] for f in retrieved]}
 
@@ -131,6 +134,19 @@ def run_agent(db: Session, inquiry: Inquiry, analysis: dict, faq_search, llm, ti
         result.answer = result.grounded = None
         result.used_faq_ids = []
         result.error = f"{type(e).__name__}: {e}"[:1000]
+
+    # 5. 답변 초안: 상담원이 검토할 초안을 미리 써 둠. 실패하면 초안 없이 검토 대기 (상담원이 버튼으로 다시 만들 수 있음)
+    if result.decision == "답변 초안" and result.answer is None and result.error is None and llm is not None:
+        try:
+            d = generate_draft(db, inquiry, faq_search, llm, timeout - (time.monotonic() - start), analysis=analysis)
+            result.answer, result.grounded, result.check_points = d.answer, d.grounded, d.check_points
+            result.used_faq_ids = d.used_faq_ids
+            result.llm_model = d.llm_model
+            for key in ("input", "output", "calls"):
+                result.tokens[key] += d.tokens.get(key, 0)
+        except Exception as e:  # noqa: BLE001
+            result.reason += " / 초안 작성 실패"
+            result.error = f"초안 작성 실패 {type(e).__name__}: {e}"[:1000]
 
     result.latency_ms = int((time.monotonic() - start) * 1000)
     return result

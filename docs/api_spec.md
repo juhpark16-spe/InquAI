@@ -292,6 +292,22 @@
 - `approved_by`, `approved_at` 기록, `responses.status = 발송`, `inquiries.status = 완료`. audit_logs (response_approve)
 - 발송은 실제 메일이 아니라 DB 저장입니다. 고객은 `/api/inquiries/lookup`(이메일 + 조회 비밀번호)으로 확인합니다.
 
+### POST /api/inquiries/{id}/draft — AI 답변 초안 만들기 (3주차)
+```json
+{ "replace": false }   // 본문 생략 가능
+```
+응답: 답변(`ResponseOut`). `status = 초안`, `generated_by = llm`, `check_points = ["택배사 파손 확인 결과", ...]`
+- 문의 상세의 **[AI 초안 만들기]** 버튼. 담당자 연결 문의나 추가 문의에도 상담원이 원할 때 씁니다.
+  (접수 때 에이전트가 '답변 초안'으로 판단한 문의는 이 버튼 없이 초안이 미리 만들어져 있습니다.)
+- 근거: 검색된 FAQ(KURE) 3개 + 본인 확인된 주문 정보(취소 가능 여부, 반품 기한) + 티켓 + 대화(처음 문의·추가 문의·보낸 답변).
+  고객 이름·이메일은 OpenAI에 넘기지 않고, 주문자 이메일이 다르면 주문 내용도 넘기지 않습니다 ("본인 확인 필요"만).
+- 근거로 알 수 없는 내용은 본문에 `[확인 필요: …]`로 남기고 `check_points`에도 적습니다. 그런 초안은 `grounded = false`.
+  화면은 "발송 전에 확인할 것"으로 보여 주고, 표시가 남은 채로 [발송]하면 한 번 더 묻습니다.
+- 보내지 않은 초안이 있으면 그 자리에 씁니다 (초안은 항상 하나). 상담원이 고쳤거나 직접 쓴 초안이면 409 `DRAFT_EDITED`
+  → 화면에서 확인을 받은 뒤 `replace: true`로 다시 요청합니다.
+- 오류: LLM 없음 503 `LLM_UNAVAILABLE`, LLM 오류·시간 초과(20초) 502 `DRAFT_FAILED` (기존 초안은 그대로). 같은 IP 1분 10회.
+- audit_logs (`draft_generate`: 근거 FAQ·토큰·처리 시간). 처리 이력에 "AI 초안 만들기 / 다시 만들기"로 보입니다.
+
 ## 6. 티켓 API
 
 ### POST /api/tickets — 티켓 접수 (내부: 에이전트 도구)

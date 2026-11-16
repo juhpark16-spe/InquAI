@@ -40,6 +40,7 @@ AUDIT_ACTIONS = (
     "response_approve",
     "ticket_approve", "ticket_reject", "label_correct", "faq_create", "faq_update", "faq_deactivate",
     "user_create", "user_update", "user_password_reset", "auto_assign", "password_change", "note_create",
+    "draft_generate",
 )
 
 
@@ -154,6 +155,8 @@ class Response(TimestampMixin, Base):
     is_edited: Mapped[bool] = mapped_column(Boolean, default=False)
     rating: Mapped[int | None] = mapped_column(Integer)  # 고객 평가: 1 도움됨, -1 도움 안 됨, None 평가 전
     rated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # AI 초안에서 상담원이 확인할 것 (본문의 [확인 필요: …]와 같은 내용). 상담원이 직접 쓴 답변은 비어 있음
+    check_points: Mapped[list | None] = mapped_column(JSON)
 
     inquiry: Mapped[Inquiry] = relationship(back_populates="responses")
 

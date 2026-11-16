@@ -96,7 +96,8 @@ def history(db: Session, inquiry: Inquiry) -> list[dict]:
         fail = " (실패)" if log.tool_success is False else ""
         events.append({"at": log.created_at, "actor": "AI",
                        "text": f"{log.decision} 판단 ({log.decided_by}){tool}{fail}"
-                               + (" · 오류로 상담원 검토" if log.error else ""), "kind": "ai"})
+                               + ((" · 초안 작성 실패" if log.error.startswith("초안 작성 실패") else " · 오류로 상담원 검토")
+                                  if log.error else ""), "kind": "ai"})
     names = {u.id: u.display_name for u in db.scalars(select(AdminUser))}
 
 
@@ -121,6 +122,8 @@ def history(db: Session, inquiry: Inquiry) -> list[dict]:
             text = "답변 작성"
         elif a.action == "response_edit":
             text = "답변 초안 수정"
+        elif a.action == "draft_generate":
+            text = "AI 초안 다시 만들기" if d.get("replaced") else "AI 초안 만들기"
         else:
             text = a.action
         events.append({"at": a.created_at, "actor": actor, "text": text, "kind": kind})

@@ -79,6 +79,7 @@ def register_inquiry(db: Session, body: InquiryCreate, analyzer, faq_search, llm
     if result.answer:
         db.add(Response(inquiry_id=inquiry.id, draft_text=result.answer, generated_by="llm",
                         used_faq_ids=result.used_faq_ids, grounded=result.grounded,
+                        check_points=result.check_points or None,
                         status="발송" if sent else "초안", approved_at=utcnow() if sent else None))
     db.add(AgentLog(
         inquiry_id=inquiry.id, category=analysis["category"], confidence=analysis["confidence"],

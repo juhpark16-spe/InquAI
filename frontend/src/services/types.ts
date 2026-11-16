@@ -118,6 +118,7 @@ export interface ResponseItem {
   grounded: boolean | null;
   is_edited: boolean;
   rating: number | null;
+  check_points: string[] | null; // AI 초안에서 상담원이 확인할 것
   approved_by: number | null;
   approved_at: string | null;
   created_at: string;

@@ -1,7 +1,8 @@
 // 대화 + 답변 작성 영역 (문의 상세)
 // - 대화: 고객(왼쪽: 처음 문의·추가 문의·사진) / AI·상담원 답변(오른쪽, 고객 평가 표시) / 내부 메모(노란색, 고객에게 안 보임)
 //         사이사이 처리 안내(AI 판단, 배정, 상태 변경, 답변 알림)
-// - 입력: [답변] 탭 = 초안 저장·발송 (AI 초안이 있으면 채워 둠, 참고 FAQ 넣기) / [내부 메모] 탭 = 상담원끼리 메모
+// - 입력: [답변] 탭 = 초안 저장·발송 (AI 초안이 있으면 채워 둠, [AI 초안 만들기], 참고 FAQ 넣기) / [내부 메모] 탭 = 상담원끼리 메모
+// - AI 초안의 [확인 필요: …] 표시와 확인할 것 목록을 보여 주고, 표시가 남은 채로 보내려 하면 한 번 더 물음
 import { useEffect, useState } from "react";
 
 import { customerApi, errorMessage, inquiryApi, responseApi } from "../services/api";
@@ -10,6 +11,7 @@ import { Bubble, Note } from "./Chat";
 import { Alert, Button, Spinner, Textarea, cx, formatDate } from "./ui";
 
 const MAX = 4000;
+const CHECK_MARK = "[확인 필요";
 
 function Photos({ data, messageId }: { data: InquiryDetail; messageId: number | null }) {
   const list = data.attachments.filter((a) => a.message_id === messageId);
@@ -43,7 +45,7 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
   const [mode, setMode] = useState<"answer" | "memo">("answer");
   const [text, setText] = useState(draft ? draft.final_text ?? draft.draft_text : "");
   const [memo, setMemo] = useState("");
-  const [busy, setBusy] = useState<"" | "save" | "send" | "memo">("");
+  const [busy, setBusy] = useState<"" | "save" | "send" | "memo" | "draft">("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [faqs, setFaqs] = useState<Record<string, FaqPublic>>({});
@@ -60,7 +62,7 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
 
   const dirty = text.trim() !== (draft ? (draft.final_text ?? draft.draft_text) : "").trim();
 
-  async function run(kind: "save" | "send" | "memo", action: () => Promise<unknown>, ok: string) {
+  async function run(kind: "save" | "send" | "memo" | "draft", action: () => Promise<unknown>, ok: string) {
     setError("");
     setNotice("");
     setBusy(kind);
@@ -75,11 +77,26 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
     }
   }
 
-  const save = (send: boolean) => run(send ? "send" : "save", async () => {
+  const save = (send: boolean) => {
+    if (send && text.includes(CHECK_MARK)
+      && !window.confirm("답변에 [확인 필요] 표시가 남아 있습니다. 확인한 내용으로 고치지 않고 그대로 보낼까요?")) return;
+    return run(send ? "send" : "save", async () => {
     if (draft) await (send ? responseApi.approve(draft.id, text) : responseApi.update(draft.id, text));
     else await responseApi.create(data.id, text, send);
     if (send) setText(""); // 보낸 뒤에는 입력칸을 비워 추가 답변용으로
   }, send ? "답변을 보냈습니다. 고객 조회 화면에 보이고 이메일 알림이 기록되었으며, 문의는 완료로 바뀌었습니다." : "초안을 저장했습니다.");
+  };
+
+  // AI 초안 만들기: 상담원이 쓰던 글이 있으면 바꿀지 먼저 물음
+  const aiDraft = () => {
+    const edited = !!draft && (draft.generated_by !== "llm" || (draft.final_text !== null && draft.final_text !== draft.draft_text));
+    const replace = edited || (dirty && !!text.trim());
+    if (replace && !window.confirm("작성 중인 답변이 AI 초안으로 바뀝니다. 계속할까요?")) return;
+    return run("draft", () => responseApi.draft(data.id, replace),
+      "AI 초안을 만들었습니다. [확인 필요] 표시와 아래 확인할 것을 살펴본 뒤 고쳐서 보내 주세요.");
+  };
+  const checks = draft?.generated_by === "llm" ? draft.check_points ?? [] : [];
+  const marks = text.split(CHECK_MARK).length - 1;
 
   const saveMemo = () => run("memo", async () => { await inquiryApi.addNote(data.id, memo); setMemo(""); }, "내부 메모를 남겼습니다.");
 
@@ -154,7 +171,13 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
             {tab("answer", draft ? (draft.generated_by === "llm" ? "AI 답변 초안" : "작성 중인 초안") : sent.length ? "추가 답변" : "답변 작성")}
             {tab("memo", "내부 메모")}
           </div>
-          {mode === "answer" && draft?.grounded === false && <span className="text-xs text-amber-700">FAQ만으로는 답이 부족해 AI가 초안으로 둔 답변입니다</span>}
+          {mode === "answer" && (
+            <button type="button" onClick={aiDraft} disabled={!!busy}
+              title="FAQ·주문 정보·대화를 근거로 AI가 초안을 씁니다. 모르는 내용은 [확인 필요]로 남깁니다."
+              className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60">
+              {busy === "draft" ? <><Spinner /> AI가 초안을 쓰는 중… (10초 안팎)</> : <>✨ {draft?.generated_by === "llm" ? "AI 초안 다시 만들기" : "AI 초안 만들기"}</>}
+            </button>
+          )}
         </div>
 
         {mode === "memo" ? (
@@ -178,10 +201,22 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
                 ))}
               </div>
             )}
+            {checks.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                <p className="mb-1 font-semibold">발송 전에 확인할 것 (AI가 근거로 알 수 없던 내용)</p>
+                <ul className="list-disc space-y-0.5 pl-4">{checks.map((c) => <li key={c}>{c}</li>)}</ul>
+              </div>
+            )}
+            {draft?.generated_by === "llm" && checks.length === 0 && draft.grounded === false && (
+              <p className="text-xs text-amber-700">FAQ만으로는 답이 부족해 AI가 초안으로 둔 답변입니다. 내용을 확인해 주세요.</p>
+            )}
             <Textarea value={text} maxLength={MAX} onChange={(e) => setText(e.target.value)} className="min-h-40 text-[15px] leading-relaxed"
               placeholder="고객에게 보낼 답변을 입력하세요. 오른쪽 주문 정보와 참고 FAQ를 확인해 주세요." disabled={!!busy} />
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-xs text-slate-400">{text.length.toLocaleString()} / {MAX.toLocaleString()}자 · 발송하면 고객 조회 화면에 보이고 이메일 알림이 기록되며 문의가 완료됩니다</span>
+              <span className="text-xs text-slate-400">
+                {marks > 0 && <b className="mr-1 font-semibold text-amber-700">[확인 필요] {marks}곳 남음 ·</b>}
+                {text.length.toLocaleString()} / {MAX.toLocaleString()}자 · 발송하면 고객 조회 화면에 보이고 이메일 알림이 기록되며 문의가 완료됩니다
+              </span>
               <div className="flex gap-2">
                 <Button variant="ghost" disabled={!!busy || !text.trim() || (!!draft && !dirty)} onClick={() => save(false)}>
                   {busy === "save" ? <Spinner /> : "초안 저장"}
