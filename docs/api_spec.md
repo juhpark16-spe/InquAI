@@ -344,8 +344,10 @@
     "auto_rate": 0.34,                   // 성공 지표: 자동 처리율 30% 이상 (자동 처리 / 분석된 문의)
     "approval_without_edit_rate": 0.72   // 성공 지표: 초안 무수정 승인율 70% 이상 (승인 기능 3주차)
   },
+  "previous": { "from": "2026-11-02", "to": "2026-11-08", "total": 110,   // 바로 앞 같은 길이 기간 (증감 비교)
+                "auto_rate": 0.29, "avg_latency_ms": 9100 },
   "now": { "open": 20, "urgent_open": 3, "review_waiting": 12, "unassigned_open": 5 },  // 기간과 관계없이 현재
-  "daily": [ { "date": "2026-11-15", "total": 18, "open": 6, "done": 12,
+  "daily": [ { "date": "2026-11-15", "total": 18, "open": 6, "done": 12, "auto": 7,
                "by_category": { "배송": 5, "주문 취소": 1, "...": 0 } } ],
   "by_status": { "접수": 0, "자동 처리": 45, "검토 대기": 12, "담당자 처리": 8, "완료": 67 },
   "by_category": { "배송": 41, "...": 0 },          // 8개 유형 순서 고정 (그래프 색 순서)
@@ -362,6 +364,14 @@
 - `avg_latency_ms`는 LLM이 판단한 문의만 평균 (규칙 판단은 0초라 섞으면 평균이 왜곡됨)
 - 대시보드 카드에서 목록으로 이동할 수 있도록 문의 목록 API에 `open=true`(미처리만) 필터를 추가했습니다.
 기획서 7장은 권한이 "필요"이지만, 6장 권한표에 맞춰 관리자만으로 정했습니다.
+
+### GET /api/stats/activity — 최근 처리 활동 (관리자)
+파라미터: `limit` (1~30, 기본 8). 최근에 움직인 문의들의 처리 이력(문의 상세의 `history`와 같은 형식)을 최신순으로 돌려줍니다.
+```json
+[ { "at": "2026-11-16T04:01:00+00:00", "actor": "AI", "text": "자동 답변 판단 (LLM) · FAQ 검색", "kind": "ai",
+    "inquiry_id": 14, "inquiry_number": "INQ-20261116-0003", "title": "택배상자가 뜯겨 왔어요" } ]
+```
+- 문의 목록 API 항목에 `confidence`(AI 유형 분류 확신도 0~1)를 추가했습니다. 목록의 확신도 막대에 씁니다 (0.8 미만 = 담당자 확인).
 
 ### GET /api/admin/agent-logs — AI 실행 로그 (관리자, 상담원은 배정된 문의만)
 파라미터: `inquiry_id`, `decision`, `selected_tool`, `tool_success`, `from`, `to`

@@ -35,6 +35,7 @@ class InquiryListItem(BaseModel):
     urgency: str | None
     sentiment: str | None
     decision: str | None
+    confidence: float | None  # AI 유형 분류 확신도 (0~1, 낮으면 사람이 확인)
     assigned_to: Assignee | None
     created_at: UTCDateTime
     due_at: UTCDateTime   # 답변 기한 (긴급 4시간, 그 외 24시간)

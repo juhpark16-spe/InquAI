@@ -215,7 +215,7 @@ export default function InquiryDetailPage() {
   return (
     <div className="space-y-4">
       {/* 상단 고정: 무엇을, 얼마나 급하게 + 바로 할 수 있는 처리 */}
-      <div className="sticky top-0 z-10 -mx-4 border-b border-slate-200 bg-slate-50/95 px-4 py-3 backdrop-blur">
+      <div className="sticky top-0 z-10 -mx-4 border-b border-slate-200 bg-canvas/95 px-4 py-3 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <Link to="/admin/inquiries" className="text-xs text-slate-500 hover:text-slate-900">← 문의 목록</Link>

@@ -4,12 +4,12 @@ import { cx } from "../../components/ui";
 
 export default function CustomerLayout() {
   const link = ({ isActive }: { isActive: boolean }) =>
-    cx("rounded-md px-3 py-1.5 text-sm", isActive ? "bg-indigo-50 font-medium text-indigo-700" : "text-slate-600 hover:text-slate-900");
+    cx("whitespace-nowrap rounded-full px-3 sm:px-4 py-2 text-sm font-medium", isActive ? "bg-primary text-white shadow-sm shadow-primary/25" : "text-muted hover:bg-white/60 hover:text-ink");
   return (
     <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
-          <span className="font-semibold text-slate-900">InquAI 쇼핑 고객센터</span>
+      <header className="sticky top-0 z-20 border-b border-white/60 bg-white/55 backdrop-blur">
+        <div className="mx-auto flex min-h-16 max-w-3xl flex-wrap items-center justify-between gap-2 px-4 py-2">
+          <span className="flex items-center gap-2 font-semibold text-ink"><span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-pink text-sm font-bold text-white" aria-hidden>Q</span>InquAI 고객센터</span>
           <nav className="flex gap-1">
             <NavLink to="/faq" className={link}>자주 묻는 질문</NavLink>
             <NavLink to="/inquiry" end className={link}>문의하기</NavLink>
@@ -17,9 +17,13 @@ export default function CustomerLayout() {
           </nav>
         </div>
       </header>
-      <main className="mx-auto max-w-2xl px-4 py-8">
+      <main className="mx-auto max-w-2xl px-4 py-10">
         <Outlet />
       </main>
+      <footer className="mt-16 border-t border-white/60 bg-white/40 py-10 text-center text-sm text-muted">
+        <p className="font-semibold text-ink">InquAI 쇼핑 고객센터</p>
+        <p className="mt-1">상담 시간 평일 10:00~17:00 · 문의는 24시간 접수</p>
+      </footer>
     </div>
   );
 }

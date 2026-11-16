@@ -68,6 +68,7 @@ def test_list_item_shape(client, inquiries):
     item = next(i for i in client.get("/api/inquiries").json()["items"] if i["inquiry_number"].endswith("0002"))
     assert item["assigned_to"] == {"id": AGENT_ID, "display_name": "상담원1"}
     assert (item["category"], item["urgency"], item["decision"]) == ("반품·환불", "높음", "담당자 연결")
+    assert 0 <= item["confidence"] <= 1  # 목록에 AI 확신도
 
 
 @pytest.mark.parametrize("params,expected", [

@@ -38,8 +38,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-4">
-      <Card className="w-full max-w-sm" title="InquAI 관리자 로그인">
+    <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4">
+      <div className="text-center">
+        <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-pink text-xl font-bold text-white" aria-hidden>Q</span>
+        <h1 className="display text-4xl">InquAI 관리</h1>
+        <p className="mt-2 text-sm text-muted">관리자·상담원 전용</p>
+      </div>
+      <Card className="w-full max-w-sm" title="로그인">
         <form onSubmit={submit} className="space-y-4">
           <Field label="아이디">
             <Input required autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} />

@@ -87,6 +87,7 @@ export interface InquiryListItem {
   urgency: string | null;
   sentiment: string | null;
   decision: string | null;
+  confidence: number | null; // AI 유형 분류 확신도 (0~1)
   assigned_to: Assignee | null;
   created_at: string;
   due_at: string;

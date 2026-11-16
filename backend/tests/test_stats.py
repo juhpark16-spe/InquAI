@@ -100,3 +100,29 @@ def test_list_open_filter(client, data):
     login(client)
     r = client.get("/api/inquiries", params={"open": "true", "urgency": "높음"})
     assert [i["inquiry_number"] for i in r.json()["items"]] == ["INQ-T-0003"]
+
+
+def test_previous_period_and_daily_auto(client, data):
+    """지난 기간(같은 일수) 값으로 증감을 계산할 수 있어야 함. 10일 전 문의는 바로 앞 7일에 들어감"""
+    login(client)
+    s = client.get("/api/stats/summary").json()
+    p = s["previous"]
+    today = datetime.now(KST).date()
+    assert p["to"] == (today - timedelta(days=7)).isoformat()
+    assert p["from"] == (today - timedelta(days=13)).isoformat()
+    assert p["total"] == 1 and p["auto_rate"] == 0.0 and p["avg_latency_ms"] is None  # 규칙 판단 1건
+    assert s["daily"][-1]["auto"] == 2
+    assert sum(d["auto"] for d in s["daily"]) == 2
+
+
+def test_activity(client, data):
+    assert client.get("/api/stats/activity").status_code == 401
+    login(client, "agent1")
+    assert client.get("/api/stats/activity").status_code == 403
+    login(client)
+    items = client.get("/api/stats/activity?limit=5").json()
+    assert 0 < len(items) <= 5
+    times = [e["at"] for e in items]
+    assert times == sorted(times, reverse=True)  # 최신순
+    e = items[0]
+    assert {"at", "actor", "text", "kind", "inquiry_id", "inquiry_number", "title"} <= set(e)

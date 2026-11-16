@@ -80,7 +80,7 @@ export default function InquiryFormPage() {
           <Button variant="ghost" onClick={() => { setResult(null); setForm(EMPTY); setPhotos([]); setAgreed(false); }}>새 문의 작성</Button>
           {/* 이메일은 주소(URL)에 남기지 않고 화면 이동 상태로만 넘김 */}
           <Link to="/inquiry/lookup" state={{ email: lookupEmail }}
-            className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50">
+            className="inline-flex min-h-11 items-center rounded-xl border border-hairline bg-canvas px-5 py-2.5 text-sm font-semibold text-ink hover:bg-surface-card">
             문의 조회로 이동
           </Link>
         </div>

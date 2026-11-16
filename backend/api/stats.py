@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 from backend.core.dependencies import DB, AdminOnly
 from backend.core.errors import AppError
 from backend.services import sla
+from backend.services.inquiry_context import history
 from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminUser, Inquiry, as_utc)
 from backend.training.labels import CATEGORY_LABELS
 
@@ -33,6 +34,22 @@ def _rate(part: int, whole: int) -> float | None:
     return round(part / whole, 4) if whole else None
 
 
+def _load(db, date_from: date, date_to: date) -> list[Inquiry]:
+    """KST 날짜 from~to 사이에 접수된 문의 (분석·AI 기록·답변 함께)"""
+    start = datetime.combine(date_from, time.min, KST).astimezone(timezone.utc)
+    end = datetime.combine(date_to + timedelta(days=1), time.min, KST).astimezone(timezone.utc)
+    return db.scalars(select(Inquiry).where(Inquiry.created_at >= start, Inquiry.created_at < end)
+                      .options(selectinload(Inquiry.analysis), selectinload(Inquiry.agent_logs),
+                               selectinload(Inquiry.responses))).all()
+
+
+def _avg_latency(rows: list[Inquiry]) -> int | None:
+    """LLM이 판단한 문의의 평균 처리 시간 (ms)"""
+    values = [log.latency_ms for i in rows for log in i.agent_logs
+              if log.latency_ms is not None and log.decided_by == "LLM"]
+    return round(sum(values) / len(values)) if values else None
+
+
 @router.get("/summary", summary="대시보드 통계 (관리자)")
 def summary(
     _: AdminOnly,
@@ -47,17 +64,17 @@ def summary(
     if days < 1 or days > MAX_DAYS:
         raise AppError(422, f"기간은 1~{MAX_DAYS}일로 정해 주세요.", "INVALID_PARAM")
 
-    start = datetime.combine(date_from, time.min, KST).astimezone(timezone.utc)
-    end = datetime.combine(date_to + timedelta(days=1), time.min, KST).astimezone(timezone.utc)
-    rows = db.scalars(select(Inquiry).where(Inquiry.created_at >= start, Inquiry.created_at < end)
-                      .options(selectinload(Inquiry.analysis), selectinload(Inquiry.agent_logs),
-                               selectinload(Inquiry.responses))).all()
+    rows = _load(db, date_from, date_to)
+    # 바로 앞의 같은 길이 기간 (대시보드의 "지난 기간 대비" 증감)
+    prev_to = date_from - timedelta(days=1)
+    prev_from = prev_to - timedelta(days=days - 1)
+    prev_rows = _load(db, prev_from, prev_to)
 
     # ---- 날짜별 (유형별 쌓기, 처리·미처리) ----
-    daily = {date_from + timedelta(days=i): {"total": 0, "open": 0, "done": 0, "by_category": Counter()}
+    daily = {date_from + timedelta(days=i): {"total": 0, "open": 0, "done": 0, "auto": 0, "by_category": Counter()}
              for i in range(days)}
     status_c, urgency_c, category_c, decision_c, decided_by_c = Counter(), Counter(), Counter(), Counter(), Counter()
-    latencies, tokens_in, tokens_out, llm_calls, errors, low_conf = [], 0, 0, 0, 0, 0
+    tokens_in, tokens_out, llm_calls, errors, low_conf = 0, 0, 0, 0, 0
     edited = approved = 0
     ratings = {"ai": Counter(), "agent": Counter()}  # 고객 평가: AI 자동 답변 / 상담원 답변
 
@@ -66,6 +83,7 @@ def summary(
         bucket = daily[d]
         bucket["total"] += 1
         bucket["open" if i.status in OPEN_STATUSES else "done"] += 1
+        bucket["auto"] += i.status == "자동 처리"
         status_c[i.status] += 1
         a = i.analysis
         if a:
@@ -78,8 +96,6 @@ def summary(
                 decided_by_c[a.decided_by] += 1
             low_conf += a.confidence < LOW_CONFIDENCE
         for log in i.agent_logs:
-            if log.latency_ms is not None and log.decided_by == "LLM":
-                latencies.append(log.latency_ms)
             t = log.tokens or {}
             tokens_in += t.get("input", 0)
             tokens_out += t.get("output", 0)
@@ -116,6 +132,12 @@ def summary(
             "auto_rate": _rate(status_c["자동 처리"], analyzed),          # 성공 지표: 30% 이상
             "approval_without_edit_rate": _rate(approved - edited, approved),  # 성공 지표: 70% 이상 (3주차부터)
         },
+        "previous": {  # 바로 앞 기간 (같은 일수). 증감 비교용
+            "from": prev_from.isoformat(), "to": prev_to.isoformat(),
+            "total": len(prev_rows),
+            "auto_rate": _rate(sum(i.status == "자동 처리" for i in prev_rows), sum(i.analysis is not None for i in prev_rows)),
+            "avg_latency_ms": _avg_latency(prev_rows),
+        },
         "now": {  # 기간과 관계없이 지금 처리해야 할 일
             "open": len(open_rows),
             "urgent_open": urgent_open,
@@ -124,7 +146,7 @@ def summary(
             "overdue_open": sum(1 for i in open_rows
                                 if sla.is_overdue(i.status, i.created_at, i.analysis.urgency if i.analysis else None)),
         },
-        "daily": [{"date": d.isoformat(), "total": v["total"], "open": v["open"], "done": v["done"],
+        "daily": [{"date": d.isoformat(), "total": v["total"], "open": v["open"], "done": v["done"], "auto": v["auto"],
                    "by_category": {c: v["by_category"].get(c, 0) for c in CATEGORY_LABELS}}
                   for d, v in daily.items()],
         "by_status": {s: status_c.get(s, 0) for s in INQUIRY_STATUSES},
@@ -136,7 +158,7 @@ def summary(
         "ratings": {k: {"up": c["up"], "down": c["down"], "satisfaction": _rate(c["up"], c["up"] + c["down"])}
                     for k, c in ratings.items()},
         "ai": {
-            "avg_latency_ms": round(sum(latencies) / len(latencies)) if latencies else None,  # LLM이 판단한 문의만
+            "avg_latency_ms": _avg_latency(rows),  # LLM이 판단한 문의만
             "low_confidence": low_conf,      # 확신도 0.8 미만 → 담당자 연결
             "llm_calls": llm_calls,
             "tokens": {"input": tokens_in, "output": tokens_out},
@@ -144,3 +166,15 @@ def summary(
         },
         "staff": list(per_staff.values()),
     }
+
+
+@router.get("/activity", summary="최근 처리 활동 (관리자)")
+def activity(_: AdminOnly, db: DB, limit: int = Query(8, ge=1, le=30)):
+    """최근에 움직임이 있던 문의들의 처리 이력(접수, AI 판단, 배정, 상태 변경, 발송)을 최신순으로"""
+    recent = db.scalars(select(Inquiry).order_by(Inquiry.updated_at.desc(), Inquiry.id.desc()).limit(limit * 2)
+                        .options(selectinload(Inquiry.agent_logs), selectinload(Inquiry.responses),
+                                 selectinload(Inquiry.messages))).all()
+    events = [{**e, "inquiry_id": i.id, "inquiry_number": i.inquiry_number, "title": i.title}
+              for i in recent for e in history(db, i)]
+    events.sort(key=lambda e: as_utc(e["at"]), reverse=True)
+    return [{**e, "at": as_utc(e["at"]).isoformat()} for e in events[:limit]]

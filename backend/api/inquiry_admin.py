@@ -101,6 +101,7 @@ def list_inquiries(
         "id": i.id, "inquiry_number": i.inquiry_number, "title": i.title, "customer_name": i.customer_name,
         "status": i.status, "category": a.category if a else None, "urgency": a.urgency if a else None,
         "sentiment": a.sentiment if a else None, "decision": a.decision if a else None,
+        "confidence": a.confidence if a else None,
         "assigned_to": _assignee(i.assignee), "created_at": i.created_at,
         "due_at": sla.due_at(i.created_at, a.urgency if a else None),
         "overdue": sla.is_overdue(i.status, i.created_at, a.urgency if a else None),

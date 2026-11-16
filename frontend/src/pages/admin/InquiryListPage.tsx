@@ -3,11 +3,28 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { useAuth } from "../../auth/AuthProvider";
-import { Alert, Badge, Button, Input, Select, Spinner, formatDate } from "../../components/ui";
+import { Alert, Badge, Button, Input, Select, Spinner, cx, formatDate } from "../../components/ui";
 import { errorMessage, inquiryApi } from "../../services/api";
 import { CATEGORIES, DECISIONS, STATUSES, URGENCIES, type InquiryListItem, type Page } from "../../services/types";
 
 const SIZE = 20;
+
+/** AI 유형 분류 확신도: 막대 10칸 + 숫자. 0.8 미만은 주황(사람이 확인할 문의) */
+function Confidence({ value }: { value: number | null }) {
+  if (value === null) return <span className="text-xs text-slate-400">-</span>;
+  const filled = Math.round(value * 10);
+  const low = value < 0.8;
+  return (
+    <span className="flex items-center gap-2" title={`AI 유형 분류 확신도 ${Math.round(value * 100)}%${low ? " · 0.8 미만이라 담당자 확인" : ""}`}>
+      <span className="flex gap-[2px]" aria-hidden>
+        {Array.from({ length: 10 }, (_, k) => (
+          <span key={k} className={cx("h-3 w-[3px] rounded-sm", k < filled ? (low ? "bg-amber-500" : "bg-emerald-600") : "bg-surface-strong")} />
+        ))}
+      </span>
+      <span className={cx("text-xs tabular-nums", low ? "font-semibold text-amber-700" : "text-body")}>{Math.round(value * 100)}</span>
+    </span>
+  );
+}
 
 export default function InquiryListPage() {
   const { user } = useAuth();
@@ -63,7 +80,7 @@ export default function InquiryListPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold text-slate-900">문의 관리</h1>
+          <h1 className="display text-4xl">문의 관리</h1>
           <p className="text-sm text-slate-500">
             {user?.role === "agent" ? "나에게 배정된 문의만 보입니다." : "긴급도 높은 문의가 위에 옵니다."}
           </p>
@@ -75,11 +92,11 @@ export default function InquiryListPage() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <label className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700">
+        <label className="flex min-h-11 items-center gap-1.5 rounded-xl border border-hairline bg-white px-3 text-sm text-ink">
           <input type="checkbox" checked={params.get("open") === "true"} onChange={(e) => update("open", e.target.checked ? "true" : "")} />
           미처리만
         </label>
-        <label className="flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-700">
+        <label className="flex min-h-11 items-center gap-1.5 rounded-xl border border-hairline bg-white px-3 text-sm text-ink">
           <input type="checkbox" checked={params.get("overdue") === "true"} onChange={(e) => update("overdue", e.target.checked ? "true" : "")} />
           기한 초과만
         </label>
@@ -103,35 +120,36 @@ export default function InquiryListPage() {
 
       {error && <Alert>{error}</Alert>}
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-2xl border border-hairline bg-white">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500">
+          <thead className="border-b border-hairline text-xs text-muted">
             <tr>
-              {["문의 번호", "제목", "고객", "유형", "긴급도", "감정", "처리 방식", "상태", "담당", "접수 시각"].map((h) => (
-                <th key={h} className="whitespace-nowrap px-3 py-2 font-medium">{h}</th>
+              {["문의 번호", "제목", "고객", "유형", "AI 확신도", "긴급도", "감정", "처리 방식", "상태", "담당", "접수 시각"].map((h) => (
+                <th key={h} className="whitespace-nowrap px-3 py-3 font-medium">{h}</th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y divide-hairline">
             {data?.items.map((i) => (
-              <tr key={i.id} className="cursor-pointer hover:bg-slate-50" onClick={() => navigate(`/admin/inquiries/${i.id}`)}>
-                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
+              <tr key={i.id} className="cursor-pointer hover:bg-surface-soft" onClick={() => navigate(`/admin/inquiries/${i.id}`)}>
+                <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">
                   <Link to={`/admin/inquiries/${i.id}`} onClick={(e) => e.stopPropagation()} className="text-indigo-600 hover:underline">
                     {i.inquiry_number}
                   </Link>
                 </td>
-                <td className="max-w-xs truncate px-3 py-2">{i.title}</td>
-                <td className="whitespace-nowrap px-3 py-2">{i.customer_name}</td>
-                <td className="whitespace-nowrap px-3 py-2">{i.category ?? "-"}</td>
-                <td className="px-3 py-2"><Badge value={i.urgency} /></td>
-                <td className="px-3 py-2"><Badge value={i.sentiment} /></td>
-                <td className="px-3 py-2"><Badge value={i.decision} /></td>
-                <td className="whitespace-nowrap px-3 py-2">
+                <td className="max-w-xs truncate px-3 py-3">{i.title}</td>
+                <td className="whitespace-nowrap px-3 py-3">{i.customer_name}</td>
+                <td className="whitespace-nowrap px-3 py-3">{i.category ?? "-"}</td>
+                <td className="px-3 py-3"><Confidence value={i.confidence} /></td>
+                <td className="px-3 py-3"><Badge value={i.urgency} /></td>
+                <td className="px-3 py-3"><Badge value={i.sentiment} /></td>
+                <td className="px-3 py-3"><Badge value={i.decision} /></td>
+                <td className="whitespace-nowrap px-3 py-3">
                   <Badge value={i.status} />
                   {i.overdue && <span className="ml-1 text-xs font-semibold text-rose-700" title={`답변 기한 ${formatDate(i.due_at)}`}>⏰ 기한 초과</span>}
                 </td>
-                <td className="whitespace-nowrap px-3 py-2 text-slate-600">{i.assigned_to?.display_name ?? "-"}</td>
-                <td className="whitespace-nowrap px-3 py-2 text-slate-500">{formatDate(i.created_at)}</td>
+                <td className="whitespace-nowrap px-3 py-3 text-slate-600">{i.assigned_to?.display_name ?? "-"}</td>
+                <td className="whitespace-nowrap px-3 py-3 text-slate-500">{formatDate(i.created_at)}</td>
               </tr>
             ))}
           </tbody>

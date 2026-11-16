@@ -133,9 +133,10 @@ export const responseApi = {
 export interface StatsSummary {
   range: { from: string; to: string; days: number };
   kpi: { total: number; today: number | null; auto_rate: number | null; approval_without_edit_rate: number | null };
+  previous: { from: string; to: string; total: number; auto_rate: number | null; avg_latency_ms: number | null }; // 바로 앞 같은 길이 기간
   now: { open: number; urgent_open: number; review_waiting: number; unassigned_open: number; overdue_open: number };
   ratings: Record<"ai" | "agent", { up: number; down: number; satisfaction: number | null }>;
-  daily: { date: string; total: number; open: number; done: number; by_category: Record<string, number> }[];
+  daily: { date: string; total: number; open: number; done: number; auto: number; by_category: Record<string, number> }[];
   by_status: Record<string, number>;
   by_category: Record<string, number>;
   by_urgency: Record<string, number>;
@@ -150,9 +151,20 @@ function kstDate(offsetDays = 0): string {
   return d.toISOString().slice(0, 10);
 }
 
+export interface ActivityItem {
+  at: string;
+  actor: string;
+  text: string;
+  kind: "received" | "followup" | "ai" | "assign" | "status" | "draft" | "sent";
+  inquiry_id: number;
+  inquiry_number: string;
+  title: string;
+}
+
 export const statsApi = {
   summary: (days: number) =>
     http.get<StatsSummary>("/stats/summary", { params: { from: kstDate(days - 1), to: kstDate(0) } }).then((r) => r.data),
+  activity: (limit = 8) => http.get<ActivityItem[]>("/stats/activity", { params: { limit } }).then((r) => r.data),
 };
 
 // ---- 계정 관리 (관리자) ----
