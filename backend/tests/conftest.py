@@ -44,5 +44,7 @@ def db():
 @pytest.fixture()
 def client(db):
     rate_limit.reset()
+    from backend.api.inquiries import lookup_failures
+    lookup_failures.reset()
     with TestClient(app) as c:
         yield c

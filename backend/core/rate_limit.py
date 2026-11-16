@@ -21,6 +21,34 @@ def reset() -> None:
         _hits.clear()
 
 
+class FailureLock:
+    """같은 대상(예: 이메일)에 실패가 window 안에 limit 번 쌓이면 잠급니다. 성공해도 기록은 남겨 둠
+    (성공한 뒤 다른 비밀번호를 계속 시도하는 것도 막기 위해)."""
+
+    def __init__(self, limit: int, window_seconds: int):
+        self.limit, self.window = limit, window_seconds
+        self._fails: dict[str, deque] = defaultdict(deque)
+
+    def _recent(self, key: str, now: float) -> deque:
+        q = self._fails[key]
+        while q and now - q[0] > self.window:
+            q.popleft()
+        return q
+
+    def is_locked(self, key: str) -> bool:
+        with _lock:
+            return len(self._recent(key, time.monotonic())) >= self.limit
+
+    def fail(self, key: str) -> None:
+        with _lock:
+            now = time.monotonic()
+            self._recent(key, now).append(now)
+
+    def reset(self) -> None:
+        with _lock:
+            self._fails.clear()
+
+
 def rate_limit(name: str, limit: int, window_seconds: int):
     def check(request: Request) -> None:
         ip = request.client.host if request.client else "unknown"

@@ -227,3 +227,11 @@ def test_agent_cannot_change_other_agents_inquiry(client, db, inquiries):
 def test_status_only_manual_values(client, inquiries, value):
     login(client, "admin")
     assert patch(client, "/api/inquiries/1/status", {"status": value}).status_code == 422
+
+def test_staff_list_admin_only(client, inquiries):
+    login(client, "agent1")
+    assert client.get("/api/admin/staff").status_code == 403
+    client.cookies.clear()
+    login(client, "admin")
+    r = client.get("/api/admin/staff")
+    assert r.status_code == 200 and [u["username"] for u in r.json()] == ["agent1", "admin"]

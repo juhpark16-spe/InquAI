@@ -40,7 +40,9 @@ def test_login_sets_cookies_and_me(client):
     assert set(by_name) == {"access_token", "refresh_token", "csrf_token"}
     assert "httponly" in by_name["access_token"] and "httponly" in by_name["refresh_token"]
     assert "httponly" not in by_name["csrf_token"]  # React가 읽어서 헤더에 넣어야 함
-    assert all("samesite=lax" in c and "path=/api" in c for c in by_name.values())
+    assert all("samesite=lax" in c for c in by_name.values())
+    assert "path=/api" in by_name["access_token"] and "path=/api" in by_name["refresh_token"]
+    assert "path=/;" in by_name["csrf_token"] or by_name["csrf_token"].endswith("path=/")  # 화면에서 읽도록
 
     me = client.get("/api/auth/me")
     assert me.status_code == 200 and me.json()["username"] == "admin"

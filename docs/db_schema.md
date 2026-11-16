@@ -35,12 +35,13 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | password_hash | VARCHAR(255) | Argon2 해시 (pwdlib). 평문은 저장하지 않음 |
 | role | VARCHAR(10) | `admin` / `agent` |
 | display_name | VARCHAR(50) | **화면에 보이는 이름** (배정 목록 등) |
+| **categories** | JSON | **담당 유형 목록** (예: `["배송", "교환"]`). 자동 배정에 사용. 빈 목록 = 전체 담당 (2주차 추가) |
 | is_active | BOOLEAN | 비활성 계정은 로그인 불가 |
 | failed_login_count | INT | 연속 실패 횟수. 로그인 성공 시 0 |
 | **locked_until** | DATETIME NULL | **5회 실패 시 지금+15분. 이 시각이 지나면 자동 해제** (기획서 6장) |
 | last_login_at | DATETIME NULL | 마지막 로그인 |
 
-계정은 `backend/database/seed_admin.py`로만 만듭니다 (공개 회원가입 없음).
+처음 계정은 `backend/database/seed_admin.py`로, 이후 계정은 관리자가 계정 관리 화면(`/admin/users`)에서 만듭니다 (공개 회원가입 없음).
 
 ### refresh_tokens — Refresh Token 기록 (추가)
 
@@ -61,7 +62,8 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | --- | --- | --- |
 | **inquiry_number** | VARCHAR(20) UNIQUE | **고객에게 알려주는 문의 번호** (예: `INQ-20261113-0007`). 내부 `id`는 노출하지 않음 |
 | customer_name | VARCHAR(50) | |
-| customer_email | VARCHAR(255) | 본인 확인용 (문의 조회, 주문 확인) |
+| customer_email | VARCHAR(255) | 본인 확인용 (문의 조회, 주문 확인). 소문자로 저장 |
+| **lookup_password_hash** | VARCHAR(255) NULL | **문의 조회 비밀번호의 Argon2 해시.** 이메일 + 이 비밀번호로 본인 문의를 조회 (2주차 추가) |
 | order_number | VARCHAR(30) NULL | 주문 관련 문의일 때만 |
 | title | VARCHAR(200) | |
 | content | TEXT | 문의 원문 |
@@ -208,7 +210,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | target_id | INT | |
 | detail | JSON | 바뀌기 전·후 값 (예: `{"before": "검토 대기", "after": "완료"}`) |
 
-**action 값:** login, login_failed, logout, status_change, assign, response_edit, response_approve, ticket_approve, ticket_reject, label_correct, faq_create, faq_update, faq_deactivate
+**action 값:** login, login_failed, logout, status_change, assign, response_edit, response_approve, ticket_approve, ticket_reject, label_correct, faq_create, faq_update, faq_deactivate, user_create, user_update, user_password_reset, auto_assign (시스템 자동 배정, admin_id 없음)
 
 ## 3. 인덱스
 
@@ -216,7 +218,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | --- | --- | --- |
 | inquiries | (status, created_at) | 문의 목록 필터·정렬 |
 | inquiries | (assigned_to, status) | 상담원의 "배정된 문의" 목록 |
-| inquiries | inquiry_number, customer_email | 고객 문의 조회 (번호 + 이메일) |
+| inquiries | customer_email | 고객 문의 조회 (이메일 + 조회 비밀번호) |
 | analysis_results | (urgency, category) | 긴급도 높은 순 정렬, 유형별 통계 |
 | orders | order_number | 배송 조회 도구 |
 | agent_logs | (inquiry_id, created_at) | 문의 상세의 실행 기록 |

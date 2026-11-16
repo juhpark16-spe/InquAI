@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api import auth, health, inquiries, inquiry_admin
+from backend.api import auth, faqs_public, health, inquiries, inquiry_admin, staff, stats
 from backend.core.config import get_settings
 from backend.core.errors import register_error_handlers
 from backend.database.session import SessionLocal, init_db
@@ -59,3 +59,6 @@ app.include_router(health.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(inquiries.router, prefix="/api")
 app.include_router(inquiry_admin.router, prefix="/api")
+app.include_router(staff.router, prefix="/api")
+app.include_router(faqs_public.router, prefix="/api")
+app.include_router(stats.router, prefix="/api")

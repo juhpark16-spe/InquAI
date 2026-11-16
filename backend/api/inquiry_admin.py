@@ -45,6 +45,7 @@ def list_inquiries(
     urgency: Literal[URGENCIES] | None = None,
     status: Literal[INQUIRY_STATUSES] | None = None,
     decision: Literal[DECISIONS] | None = None,
+    open: bool | None = Query(None, description="true 면 미처리(접수·검토 대기·담당자 처리)만"),
     assigned_to: str | None = Query(None, description="상담원 id, me, none (관리자만 지정 가능)"),
     q: str | None = Query(None, max_length=100, description="제목·내용·문의 번호·이메일 검색"),
     sort: Literal["urgency", "-created_at"] = "urgency",
@@ -66,6 +67,8 @@ def list_inquiries(
 
     if status:
         stmt = stmt.where(Inquiry.status == status)
+    if open:
+        stmt = stmt.where(Inquiry.status.in_(("접수", "검토 대기", "담당자 처리")))
     if category:
         stmt = stmt.where(AnalysisResult.category == category)
     if urgency:

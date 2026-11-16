@@ -19,6 +19,7 @@ REFRESH_COOKIE = "refresh_token"
 CSRF_COOKIE = "csrf_token"
 CSRF_HEADER = "X-CSRF-Token"
 COOKIE_PATH = "/api"
+CSRF_COOKIE_PATH = "/"
 
 
 def hash_password(password: str) -> str:
@@ -79,15 +80,18 @@ def set_auth_cookies(response: Response, access: str, refresh: str) -> str:
     common = {"secure": s.cookie_secure, "samesite": "lax", "path": COOKIE_PATH}
     response.set_cookie(ACCESS_COOKIE, access, max_age=s.access_token_minutes * 60, httponly=True, **common)
     response.set_cookie(REFRESH_COOKIE, refresh, max_age=s.refresh_token_days * 86400, httponly=True, **common)
-    response.set_cookie(CSRF_COOKIE, csrf, max_age=s.refresh_token_days * 86400, httponly=False, **common)
+    # csrf_token 은 화면 주소(/admin/...)의 React가 document.cookie 로 읽어야 해서 경로를 / 로 둡니다.
+    # (Path=/api 이면 /admin 페이지에서 보이지 않음. 토큰 쿠키 두 개는 /api 로만 보냄)
+    response.set_cookie(CSRF_COOKIE, csrf, max_age=s.refresh_token_days * 86400, httponly=False,
+                        **{**common, "path": CSRF_COOKIE_PATH})
     return csrf
 
 
 def clear_auth_cookies(response: Response) -> None:
     s = get_settings()
     for name in (ACCESS_COOKIE, REFRESH_COOKIE, CSRF_COOKIE):
-        response.delete_cookie(name, path=COOKIE_PATH, secure=s.cookie_secure, samesite="lax",
-                               httponly=name != CSRF_COOKIE)
+        response.delete_cookie(name, path=CSRF_COOKIE_PATH if name == CSRF_COOKIE else COOKIE_PATH,
+                               secure=s.cookie_secure, samesite="lax", httponly=name != CSRF_COOKIE)
 
 
 def csrf_matches(cookie_value: str | None, header_value: str | None) -> bool:

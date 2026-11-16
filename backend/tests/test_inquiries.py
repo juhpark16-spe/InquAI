@@ -62,10 +62,17 @@ def ai(client, db):
     return fake
 
 
+PW = "my-lookup-pw"
+
+
 def post(client, content="배송은 보통 며칠 걸려요?", **extra):
     body = {"customer_name": "김민준", "customer_email": "Customer01@Example.com", "title": "문의",
-            "content": content, **extra}
+            "content": content, "password": PW, **extra}
     return client.post("/api/inquiries", json=body)
+
+
+def lookup(client, email="customer01@example.com", password=PW):
+    return client.post("/api/inquiries/lookup", json={"customer_email": email, "password": password})
 
 
 def route_reply(decision, tool, faq_ids=(), reason="테스트"):
@@ -139,7 +146,7 @@ def test_order_email_mismatch_escalates(client, db, ai):
     ai["llm"].replies = {"route": route_reply("답변 초안", "배송 조회")}
     r = client.post("/api/inquiries", json={"customer_name": "남", "customer_email": "other@example.com",
                                             "title": "문의", "content": "제 주문 어디쯤 왔어요?",
-                                            "order_number": "20261110-0001"})
+                                            "order_number": "20261110-0001", "password": PW})
     body = r.json()
     assert body["status"] == "담당자 처리"
     _, log = saved(db, body["inquiry_number"])
@@ -170,31 +177,59 @@ def test_inquiry_numbers_increase(client, ai):
     assert [n[-4:] for n in numbers] == ["0001", "0002", "0003"]
 
 
+def test_password_is_hashed(client, db, ai):
+    ai["analyzer"].next = {"confidence": 0.5}
+    inquiry, _ = saved(db, post(client).json()["inquiry_number"])
+    assert inquiry.lookup_password_hash.startswith("$argon2") and PW not in inquiry.lookup_password_hash
+
+
 def test_lookup(client, ai):
     ai["llm"].replies = {"route": route_reply("자동 답변", "FAQ 검색", ["F05"]),
                          "answer": {"answer": "보통 1~3일입니다.", "used_faq_ids": ["F05"], "grounded": True}}
     number = post(client).json()["inquiry_number"]
 
-    ok = client.post("/api/inquiries/lookup", json={"inquiry_number": number, "customer_email": "customer01@example.com"})
+    ok = lookup(client, email="Customer01@EXAMPLE.com")  # 대소문자 구분 없음
     assert ok.status_code == 200
-    assert ok.json()["answer"] == "보통 1~3일입니다." and ok.json()["answered_at"] is not None
+    item = ok.json()["items"][0]
+    assert item["inquiry_number"] == number and item["answer"] == "보통 1~3일입니다." and item["answered_at"]
 
-    wrong_email = client.post("/api/inquiries/lookup", json={"inquiry_number": number, "customer_email": "x@example.com"})
-    wrong_number = client.post("/api/inquiries/lookup",
-                               json={"inquiry_number": "INQ-20000101-0001", "customer_email": "customer01@example.com"})
-    assert wrong_email.status_code == wrong_number.status_code == 404
-    assert wrong_email.json() == wrong_number.json()
+    wrong_email = lookup(client, email="x@example.com")
+    wrong_password = lookup(client, password="wrong-password")
+    assert wrong_email.status_code == wrong_password.status_code == 404
+    assert wrong_email.json() == wrong_password.json()  # 무엇이 틀렸는지 알려주지 않음
+
+
+def test_lookup_lists_only_same_password(client, ai):
+    """같은 이메일이라도 비밀번호가 다른 문의는 보이지 않음 (남이 내 이메일로 문의해도 내 문의는 못 봄)"""
+    ai["analyzer"].next = {"confidence": 0.5}
+    first = post(client, content="첫 번째 문의입니다").json()["inquiry_number"]
+    second = post(client, content="두 번째 문의입니다").json()["inquiry_number"]
+    other = post(client, content="다른 사람이 같은 이메일로 쓴 문의", password="someone-else").json()["inquiry_number"]
+
+    mine = [i["inquiry_number"] for i in lookup(client).json()["items"]]
+    assert mine == [second, first]  # 최신순
+    assert [i["inquiry_number"] for i in lookup(client, password="someone-else").json()["items"]] == [other]
+
+
+def test_lookup_locks_after_failures(client, ai):
+    ai["analyzer"].next = {"confidence": 0.5}
+    post(client)
+    codes = [lookup(client, password=f"wrong-{n}").status_code for n in range(5)]
+    assert codes == [404] * 5
+    r = lookup(client)  # 맞는 비밀번호여도 잠김
+    assert r.status_code == 429 and "15분" in r.json()["detail"]
 
 
 def test_draft_is_not_shown_in_lookup(client, ai):
     ai["llm"].replies = {"route": route_reply("자동 답변", "FAQ 검색", ["F05"]),
                          "answer": {"answer": "초안 내용", "used_faq_ids": [], "grounded": False}}
-    number = post(client).json()["inquiry_number"]
-    r = client.post("/api/inquiries/lookup", json={"inquiry_number": number, "customer_email": "customer01@example.com"})
-    assert r.json()["answer"] is None and r.json()["status"] == "검토 대기"
+    post(client)
+    item = lookup(client).json()["items"][0]
+    assert item["answer"] is None and item["status"] == "검토 대기"
 
 
-@pytest.mark.parametrize("field,value", [("content", "짧음"), ("customer_email", "not-an-email"), ("title", "")])
+@pytest.mark.parametrize("field,value", [("content", "짧음"), ("customer_email", "not-an-email"), ("title", ""),
+                                         ("password", "12345")])
 def test_validation(client, ai, field, value):
     assert post(client, **{field: value}).status_code == 422
 

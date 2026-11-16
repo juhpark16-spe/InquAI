@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, field_validator
 from backend.schemas.common import UTCDateTime
 
 EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+LOOKUP_PASSWORD_MIN = 6
 
 
 def _clean_email(v: str) -> str:
@@ -17,6 +18,8 @@ class InquiryCreate(BaseModel):
     order_number: str | None = Field(default=None, max_length=30)
     title: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=5, max_length=2000)
+    # 문의 조회용 비밀번호 (이메일과 함께 입력해 내 문의를 봄). 6자 이상: 4자리 숫자는 너무 쉽게 맞힐 수 있음
+    password: str = Field(min_length=LOOKUP_PASSWORD_MIN, max_length=64)
 
     @field_validator("customer_email", mode="before")
     @classmethod
@@ -42,8 +45,8 @@ class InquiryCreated(BaseModel):
 
 
 class InquiryLookup(BaseModel):
-    inquiry_number: str = Field(min_length=1, max_length=20)
     customer_email: str = Field(max_length=255)
+    password: str = Field(min_length=1, max_length=64)
 
     @field_validator("customer_email", mode="before")
     @classmethod
@@ -59,3 +62,7 @@ class InquiryPublic(BaseModel):
     answer: str | None
     created_at: UTCDateTime
     answered_at: UTCDateTime | None
+
+
+class InquiryLookupResult(BaseModel):
+    items: list[InquiryPublic]  # 최신순

@@ -5,11 +5,15 @@ from fastapi import APIRouter, Depends, Request
 from backend.core.config import get_settings
 from backend.core.dependencies import DB
 from backend.core.errors import AppError
-from backend.core.rate_limit import rate_limit
-from backend.schemas.inquiry import InquiryCreate, InquiryCreated, InquiryLookup, InquiryPublic
-from backend.services.inquiries import find_public_inquiry, register_inquiry
+from backend.core.rate_limit import FailureLock, rate_limit
+from backend.schemas.inquiry import InquiryCreate, InquiryCreated, InquiryLookup, InquiryLookupResult
+from backend.services.inquiries import find_public_inquiries, register_inquiry
 
 router = APIRouter(prefix="/inquiries", tags=["고객 문의"])
+
+# 같은 이메일로 15분 안에 5번 틀리면 15분 동안 조회를 막음 (비밀번호 맞히기 방지)
+lookup_failures = FailureLock(limit=5, window_seconds=15 * 60)
+NOT_FOUND = "일치하는 문의가 없습니다. 이메일과 문의할 때 정한 비밀번호를 확인해 주세요."
 
 
 def get_ai(request: Request) -> dict:
@@ -27,10 +31,14 @@ def create_inquiry(body: InquiryCreate, db: DB, ai: dict = Depends(get_ai)):
     return register_inquiry(db, body, timeout=get_settings().agent_timeout_seconds, **ai)
 
 
-@router.post("/lookup", response_model=InquiryPublic, summary="본인 문의 조회 (문의 번호 + 이메일)",
+@router.post("/lookup", response_model=InquiryLookupResult, summary="내 문의 조회 (이메일 + 조회 비밀번호)",
              dependencies=[Depends(rate_limit("inquiry_lookup", 10, 60))])
-def lookup_inquiry(body: InquiryLookup, db: DB):
-    found = find_public_inquiry(db, body.inquiry_number.strip(), body.customer_email)
-    if found is None:  # 번호가 틀려도 이메일이 틀려도 같은 응답 (다른 사람 문의가 있는지 알 수 없게)
-        raise AppError(404, "문의를 찾을 수 없습니다. 문의 번호와 이메일을 확인해 주세요.", "NOT_FOUND")
-    return found
+def lookup_inquiries(body: InquiryLookup, db: DB):
+    if lookup_failures.is_locked(body.customer_email):
+        raise AppError(429, "비밀번호를 여러 번 틀려 잠시 조회할 수 없습니다. 15분 후 다시 시도해 주세요.",
+                       "TOO_MANY_REQUESTS")
+    items = find_public_inquiries(db, body.customer_email, body.password)
+    if not items:  # 이메일이 없어도 비밀번호가 틀려도 같은 응답 (이메일로 문의한 적이 있는지 알 수 없게)
+        lookup_failures.fail(body.customer_email)
+        raise AppError(404, NOT_FOUND, "NOT_FOUND")
+    return {"items": items}

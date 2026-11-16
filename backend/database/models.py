@@ -38,6 +38,7 @@ TOOLS = ("FAQ 검색", "배송 조회", "티켓 접수", "상담원 이관")
 AUDIT_ACTIONS = (
     "login", "login_failed", "logout", "status_change", "assign", "response_edit", "response_approve",
     "ticket_approve", "ticket_reject", "label_correct", "faq_create", "faq_update", "faq_deactivate",
+    "user_create", "user_update", "user_password_reset", "auto_assign",
 )
 
 
@@ -54,6 +55,8 @@ class AdminUser(TimestampMixin, Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(10))
     display_name: Mapped[str] = mapped_column(String(50))
+    # 담당 유형 (자동 배정용). 빈 목록이면 '전체 담당': 맞는 담당자가 없는 유형을 받음
+    categories: Mapped[list] = mapped_column(JSON, default=list)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     failed_login_count: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -86,12 +89,13 @@ class Inquiry(TimestampMixin, Base):
     __table_args__ = (
         Index("ix_inquiries_status_created", "status", "created_at"),
         Index("ix_inquiries_assigned_status", "assigned_to", "status"),
-        Index("ix_inquiries_number_email", "inquiry_number", "customer_email"),
     )
 
     inquiry_number: Mapped[str] = mapped_column(String(20), unique=True)
     customer_name: Mapped[str] = mapped_column(String(50))
-    customer_email: Mapped[str] = mapped_column(String(255))
+    customer_email: Mapped[str] = mapped_column(String(255), index=True)
+    # 고객이 문의할 때 정한 조회 비밀번호의 Argon2 해시 (이메일 + 비밀번호로 조회). 평문은 저장하지 않음
+    lookup_password_hash: Mapped[str | None] = mapped_column(String(255))
     order_number: Mapped[str | None] = mapped_column(String(30))
     title: Mapped[str] = mapped_column(String(200))
     content: Mapped[str] = mapped_column(Text)

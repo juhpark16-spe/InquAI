@@ -19,7 +19,8 @@
 
 - `csrf_token`을 access(30분)와 같게 두면 access가 만료된 뒤 `/api/auth/refresh`를 부를 때 CSRF 값이 없어 재발급할 수 없어서, refresh와 같은 7일로 정했습니다 (2주차 구현 시 변경).
 
-- 모든 쿠키: `SameSite=Lax`, `Secure`(개발 환경에서는 `.env`의 `COOKIE_SECURE=false`로 끔), `Path=/api`
+- 모든 쿠키: `SameSite=Lax`, `Secure`(개발 환경에서는 `.env`의 `COOKIE_SECURE=false`로 끔)
+- 경로: `access_token`·`refresh_token`은 `Path=/api`(API 요청에만 전송), `csrf_token`은 `Path=/`. React 화면 주소(`/admin/...`)에서 `document.cookie`로 읽어야 하기 때문 (2주차 화면 연결 시 변경)
 - **CSRF:** 로그인이 필요한 POST·PUT·PATCH·DELETE 요청은 헤더 `X-CSRF-Token`에 `csrf_token` 쿠키 값을 넣어야 합니다. 값이 다르면 403.
 - React: Axios `withCredentials: true`, 요청 인터셉터에서 `X-CSRF-Token` 헤더 추가, 401을 받으면 `/api/auth/refresh` 한 번 시도 후 실패하면 로그인 화면으로 이동
 
@@ -87,14 +88,15 @@
   "customer_email": "hong@example.com",
   "order_number": "20261103-0042",      // 선택
   "title": "배송 문의",
-  "content": "지금 주문하면 보통 며칠 만에 받을 수 있어요?"
+  "content": "지금 주문하면 보통 며칠 만에 받을 수 있어요?",
+  "password": "••••••"                    // 조회 비밀번호 6~64자 (Argon2 해시로 저장)
 }
 // 201 응답 — 자동 답변
 {
   "inquiry_number": "INQ-20261113-0007",
   "status": "자동 처리",
   "answer": "결제 완료 후 평일 오후 2시 이전 주문은 당일 출고되고, ...",
-  "message": "문의 번호와 이메일로 처리 상태를 다시 확인하실 수 있습니다."
+  "message": "이메일과 문의할 때 정한 비밀번호로 처리 상태를 다시 확인하실 수 있습니다."
 }
 // 201 응답 — 답변 초안 / 담당자 연결 (고객에게 분석 결과·판단 이유는 보여주지 않음)
 {
@@ -109,6 +111,7 @@
 2. 분류 모델: 유형·감정·확신도 → 규칙: 처리 경로·긴급도 (`rules.py`) → `analysis_results` 저장
 3. 에이전트: 규칙 판단(확신도 0.8 미만, 긴급도 높음, 기타 → 담당자 연결) 또는 LLM 판단 → 도구 실행 → 자동 답변이면 FAQ 근거 답변 생성 (`prompts.py`)
 4. `responses`, `tickets`, `agent_logs` 저장, `inquiries.status` 갱신
+5. 사람이 볼 문의(`검토 대기`·`담당자 처리`)는 **자동 배정** (`backend/services/assignment.py`): 활성 상담원 중 담당 유형에 이 문의 유형이 있는 사람 → 없으면 전체 담당(담당 유형을 비운 상담원) → 그중 지금 미처리가 가장 적은 사람. 아무도 없으면 미배정. 작업 기록 `auto_assign`. 관리자는 언제든 재배정 가능
 
 - **동기 방식** (11장 결정 사항): 분석과 에이전트 처리가 끝난 뒤 응답합니다. 분석은 1초 이내, LLM 판단·답변까지 최대 8~10초 (프롬프트 검증 기준). 화면에 "답변을 작성하고 있습니다" 표시가 필요합니다.
 - **실패 처리:** LLM 오류나 20초 초과 시 자동 답변 없이 `검토 대기`로 저장하고 `agent_logs.error`에 기록합니다. 고객 응답은 위의 "접수되었습니다" 형식입니다.
@@ -120,22 +123,25 @@
   - 티켓 접수는 주문번호가 있을 때만 만들고, 없으면 `tool_success=false`로 남겨 상담원이 고객에게 확인합니다.
   - 분류 모델이 준비되지 않았으면 503 `MODEL_NOT_READY`.
 
-### POST /api/inquiries/lookup — 본인 문의 조회
+### POST /api/inquiries/lookup — 내 문의 조회 (이메일 + 조회 비밀번호)
 ```json
 // 요청
-{ "inquiry_number": "INQ-20261113-0008", "customer_email": "hong@example.com" }
-// 200 응답
-{
-  "inquiry_number": "INQ-20261113-0008",
-  "title": "배송 문의",
-  "content": "...",
-  "status": "완료",
-  "answer": "주문하신 패딩은 현재 대전 HUB에 도착해 ...",   // 발송된 답변만 (초안은 보이지 않음)
-  "created_at": "...", "answered_at": "..."
-}
+{ "customer_email": "hong@example.com", "password": "••••••" }
+// 200 응답: 이메일이 같고 비밀번호가 맞는 문의만, 최신순
+{ "items": [ {
+    "inquiry_number": "INQ-20261113-0008",
+    "title": "배송 문의",
+    "content": "...",
+    "status": "완료",
+    "answer": "주문하신 패딩은 현재 대전 HUB에 도착해 ...",   // 발송된 답변만 (초안은 보이지 않음)
+    "created_at": "...", "answered_at": "..."
+} ] }
 ```
-- 번호와 이메일이 모두 맞을 때만 200. 하나라도 틀리면 404 (같은 메시지)
-- 같은 IP에서 1분에 10회 초과 시 429 (번호 추측 방지)
+- 고객이 문의 번호를 기억하지 않아도 되도록 2주차에 "문의 번호 + 이메일"에서 바꿨습니다. 문의 번호는 계속 발급하고 화면에 보여 줍니다.
+- 비밀번호는 문의마다 저장합니다. 같은 이메일이라도 비밀번호가 다른 문의는 보이지 않아, 남이 내 이메일로 문의해도 내 문의는 볼 수 없습니다.
+- 일치하는 문의가 없으면 이메일이 없든 비밀번호가 틀리든 같은 404. 이메일이 없을 때도 비밀번호 확인을 한 번 해서 응답 시간으로 구분할 수 없게 합니다.
+- 같은 이메일로 15분 안에 5번 틀리면 15분 동안 429 (비밀번호 맞히기 방지, 서버 메모리 기록). 같은 IP 1분 10회 초과도 429
+- 한 이메일에서 최근 30건까지 확인합니다. 비밀번호는 되찾을 수 없어, 화면에서 "새 문의에 이전 문의 내용을 적어 달라"고 안내합니다.
 
 ## 4. 문의 관리 API (로그인)
 
@@ -264,20 +270,33 @@
 
 ## 9. 통계·로그 API
 
-### GET /api/stats/summary — 대시보드 (관리자)
-파라미터: `from`, `to` (기본: 오늘)
+### GET /api/stats/summary — 대시보드 (관리자, 2주차 구현)
+파라미터: `from`, `to` (한국 날짜 `YYYY-MM-DD`, 기본: 최근 7일, 최대 92일)
 ```json
 {
-  "total": 132, "today": 18,
-  "by_category": { "배송": 41, "반품·환불": 22 },
+  "range": { "from": "2026-11-09", "to": "2026-11-15", "days": 7 },
+  "kpi": {
+    "total": 132, "today": 18,
+    "auto_rate": 0.34,                   // 성공 지표: 자동 처리율 30% 이상 (자동 처리 / 분석된 문의)
+    "approval_without_edit_rate": 0.72   // 성공 지표: 초안 무수정 승인율 70% 이상 (승인 기능 3주차)
+  },
+  "now": { "open": 20, "urgent_open": 3, "review_waiting": 12, "unassigned_open": 5 },  // 기간과 관계없이 현재
+  "daily": [ { "date": "2026-11-15", "total": 18, "open": 6, "done": 12,
+               "by_category": { "배송": 5, "주문 취소": 1, "...": 0 } } ],
+  "by_status": { "접수": 0, "자동 처리": 45, "검토 대기": 12, "담당자 처리": 8, "완료": 67 },
+  "by_category": { "배송": 41, "...": 0 },          // 8개 유형 순서 고정 (그래프 색 순서)
   "by_urgency": { "높음": 9, "보통": 51, "낮음": 72 },
   "by_decision": { "자동 답변": 45, "답변 초안": 60, "담당자 연결": 27 },
-  "auto_rate": 0.34,                   // 성공 지표: 자동 처리율 30% 이상
-  "pending_review": 12,                // 검토 대기
-  "approval_without_edit_rate": 0.72,  // 성공 지표: 답변 초안 승인율 70% 이상
-  "avg_latency_ms": 8400
+  "by_decided_by": { "규칙": 40, "LLM": 92 },
+  "ai": { "avg_latency_ms": 8400, "low_confidence": 3, "llm_calls": 180,
+          "tokens": { "input": 120000, "output": 45000 }, "errors": 1 },
+  "staff": [ { "id": 2, "display_name": "상담원 김하늘", "role": "agent", "open": 3, "urgent_open": 2 } ]
 }
 ```
+- 날짜는 한국 시간으로 묶습니다 (UTC로 저장된 KST 0~9시 문의가 전날로 가지 않게).
+- 처리됨 = 자동 처리 + 완료, 미처리 = 접수 · 검토 대기 · 담당자 처리
+- `avg_latency_ms`는 LLM이 판단한 문의만 평균 (규칙 판단은 0초라 섞으면 평균이 왜곡됨)
+- 대시보드 카드에서 목록으로 이동할 수 있도록 문의 목록 API에 `open=true`(미처리만) 필터를 추가했습니다.
 기획서 7장은 권한이 "필요"이지만, 6장 권한표에 맞춰 관리자만으로 정했습니다.
 
 ### GET /api/admin/agent-logs — AI 실행 로그 (관리자, 상담원은 배정된 문의만)
@@ -288,6 +307,35 @@
 
 ### GET /api/admin/audit-logs — 작업 기록 (관리자)
 파라미터: `admin_id`, `action`, `target_type`, `from`, `to`
+
+## 8-1. 고객 FAQ API (공개, 2주차 추가)
+
+| 메서드 | 경로 | 설명 |
+| --- | --- | --- |
+| GET | /api/public/faqs | 활성 FAQ 목록 `[{code, category, question, answer}]` (고객 FAQ 화면 `/faq`) |
+| GET | /api/public/faqs/suggest?q=&k=3 | 문의 작성 중 비슷한 FAQ 추천. 유사도 0.18 미만은 빼서 관계없는 FAQ를 보여 주지 않음. 같은 IP 1분 30회 초과 시 429 |
+
+- 추천은 에이전트와 같은 FAQ 검색(지금은 임시 TF-IDF, 3주차에 ChromaDB)을 씁니다. 기준값 0.18은 검색 방식을 바꾸면 다시 정합니다.
+- 다른 고객의 문의는 목록으로 보여 주지 않습니다 (문의에 주문번호·개인 사정이 들어 있어 개인정보 문제).
+
+## 9-1. 계정 관리 API (관리자, 2주차 추가)
+
+공개 회원가입은 없습니다. 처음 계정은 `seed_admin.py`, 이후 계정은 관리자가 계정 관리 화면(`/admin/users`)에서 만듭니다.
+
+| 메서드 | 경로 | 설명 |
+| --- | --- | --- |
+| GET | /api/admin/staff | 배정 선택 상자용: 활성 계정만 `[{id, username, display_name, role}]` |
+| GET | /api/admin/users | 계정 목록 (비활성 포함). `is_active`, `locked_until`, `last_login_at`, `created_at` 포함, 비밀번호 해시는 내보내지 않음 |
+| POST | /api/admin/users | `{ "username": "agent3", "display_name": "상담원 박서준", "role": "agent", "password": "8자 이상", "categories": ["배송", "교환"] }` → 201 |
+| PATCH | /api/admin/users/{id} | 바꿀 것만: `display_name`, `role`, `is_active`, `categories` |
+
+- `categories`(담당 유형): 8개 유형 중에서 고름. 중복은 없애고 유형 순서로 저장. 빈 목록은 "전체 담당"(맞는 담당자가 없는 유형을 받음). 자동 배정은 상담원(agent)만 받습니다.
+| POST | /api/admin/users/{id}/reset-password | `{ "password": "..." }`. 실패 횟수·잠금도 풀림 |
+
+- 아이디: 영문 소문자·숫자·밑줄 3~30자. 이미 있으면 409 `USERNAME_TAKEN`
+- 비활성화·비밀번호 초기화 시 그 계정의 refresh_token을 모두 무효화합니다. access_token은 요청마다 `is_active`를 확인하므로 바로 막힙니다.
+- 자기 계정을 비활성화하거나 상담원으로 바꾸면 400 `INVALID_STATE` (관리자가 없어지는 것 방지)
+- 작업 기록: `user_create`, `user_update`(바뀌기 전·후 값), `user_password_reset`(비밀번호는 기록하지 않음)
 
 ## 10. 기획서 7장과 달라진 점
 
