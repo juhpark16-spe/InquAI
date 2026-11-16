@@ -4,11 +4,11 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from backend.core.config import get_settings
 from backend.schemas.common import UTCDateTime
 from backend.training.labels import CATEGORY_LABELS
 
 USERNAME_PATTERN = r"^[a-z0-9_]{3,30}$"  # 영문 소문자·숫자·밑줄 3~30자
-PASSWORD_MIN = 8
 
 Category = Literal[tuple(CATEGORY_LABELS)]
 
@@ -37,8 +37,32 @@ class UserDetail(BaseModel):
         return v or []
 
 
+def check_password_length(v: str) -> str:
+    """최소 길이는 설정값(PASSWORD_MIN_LENGTH, 기본 8)을 따름. 시연 환경에서만 낮춰 씀"""
+    n = get_settings().password_min_length
+    if len(v) < n:
+        raise ValueError(f"비밀번호는 {n}자 이상이어야 합니다.")
+    return v
+
+
 class _Password(BaseModel):
-    password: str = Field(min_length=PASSWORD_MIN, max_length=128)
+    password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("password")
+    @classmethod
+    def _length(cls, v):
+        return check_password_length(v)
+
+
+class PasswordChange(BaseModel):
+    """본인 비밀번호 변경 (POST /api/auth/change-password)"""
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password: str = Field(min_length=1, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def _length(cls, v):
+        return check_password_length(v)
 
 
 class UserCreate(_Password):

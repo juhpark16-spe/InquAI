@@ -164,3 +164,50 @@ def test_audit_logs(client, db):
         ("login_failed", 1, "wrong_password"), ("login_failed", None, "unknown_user"),
         ("login", 1, None), ("logout", 1, None)]
     assert logs[1].detail["username"] == "nobody"
+
+
+# ---- 내 비밀번호 변경 ----
+def change(client, current, new):
+    return client.post("/api/auth/change-password", json={"current_password": current, "new_password": new},
+                       headers=csrf(client))
+
+
+def test_change_password(client, db):
+    from fastapi.testclient import TestClient
+    from backend.main import app
+    with TestClient(app) as other:  # 다른 기기에서 로그인해 둔 상태
+        login(other, "agent1")
+        login(client, "agent1")
+        r = change(client, TEST_PASSWORD, "brand-new-pass")
+        assert r.status_code == 200 and r.json()["user"]["username"] == "agent1"
+        assert client.get("/api/auth/me").status_code == 200            # 지금 화면은 로그인 유지
+        assert other.post("/api/auth/refresh", headers=csrf(other)).status_code == 401  # 다른 기기는 끊김
+    client.cookies.clear()
+    assert login(client, "agent1").status_code == 401
+    assert login(client, "agent1", "brand-new-pass").status_code == 200
+    log = db.scalar(select(AdminAuditLog).where(AdminAuditLog.action == "password_change"))
+    assert log.admin_id == 2 and "brand-new-pass" not in str(log.detail)
+
+
+def test_change_password_errors(client):
+    login(client, "admin")
+    r = change(client, "wrong-current", "brand-new-pass")
+    assert r.status_code == 400 and r.json()["code"] == "INVALID_PASSWORD"
+    assert change(client, TEST_PASSWORD, TEST_PASSWORD).status_code == 400   # 같은 비밀번호
+    assert change(client, TEST_PASSWORD, "short").status_code == 422          # 8자 미만 (기본 규칙)
+    assert client.post("/api/auth/change-password", json={"current_password": TEST_PASSWORD,
+                                                          "new_password": "brand-new-pass"}).status_code == 403  # CSRF
+
+
+def test_change_password_requires_login(client):
+    r = client.post("/api/auth/change-password", json={"current_password": "a", "new_password": "bbbbbbbb"})
+    assert r.status_code == 401
+
+
+def test_password_min_length_setting(client, monkeypatch):
+    """시연 환경에서 PASSWORD_MIN_LENGTH=4 로 낮추면 1234 같은 비밀번호도 허용"""
+    from backend.core.config import get_settings
+    monkeypatch.setattr(get_settings(), "password_min_length", 4)
+    login(client, "admin")
+    assert change(client, TEST_PASSWORD, "1234").status_code == 200
+    assert change(client, "1234", "123").status_code == 422

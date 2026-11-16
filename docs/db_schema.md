@@ -210,7 +210,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | target_id | INT | |
 | detail | JSON | 바뀌기 전·후 값 (예: `{"before": "검토 대기", "after": "완료"}`) |
 
-**action 값:** login, login_failed, logout, status_change, assign, response_edit, response_approve, ticket_approve, ticket_reject, label_correct, faq_create, faq_update, faq_deactivate, user_create, user_update, user_password_reset, auto_assign (시스템 자동 배정, admin_id 없음)
+**action 값:** login, login_failed, logout, status_change, assign, response_edit, response_approve, ticket_approve, ticket_reject, label_correct, faq_create, faq_update, faq_deactivate, user_create, user_update, user_password_reset, password_change (본인 변경), auto_assign (시스템 자동 배정, admin_id 없음)
 
 ## 3. 인덱스
 

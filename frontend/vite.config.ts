@@ -10,5 +10,11 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: { "/api": "http://127.0.0.1:8000" },
+    // 화면도 다른 사이트의 iframe 안에 뜨지 않게 (클릭재킹 방지). 배포에서는 웹 서버가 같은 헤더를 붙임
+    headers: {
+      "X-Frame-Options": "DENY",
+      "X-Content-Type-Options": "nosniff",
+      "Referrer-Policy": "strict-origin-when-cross-origin",
+    },
   },
 });

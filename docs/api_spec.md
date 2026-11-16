@@ -21,6 +21,10 @@
 
 - 모든 쿠키: `SameSite=Lax`, `Secure`(개발 환경에서는 `.env`의 `COOKIE_SECURE=false`로 끔)
 - 경로: `access_token`·`refresh_token`은 `Path=/api`(API 요청에만 전송), `csrf_token`은 `Path=/`. React 화면 주소(`/admin/...`)에서 `document.cookie`로 읽어야 하기 때문 (2주차 화면 연결 시 변경)
+- **토큰 버전:** access_token에 계정의 `token_version`(`ver`)을 넣고, 비밀번호를 바꾸거나 관리자가 초기화하면 버전을 올려 다른 기기의 로그인을 30분 기다리지 않고 즉시 끊습니다 (2주차 보안 점검 후 추가).
+- **로그인 호출 제한:** 같은 IP에서 1분에 10회 초과 시 429. 계정별 5회 잠금과 함께 여러 아이디에 흔한 비밀번호를 넣어 보는 공격을 막습니다.
+- **보안 헤더:** 모든 응답에 `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy`, `/api` 응답에는 `Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` (`backend/core/security_headers.py`). React 화면은 개발 서버(`vite.config.ts`)와 배포 웹 서버에서 같은 헤더를 붙입니다.
+- **API 문서:** `/docs`, `/openapi.json`은 `.env`의 `API_DOCS`(기본 true)로 켜고 끕니다. 배포에서는 false.
 - **CSRF:** 로그인이 필요한 POST·PUT·PATCH·DELETE 요청은 헤더 `X-CSRF-Token`에 `csrf_token` 쿠키 값을 넣어야 합니다. 값이 다르면 403.
 - React: Axios `withCredentials: true`, 요청 인터셉터에서 `X-CSRF-Token` 헤더 추가, 401을 받으면 `/api/auth/refresh` 한 번 시도 후 실패하면 로그인 화면으로 이동
 
@@ -72,6 +76,15 @@
 ### POST /api/auth/logout — 로그아웃 (refresh_token 쿠키)
 - 세 쿠키 삭제, refresh_token의 `jti` 무효화. 응답 204
 - access_token이 만료된 상태에서도 로그아웃할 수 있게 refresh_token 쿠키로 사용자를 찾습니다. refresh_token 쿠키가 있으면 `X-CSRF-Token` 헤더 필요
+
+### POST /api/auth/change-password — 내 비밀번호 변경 (로그인, 2주차 추가)
+```json
+{ "current_password": "••••", "new_password": "••••" }   // 200 응답: { "user": {...} } + 새 쿠키
+```
+- 현재 비밀번호가 틀리거나 새 비밀번호가 지금과 같으면 400 `INVALID_PASSWORD`. 최소 길이 미달은 422
+- 바꾸면 그 계정의 refresh_token을 모두 무효화해 다른 기기의 로그인을 끊고, 지금 화면은 새 쿠키로 로그인을 유지합니다. 작업 기록 `password_change` (비밀번호는 기록하지 않음)
+- 화면: 상단의 내 이름을 누르면 나오는 "내 계정"(`/admin/account`)
+- **비밀번호 최소 길이**는 `.env`의 `PASSWORD_MIN_LENGTH`(기본 8)를 따릅니다. 로컬 시연 환경만 4로 낮춰 `1234`를 씁니다. 배포할 때는 8 이상으로 둡니다.
 
 ### GET /api/auth/me — 내 정보 (로그인)
 ```json

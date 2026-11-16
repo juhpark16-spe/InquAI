@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     cookie_secure: bool = True
     login_max_failures: int = 5
     login_lock_minutes: int = 15
+    # 관리자·상담원 비밀번호 최소 길이. 기본 8자, 시연용 로컬 환경에서만 .env 로 낮춤 (예: 4 → "1234")
+    password_min_length: int = 8
+
+    # API 문서(/docs, /openapi.json) 공개 여부. 배포에서는 false (공격자에게 API 목록을 보여주지 않게)
+    api_docs: bool = True
 
     # CORS: 쉼표로 여러 주소
     frontend_origins: str = "http://localhost:5173"

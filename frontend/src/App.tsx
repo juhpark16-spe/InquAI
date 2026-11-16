@@ -3,6 +3,7 @@ import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router";
 
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
+import AccountPage from "./pages/admin/AccountPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import InquiryDetailPage from "./pages/admin/InquiryDetailPage";
 import InquiryListPage from "./pages/admin/InquiryListPage";
@@ -47,6 +48,7 @@ export default function App() {
               <Route path="/admin" element={<AdminHome />} />
               <Route path="/admin/inquiries" element={<InquiryListPage />} />
               <Route path="/admin/inquiries/:id" element={<InquiryDetailPage />} />
+              <Route path="/admin/account" element={<AccountPage />} />
               <Route element={<ProtectedRoute roles={["admin"]} />}>
                 <Route path="/admin/users" element={<UsersPage />} />
               </Route>

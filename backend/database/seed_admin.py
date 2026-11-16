@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from backend.core.config import get_settings
 from backend.core.security import hash_password
-from backend.database.models import AdminUser
+from backend.database.models import AdminUser, utcnow
 from backend.database.session import SessionLocal, init_db
 
 # (아이디, 역할, 화면 이름, 비밀번호 설정 이름, 담당 유형 — 비우면 전체 담당)
@@ -25,7 +25,6 @@ ACCOUNTS = [
     ("agent1", "agent", "상담원 김하늘", "seed_agent_password", ["주문 취소", "반품·환불", "결제"]),
     ("agent2", "agent", "상담원 이준호", "seed_agent_password", ["배송", "교환", "상품"]),
 ]
-MIN_PASSWORD_LENGTH = 8
 
 
 def main():
@@ -35,9 +34,12 @@ def main():
     args = p.parse_args()
 
     settings = get_settings()
+    min_len = settings.password_min_length
     for _, _, _, key, _ in ACCOUNTS:
-        if len(getattr(settings, key)) < MIN_PASSWORD_LENGTH:
-            raise SystemExit(f".env 의 {key.upper()} 를 {MIN_PASSWORD_LENGTH}자 이상으로 넣어 주세요.")
+        if len(getattr(settings, key)) < min_len:
+            raise SystemExit(f".env 의 {key.upper()} 를 {min_len}자 이상으로 넣어 주세요.")
+    if min_len < 8:
+        print(f"[주의] 비밀번호 최소 길이가 {min_len}자입니다. 시연용 로컬 환경에서만 쓰고, 배포할 때는 8자 이상으로 바꿔 주세요.")
 
     init_db()
     with SessionLocal() as db:
@@ -50,6 +52,8 @@ def main():
             elif args.reset_password:
                 user.password_hash = hash_password(getattr(settings, key))
                 user.failed_login_count, user.locked_until = 0, None
+                user.password_changed_at = utcnow()
+                user.token_version = (user.token_version or 0) + 1
                 print(f"[비밀번호 변경] {username}")
             else:
                 print(f"[건너뜀] {username} 이미 있음")

@@ -41,10 +41,11 @@ def _secret() -> str:
     return key
 
 
-def create_access_token(user_id: int, role: str) -> str:
+def create_access_token(user_id: int, role: str, version: int = 0) -> str:
+    """version: 계정의 token_version (비밀번호를 바꾸면 올라가 예전 토큰이 무효가 됨)"""
     s = get_settings()
     now = datetime.now(timezone.utc)
-    payload = {"sub": str(user_id), "role": role, "type": "access",
+    payload = {"sub": str(user_id), "role": role, "type": "access", "ver": version,
                "iat": now, "exp": now + timedelta(minutes=s.access_token_minutes)}
     return jwt.encode(payload, _secret(), algorithm=s.jwt_algorithm)
 

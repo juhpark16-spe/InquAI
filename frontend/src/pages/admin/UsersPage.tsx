@@ -78,8 +78,8 @@ function CreateForm({ onCreated }: { onCreated: (u: UserDetail) => void }) {
             <span className="block text-xs text-slate-500">고른 유형의 문의가 자동 배정됩니다. 비워 두면 담당자가 없는 유형을 받는 전체 담당입니다.</span>
           </div>
         )}
-        <Field label="처음 비밀번호" hint="8자 이상. 계정 주인에게 따로 전달해 주세요.">
-          <Input required type="password" minLength={8} autoComplete="new-password" value={form.password}
+        <Field label="처음 비밀번호" hint="최소 길이는 서버 설정을 따릅니다 (기본 8자). 계정 주인에게 따로 전달해 주세요.">
+          <Input required type="password" autoComplete="new-password" value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })} />
         </Field>
         {error && <Alert>{error}</Alert>}
@@ -171,7 +171,7 @@ function UserRow({ u, isMe, onChanged }: { u: UserDetail; isMe: boolean; onChang
         {resetting && (
           <form className="mt-2 flex gap-2"
             onSubmit={(e) => { e.preventDefault(); run(() => userApi.resetPassword(u.id, password), `${u.display_name}: 비밀번호를 바꿨습니다.`); }}>
-            <Input required type="password" minLength={8} autoComplete="new-password" placeholder="새 비밀번호 (8자 이상)"
+            <Input required type="password" autoComplete="new-password" placeholder="새 비밀번호"
               value={password} onChange={(e) => setPassword(e.target.value)} />
             <Button type="submit" disabled={busy}>저장</Button>
           </form>

@@ -22,9 +22,11 @@ export default function AdminLayout() {
             </nav>
           </div>
           <div className="flex items-center gap-3 whitespace-nowrap text-sm">
-            <span className="text-slate-600">
+            <NavLink to="/admin/account" title="내 계정 · 비밀번호 변경"
+              className={({ isActive }) => cx("rounded-md px-2 py-1 hover:bg-slate-50", isActive ? "text-indigo-700" : "text-slate-600")}>
               {user?.display_name} <span className="text-slate-400">({user?.role === "admin" ? "관리자" : "상담원"})</span>
-            </span>
+              <span className="ml-1 text-xs text-slate-400">· 내 계정</span>
+            </NavLink>
             <button className="text-slate-500 hover:text-slate-900"
               onClick={async () => { await logout(); navigate("/login", { replace: true }); }}>
               로그아웃

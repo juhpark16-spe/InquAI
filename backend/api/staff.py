@@ -85,6 +85,8 @@ def reset_password(user_id: int, body: PasswordReset, request: Request, admin: A
     user = _get_user(db, user_id)
     user.password_hash = hash_password(body.password)
     user.failed_login_count, user.locked_until = 0, None  # 잠긴 계정도 풀림
+    user.password_changed_at = utcnow()
+    user.token_version = (user.token_version or 0) + 1  # 그 계정의 기존 로그인을 즉시 끊음
     _revoke_tokens(db, user.id)
     add_audit(db, request, "user_password_reset", admin, "admin_user", user.id)  # 비밀번호는 기록하지 않음
     db.commit()

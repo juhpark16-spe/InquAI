@@ -3,14 +3,16 @@
 from datetime import timedelta
 
 import jwt
-from fastapi import APIRouter, Request, Response
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy import select, update
 
 from backend.core.config import get_settings
 from backend.core.dependencies import DB, LoginUser, verify_csrf
 from backend.core.errors import AppError
+from backend.core.rate_limit import rate_limit
 from backend.core.security import (REFRESH_COOKIE, clear_auth_cookies, create_access_token, create_refresh_token,
-                                   decode_token, set_auth_cookies, verify_password)
+                                   decode_token, hash_password, set_auth_cookies, verify_password)
+from backend.schemas.users import PasswordChange
 from backend.database.models import AdminUser, RefreshToken, as_utc, utcnow
 from backend.schemas.auth import LoginRequest, LoginResponse, UserOut
 from backend.services.audit import add_audit
@@ -18,6 +20,7 @@ from backend.services.audit import add_audit
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 LOGIN_FAILED_MESSAGE = "아이디 또는 비밀번호가 올바르지 않습니다."
+LOGIN_PER_MINUTE = 10  # 같은 IP에서 1분에 로그인 요청 10회까지
 
 
 def _audit(db, request: Request, action: str, user: AdminUser | None, **detail) -> None:
@@ -28,7 +31,7 @@ def _audit(db, request: Request, action: str, user: AdminUser | None, **detail) 
 def _issue_tokens(db, response: Response, user: AdminUser) -> None:
     refresh, jti, expires_at = create_refresh_token(user.id)
     db.add(RefreshToken(user_id=user.id, jti=jti, expires_at=expires_at))
-    set_auth_cookies(response, create_access_token(user.id, user.role), refresh)
+    set_auth_cookies(response, create_access_token(user.id, user.role, user.token_version or 0), refresh)
 
 
 def _locked_error(locked_until) -> AppError:
@@ -36,7 +39,9 @@ def _locked_error(locked_until) -> AppError:
                     locked_until=as_utc(locked_until).isoformat().replace("+00:00", "Z"))
 
 
-@router.post("/login", response_model=LoginResponse, summary="로그인 (공개)")
+# 계정별 5회 잠금에 더해, 같은 IP에서 여러 아이디로 흔한 비밀번호를 넣어 보는 공격(비밀번호 스프레이)을 막음
+@router.post("/login", response_model=LoginResponse, summary="로그인 (공개)",
+             dependencies=[Depends(rate_limit("login", LOGIN_PER_MINUTE, 60))])
 def login(body: LoginRequest, request: Request, response: Response, db: DB):
     s = get_settings()
     now = utcnow()
@@ -132,3 +137,21 @@ def logout(request: Request, db: DB):
 @router.get("/me", response_model=UserOut, summary="내 정보")
 def me(user: LoginUser):
     return user
+
+
+@router.post("/change-password", response_model=LoginResponse, summary="내 비밀번호 변경 (로그인)")
+def change_password(body: PasswordChange, request: Request, response: Response, user: LoginUser, db: DB):
+    """현재 비밀번호를 확인한 뒤 바꿉니다. 다른 기기의 로그인은 모두 끊고, 지금 화면은 새 쿠키로 로그인을 유지합니다."""
+    if not verify_password(body.current_password, user.password_hash):
+        raise AppError(400, "현재 비밀번호가 맞지 않습니다.", "INVALID_PASSWORD")
+    if body.current_password == body.new_password:
+        raise AppError(400, "지금과 다른 비밀번호를 입력해 주세요.", "INVALID_PASSWORD")
+    user.password_hash = hash_password(body.new_password)
+    user.password_changed_at = utcnow()
+    user.token_version = (user.token_version or 0) + 1  # 이전에 발급된 access_token 은 모두 무효 (dependencies.py)
+    db.execute(update(RefreshToken).where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
+               .values(revoked_at=utcnow()))
+    _issue_tokens(db, response, user)
+    _audit(db, request, "password_change", user)  # 비밀번호 자체는 기록하지 않음
+    db.commit()
+    return {"user": user}

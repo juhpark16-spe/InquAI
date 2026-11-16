@@ -42,6 +42,9 @@ def get_current_user(request: Request, db: DB) -> AdminUser:
     user = db.get(AdminUser, int(payload["sub"]))
     if user is None or not user.is_active:
         raise AppError(401, "로그인이 필요합니다.", "AUTH_REQUIRED")
+    # 비밀번호를 바꾸기 전에 발급된 토큰이면 거부
+    if payload.get("ver", 0) != (user.token_version or 0):
+        raise AppError(401, "비밀번호가 바뀌어 다시 로그인해야 합니다.", "AUTH_REQUIRED")
     if request.method not in SAFE_METHODS:
         verify_csrf(request)
     return user

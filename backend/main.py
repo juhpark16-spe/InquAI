@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.api import auth, faqs_public, health, inquiries, inquiry_admin, staff, stats
 from backend.core.config import get_settings
 from backend.core.errors import register_error_handlers
+from backend.core.security_headers import add_security_headers
 from backend.database.session import SessionLocal, init_db
 from backend.rag.faq_search import FaqSearch
 
@@ -44,7 +45,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title=f"{settings.app_name} API", version="0.2.0", lifespan=lifespan,
-              description="쇼핑몰 고객 문의 자동 분석·처리 AI 에이전트")
+              description="쇼핑몰 고객 문의 자동 분석·처리 AI 에이전트",
+              # 배포에서는 .env 의 API_DOCS=false 로 문서를 닫음
+              docs_url="/docs" if settings.api_docs else None, redoc_url=None,
+              openapi_url="/openapi.json" if settings.api_docs else None)
+add_security_headers(app)
 
 app.add_middleware(
     CORSMiddleware,

@@ -15,6 +15,7 @@ os.environ["JWT_SECRET_KEY"] = "test-secret-key-only-for-pytest-0123456789"
 os.environ["COOKIE_SECURE"] = "false"
 os.environ["LOAD_MODELS"] = "false"   # 분류 모델·LLM은 테스트마다 가짜로 끼움 (test_inquiries.py)
 os.environ["OPENAI_API_KEY"] = ""
+os.environ["PASSWORD_MIN_LENGTH"] = "8"  # 개발 .env 가 시연용 4자로 낮춰도 테스트는 기본 규칙으로
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

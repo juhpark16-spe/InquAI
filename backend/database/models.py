@@ -38,7 +38,7 @@ TOOLS = ("FAQ 검색", "배송 조회", "티켓 접수", "상담원 이관")
 AUDIT_ACTIONS = (
     "login", "login_failed", "logout", "status_change", "assign", "response_edit", "response_approve",
     "ticket_approve", "ticket_reject", "label_correct", "faq_create", "faq_update", "faq_deactivate",
-    "user_create", "user_update", "user_password_reset", "auto_assign",
+    "user_create", "user_update", "user_password_reset", "auto_assign", "password_change",
 )
 
 
@@ -61,6 +61,10 @@ class AdminUser(TimestampMixin, Base):
     failed_login_count: Mapped[int] = mapped_column(Integer, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # 비밀번호를 바꾸거나 초기화할 때마다 1씩 올림. access_token 의 ver 가 이 값과 다르면 거부해
+    # 다른 기기의 로그인을 즉시 끊음 (시각 비교는 JWT 가 초 단위라 같은 초에 발급된 토큰을 구분하지 못함)
+    token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 기록용
 
 
 class RefreshToken(TimestampMixin, Base):

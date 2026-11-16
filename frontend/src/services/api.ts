@@ -63,6 +63,8 @@ export const authApi = {
     http.post<{ user: User }>("/auth/login", { username, password }).then((r) => r.data.user),
   logout: () => http.post("/auth/logout"),
   me: () => http.get<User>("/auth/me").then((r) => r.data),
+  changePassword: (current_password: string, new_password: string) =>
+    http.post<{ user: User }>("/auth/change-password", { current_password, new_password }).then((r) => r.data.user),
 };
 
 // ---- 고객 ----
