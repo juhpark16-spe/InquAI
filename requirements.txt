@@ -39,6 +39,7 @@ httpx==0.28.1
 
 # FAQ 검색: KURE-v1 임베딩 + ChromaDB (3주차, docs/faq_search_eval.md)
 sentence-transformers==6.3.0
+# 서버 모드(chroma run, HTTP API)로 띄우지 않음: 1.5.9 취약점 4건은 HTTP 서버에만 해당 (docs/security_audit.md)
 chromadb==1.5.9
 
 # 에이전트 처리 흐름 (3주차, backend/agents/graph.py)

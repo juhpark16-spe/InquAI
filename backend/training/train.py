@@ -77,6 +77,10 @@ def parse_args():
     p.add_argument("--label-smoothing", type=float, default=0.1,
                    help="정답을 100%%가 아닌 90%% 등으로 부드럽게 학습해 과한 확신도를 줄임 (0이면 끔)")
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--extra-train", nargs="*", default=[],
+                   help="학습 분할에만 더할 CSV (text, <라벨> 컬럼). 상담원 분류 수정·약점 보강 문장 등 (docs/retraining.md)")
+    p.add_argument("--extra-repeat", type=int, nargs="*", default=[],
+                   help="--extra-train 파일마다 반복 횟수 (가중치 대신 여러 번 넣기, 기본 1)")
     p.add_argument("--group-column", default="dialog_id",
                    help="같은 대화의 문장을 한쪽에만 넣기 위한 컬럼. 빈 문자열이면 문장 단위로 분할")
     return p.parse_args()
@@ -119,6 +123,24 @@ def load_data(path: Path, label_column: str, labels: list[str], group_column: st
 
     print(f"[데이터] {len(df)}건 / 라벨 분포:\n{df[label_column].value_counts().to_string()}\n")
     return df.reset_index(drop=True)
+
+
+def add_extra_train(train_df, df, args, label_column, labels):
+    """--extra-train 파일을 학습 분할에만 더합니다. 검증·평가 분할에는 넣지 않아 내부 평가 점수가 그대로 비교됩니다.
+
+    이미 데이터에 있는 문장은 빼고, --extra-repeat만큼 반복해서 넣습니다.
+    """
+    info = []
+    known = set(df["text"].str.replace(" ", "", regex=False))
+    for i, path in enumerate(args.extra_train):
+        repeat = args.extra_repeat[i] if i < len(args.extra_repeat) else 1
+        extra = load_data(resolve(path), label_column, labels, None)[["text", label_column]]
+        extra = extra[~extra["text"].str.replace(" ", "", regex=False).isin(known)]
+        known |= set(extra["text"].str.replace(" ", "", regex=False))
+        train_df = pd.concat([train_df] + [extra] * repeat, ignore_index=True)
+        info.append({"file": str(path), "rows": len(extra), "repeat": repeat})
+        print(f"[추가 학습 데이터] {Path(path).name}: {len(extra)}건 × {repeat}회 (학습 분할에만)")
+    return train_df, info
 
 
 def split_data(df: pd.DataFrame, label_column: str, seed: int, group_column: str | None = None):
@@ -213,6 +235,7 @@ def main():
     # 1. 데이터 로드·분할
     df = load_data(resolve(args.data), label_column, labels, args.group_column)
     train_df, valid_df, test_df = split_data(df, label_column, args.seed, args.group_column)
+    train_df, extra_info = add_extra_train(train_df, df, args, label_column, labels)
     for name, part in (("train", train_df), ("valid", valid_df), ("test", test_df)):
         part.to_csv(processed_dir / f"{label_column}_{name}.csv", index=False, encoding="utf-8-sig")
     print(f"[분할] train {len(train_df)} / valid {len(valid_df)} / test {len(test_df)}")
@@ -320,6 +343,7 @@ def main():
             "class_weight_power": args.class_weight_power,
             "label_smoothing": args.label_smoothing,
             "seed": args.seed,
+            "extra_train": extra_info,
         },
     }
     report_path = eval_dir / f"{args.report_name or label_column}_test_report.json"

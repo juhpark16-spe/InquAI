@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     load_models: bool = True
     category_model_dir: Path = PROJECT_ROOT / "models" / "category_classifier"
     sentiment_model_dir: Path = PROJECT_ROOT / "models" / "sentiment_classifier"
-    category_model_version: str = "category_ev_s123"
+    category_model_version: str = "category_aug_s42"
     sentiment_model_version: str = "sentiment_v1"
 
     # FAQ 검색 (docs/faq_search_eval.md). kure: KURE-v1 + ChromaDB, tfidf: 글자 단위 (모델 없이 가벼움)

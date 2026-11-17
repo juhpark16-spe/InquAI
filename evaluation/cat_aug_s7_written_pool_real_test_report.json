@@ -1,0 +1,183 @@
+{
+  "model_dir": "models/category_aug_s7",
+  "test_file": "data/test/written_pool.csv",
+  "num_samples": 120,
+  "accuracy": 0.9833333333333333,
+  "macro_f1": 0.9830069124423964,
+  "accuracy_by_difficulty": {
+    "보통": 0.9901960784313726,
+    "애매": 0.9444444444444444
+  },
+  "avg_latency_ms": 14.340855832657931,
+  "classification_report": {
+    "배송": {
+      "precision": 0.9375,
+      "recall": 1.0,
+      "f1-score": 0.967741935483871,
+      "support": 15.0
+    },
+    "주문 취소": {
+      "precision": 0.9375,
+      "recall": 1.0,
+      "f1-score": 0.967741935483871,
+      "support": 15.0
+    },
+    "교환": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 15.0
+    },
+    "반품·환불": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 15.0
+    },
+    "결제": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 15.0
+    },
+    "상품": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 15.0
+    },
+    "쿠폰·적립금·회원": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 15.0
+    },
+    "기타": {
+      "precision": 1.0,
+      "recall": 0.8666666666666667,
+      "f1-score": 0.9285714285714286,
+      "support": 15.0
+    },
+    "accuracy": 0.9833333333333333,
+    "macro avg": {
+      "precision": 0.984375,
+      "recall": 0.9833333333333334,
+      "f1-score": 0.9830069124423964,
+      "support": 120.0
+    },
+    "weighted avg": {
+      "precision": 0.984375,
+      "recall": 0.9833333333333333,
+      "f1-score": 0.9830069124423964,
+      "support": 120.0
+    }
+  },
+  "confusion_matrix": {
+    "labels": [
+      "배송",
+      "주문 취소",
+      "교환",
+      "반품·환불",
+      "결제",
+      "상품",
+      "쿠폰·적립금·회원",
+      "기타"
+    ],
+    "matrix": [
+      [
+        15,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        15,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        15,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        15,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        15,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        15,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        15,
+        0
+      ],
+      [
+        1,
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        13
+      ]
+    ]
+  },
+  "errors": [
+    {
+      "text": "선물 포장 해 주시나요",
+      "category": "기타",
+      "pred": "배송",
+      "confidence": 0.9306
+    },
+    {
+      "text": "제 개인정보 삭제 요청합니다",
+      "category": "기타",
+      "pred": "주문 취소",
+      "confidence": 0.4765
+    }
+  ]
+}

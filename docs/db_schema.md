@@ -3,7 +3,7 @@
 기획서 v2 7장 "DB 테이블"을 바탕으로, 1주차에 정한 내용(분석 결과, 처리 방식 판단, 프롬프트 검증 결과)을 반영해 컬럼과 값을 구체화한 초안입니다.
 2주차에 SQLAlchemy 모델(`backend/database/models.py`)로 옮기면서 바뀔 수 있습니다.
 
-- DB: 개발 중에는 SQLite, 배포는 PostgreSQL (기획서 4장). 두 DB에서 모두 동작하도록 JSON은 `JSON` 타입, 날짜는 UTC `DATETIME`으로 저장합니다.
+- DB: SQLite (WAL 모드, `data/inquai.db`). 시연 규모에 맞춰 파일 하나로 운영합니다 (기획서 4장). 운영 단계에서 PostgreSQL로 바꿀 수 있도록 SQLAlchemy로 작성했고, JSON은 `JSON` 타입, 날짜는 UTC `DATETIME`으로 저장합니다. PostgreSQL에서는 아직 테스트하지 않았습니다 (향후 확장).
 - 모든 테이블에 `id`(정수, 자동 증가)와 `created_at`이 있습니다. 표에서는 생략합니다.
 - **굵게** 표시한 컬럼은 기획서 7장에 없던 것으로 이번에 추가했습니다.
 
@@ -95,7 +95,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | **decision** | VARCHAR(10) | **처리 방식: 자동 답변 / 답변 초안 / 담당자 연결** (기획서 2-2) |
 | **decided_by** | VARCHAR(5) | **규칙 / LLM** (규칙: 확신도 낮음·긴급도 높음·기타 유형) |
 | **decision_reason** | TEXT | **판단 이유** (규칙 이름 또는 LLM이 쓴 이유) |
-| model_version | VARCHAR(50) | 분류 모델 버전 (예: `category_ev_s123`, `sentiment_v1`) |
+| model_version | VARCHAR(50) | 분류 모델 버전 (예: `category_aug_s42`, `sentiment_v1`) |
 | **scores** | JSON | **유형별·감정별 확률 전체** (예: `{"category": {"배송": 0.92, ...}, "sentiment": {...}}`) |
 
 `route`(4갈래)는 유형만 보고 정해지는 기본 경로이고, `decision`(3가지)은 에이전트가 실제로 고른 처리 방식입니다.

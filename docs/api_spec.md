@@ -211,7 +211,7 @@
     "decision": "답변 초안", "decided_by": "LLM",
     "decision_reason": "특정 주문의 배송 위치 확인이 필요합니다.",
     "scores": { "category": { "배송": 0.93, "상품": 0.01 }, "sentiment": { "중립": 0.81 } },
-    "model_version": "category_ev_s123"
+    "model_version": "category_aug_s42"
   },
   "responses": [ { "id": 5, "draft_text": "...", "final_text": null, "status": "초안",
                    "used_faq_ids": [], "grounded": null } ],

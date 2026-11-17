@@ -15,12 +15,12 @@ from backend.core.dependencies import DB, AdminOnly, LoginUser
 from backend.core.errors import AppError
 from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminUser, AnalysisResult, Attachment,
                                      Inquiry, InquiryNote, LabelCorrection, Notification, utcnow)
-from backend.ai.rules import get_route, get_urgency
 from backend.schemas.inquiry_admin import (AnalysisCorrection, AnalysisOut, AssignRequest, InquiryDetail, InquiryListItem, InquiryState, NoteCreate,
                                            NoteOut, Page, StatusRequest)
 from backend.services import inquiry_context as ctx
 from backend.services import sla, uploads
 from backend.services.audit import add_audit
+from backend.services.corrections import apply_correction
 from backend.training.labels import CATEGORY_LABELS
 
 router = APIRouter(prefix="/inquiries", tags=["문의 관리"])
@@ -160,20 +160,10 @@ def correct_analysis(inquiry_id: int, body: AnalysisCorrection, request: Request
     a = inquiry.analysis
     if a is None:
         raise AppError(400, "AI 분석이 없는 문의는 고칠 분류가 없습니다.", "NO_ANALYSIS")
-    changes = {f: (getattr(a, f), v) for f, v in body.model_dump(exclude_none=True).items() if v != getattr(a, f)}
-    if not changes:
+    done = apply_correction(db, inquiry, user, category=body.category, sentiment=body.sentiment,
+                            ip=request.client.host if request.client else None)
+    if not done["changes"]:
         raise AppError(400, "지금과 같은 분류입니다.", "NO_CHANGE")
-
-    for field, (before, after) in changes.items():
-        db.add(LabelCorrection(inquiry_id=inquiry.id, field=field, before_label=before, after_label=after,
-                               text=inquiry.content, corrected_by=user.id))
-        setattr(a, field, after)
-    before_rule = {"route": a.route, "urgency": a.urgency}
-    a.route = get_route(a.category)
-    a.urgency = get_urgency(a.category, a.sentiment, inquiry.content)
-    rule = {k: [before_rule[k], getattr(a, k)] for k in before_rule if before_rule[k] != getattr(a, k)}
-    add_audit(db, request, "label_correct", user, "inquiry", inquiry.id,
-              changes={f: list(v) for f, v in changes.items()}, rule=rule)
     db.commit()
     db.refresh(a)
     return a
