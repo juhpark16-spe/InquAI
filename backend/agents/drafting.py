@@ -16,7 +16,7 @@ from datetime import timedelta, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.ai.prompts import DRAFT_PROMPT, DRAFT_SCHEMA
+from backend.ai.prompts import DRAFT_PROMPT, DRAFT_SCHEMA, customer_text, find_promises
 from backend.database.models import Attachment, CustomerMessage, Inquiry, Response, Ticket, as_utc
 from backend.services.inquiry_context import order_card
 
@@ -83,8 +83,8 @@ def build_input(db: Session, inquiry: Inquiry, faqs: list[dict], analysis: dict 
                           .order_by(CustomerMessage.id)).all()
     sent = db.scalars(select(Response).where(Response.inquiry_id == inquiry.id, Response.status == "발송")
                       .order_by(Response.id)).all()
-    talk = [(as_utc(inquiry.created_at), f"고객 (처음 문의, 제목: {inquiry.title})", inquiry.content)]
-    talk += [(as_utc(m.created_at), "고객 (추가 문의)", m.content) for m in messages]
+    talk = [(as_utc(inquiry.created_at), "고객 (처음 문의)", customer_text(f"제목: {inquiry.title}\n{inquiry.content}"))]
+    talk += [(as_utc(m.created_at), "고객 (추가 문의)", customer_text(m.content)) for m in messages]
     talk += [(as_utc(r.approved_at or r.created_at), "고객센터 (보낸 답변)", r.final_text or r.draft_text) for r in sent]
     talk.sort(key=lambda t: t[0])
     parts.append("[대화] (시간순, 마지막 고객 글에 답할 것)\n" + "\n\n".join(f"{who} {_kst(at)}\n{text}" for at, who, text in talk))
@@ -115,6 +115,8 @@ def generate_draft(db: Session, inquiry: Inquiry, faq_search, llm, timeout: floa
     answer = FAQ_REF.sub("", data["answer"]).strip()[:MAX_LEN]
     known = {f["id"] for f in faqs}
     checks = [c.strip() for c in data["check_points"] if c.strip()][:10]
+    # 안전장치: 지급·승인을 확정하는 말이 있으면 상담원이 꼭 보도록 확인할 것에 올림 (프롬프트를 어겨도 걸러지게)
+    checks += [f"지급·승인을 확정하는 표현이 있습니다: '{p}' (사실인지 확인 후 고치세요)" for p in find_promises(answer)]
     return DraftResult(
         answer=answer,
         used_faq_ids=[i for i in data["used_faq_ids"] if i in known],   # 넘기지 않은 FAQ 번호는 버림

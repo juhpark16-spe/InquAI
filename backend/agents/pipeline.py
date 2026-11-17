@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from backend.agents.drafting import generate_draft
 from backend.ai.prompts import (ANSWER_PROMPT, ANSWER_SCHEMA, ROUTE_PROMPT, ROUTE_SCHEMA, decide_by_rule,
-                                format_answer_input, format_route_input)
+                                find_promises, format_answer_input, format_route_input)
 from backend.database.models import Inquiry
 from backend.tools.orders import find_customer_order, shipping_summary
 from backend.tools.tickets import CATEGORY_TICKET_TYPE, create_ticket
@@ -102,6 +102,11 @@ def run_agent(db: Session, inquiry: Inquiry, analysis: dict, faq_search, llm, ti
             if not ans["grounded"]:  # 근거가 부족하면 자동 발송하지 않고 초안으로
                 result.decision = "답변 초안"
                 result.reason += " / FAQ 근거 부족으로 초안 전환"
+            elif promises := find_promises(ans["answer"]):  # 지급·승인 확정 표현이면 보내지 않고 상담원 확인
+                result.decision, result.grounded = "답변 초안", False
+                result.reason += " / 지급·승인을 확정하는 표현이 있어 초안 전환"
+                result.check_points = [f"지급·승인을 확정하는 표현이 있습니다: '{p}' (사실인지 확인 후 고치세요)"
+                                       for p in promises]
 
         elif plan["tool"] == "배송 조회":
             if order is None:
