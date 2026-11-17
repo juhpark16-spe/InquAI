@@ -44,4 +44,5 @@ chromadb==1.5.9
 # 에이전트 처리 흐름 (3주차, backend/agents/graph.py)
 langgraph==1.2.19
 
-# 3주차부터 추가 예정: langsmith
+# LangSmith 추적 (3주차, backend/core/tracing.py)
+langsmith==0.14.17

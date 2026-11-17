@@ -13,6 +13,7 @@ import time
 from dataclasses import dataclass, field
 from datetime import timedelta, timezone
 
+from langsmith import traceable
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -98,6 +99,12 @@ def search_query(db: Session, inquiry: Inquiry) -> str:
     return f"{inquiry.title}\n{inquiry.content}" + (f"\n{last.content}" if last else "")
 
 
+def _trace_inputs(inputs: dict) -> dict:
+    """LangSmith에 남길 입력: DB 세션·문의 객체 대신 문의 번호만 (원문은 LLM 호출 기록에 가려져 남음)"""
+    return {"inquiry_number": inputs["inquiry"].inquiry_number}
+
+
+@traceable(name="답변 초안 작성", run_type="chain", process_inputs=_trace_inputs)
 def generate_draft(db: Session, inquiry: Inquiry, faq_search, llm, timeout: float,
                    analysis: dict | None = None) -> DraftResult:
     """초안 1개를 만듭니다. LLM 오류·시간 초과는 예외로 올라갑니다 (부르는 쪽에서 처리)."""

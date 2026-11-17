@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api import auth, faqs_public, health, inquiries, inquiry_admin, responses, staff, stats
+from backend.core import tracing
 from backend.core.config import get_settings
 from backend.core.errors import register_error_handlers
 from backend.core.security_headers import add_security_headers
@@ -36,6 +37,7 @@ def load_faq_search(db):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    tracing.setup(settings)  # LangSmith (켜져 있을 때만, 개인정보 가림)
     init_db()  # 테이블이 없으면 만듦
     with SessionLocal() as db:
         app.state.faq_search = load_faq_search(db)
@@ -54,6 +56,7 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("OPENAI_API_KEY 가 없어 LLM 판단 없이 동작합니다 (규칙에 걸리지 않는 문의는 검토 대기).")
     yield
+    tracing.flush()  # 남은 추적 기록을 보내고 종료
 
 
 app = FastAPI(title=f"{settings.app_name} API", version="0.2.0", lifespan=lifespan,

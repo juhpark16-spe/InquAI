@@ -1,4 +1,7 @@
-"""LLM 프롬프트 검증 (기획서 9장 1주차: 처리 경로 판단·FAQ 답변, 10~20개 사례).
+"""[1주차 기록용] LLM 프롬프트 검증 (기획서 9장 1주차: 처리 경로 판단·FAQ 답변, 10~20개 사례).
+
+※ 3주차부터는 서버와 같은 처리 흐름(KURE·LangGraph·초안)을 그대로 돌리는 backend/agents/evaluate_agent.py 를 씁니다.
+  이 파일은 1주차 결과(evaluation/prompt_check_*.md)를 다시 만들 때만 씁니다.
 
 data/test/prompt_cases.json의 사례마다 실제 흐름을 그대로 돌립니다.
     분류 모델(유형·감정·확신도) → 규칙(경로·긴급도·무조건 이관) → FAQ 검색 → LLM 경로 판단 → LLM FAQ 답변

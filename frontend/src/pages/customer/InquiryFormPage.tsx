@@ -136,6 +136,7 @@ export default function InquiryFormPage() {
             <li>이용 목적: 문의 확인·답변, 주문 확인, 답변 알림</li>
             <li>보관 기간: 문의 처리 후 3년 (전자상거래법의 소비자 불만·분쟁 처리 기록 보존 기간)</li>
             <li>문의 내용은 빠른 답변을 위해 AI 분석에 쓰이며, 외부 AI 서비스(OpenAI)에서 처리될 수 있습니다.</li>
+            <li>AI 답변 품질 점검을 위해 처리 기록이 외부 서비스(LangSmith)에 보관될 수 있으며, 이때 이메일·전화번호·주문번호 등은 가려서 보냅니다.</li>
             <li>동의하지 않으실 수 있으나, 동의하지 않으면 1:1 문의를 등록할 수 없습니다.</li>
           </ul>
           <label className="mt-2 flex items-center gap-2 text-sm text-slate-800">

@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     # 문의 등록 1건의 에이전트 처리 제한 시간. 넘으면 자동 답변 없이 '검토 대기' (docs/api_spec.md 3장)
     agent_timeout_seconds: float = 20.0
 
+    # LangSmith 추적 (backend/core/tracing.py). 서버와 평가 --trace 에서만 켜지고, 보내기 전에 개인정보를 가림
+    langsmith_tracing: bool = False
+    langsmith_api_key: str = ""
+    langsmith_project: str = "inquai"
+    langsmith_endpoint: str = ""
+
     # 로그인 (기획서 6장, docs/api_spec.md 1장)
     jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"

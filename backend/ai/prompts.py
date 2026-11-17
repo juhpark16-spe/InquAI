@@ -8,7 +8,8 @@
     5. LLM 답변 초안(DRAFT_PROMPT, 3주차): 상담원이 검토할 문의의 초안. FAQ + 주문 정보 + 처리 기록 + 대화를 근거로,
        상담원이 확인할 곳은 [확인 필요: …]로 남김 (backend/agents/drafting.py)
 
-프롬프트를 고치면 backend/ai/prompt_check.py로 검증 사례를 다시 돌려 결과를 비교합니다.
+프롬프트를 고치면 backend/agents/evaluate_agent.py(서버와 같은 처리 흐름)로 검증 사례를 다시 돌려
+docs/agent_eval.md의 기준값과 비교합니다. (1주차 backend/ai/prompt_check.py는 옛 흐름이라 기록용)
 """
 
 import re

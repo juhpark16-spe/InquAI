@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from backend.agents.drafting import generate_draft
 from backend.api.inquiry_admin import get_inquiry_for_user
+from backend.core import tracing
 from backend.core.config import get_settings
 from backend.core.dependencies import DB, LoginUser
 from backend.core.errors import AppError
@@ -145,8 +146,10 @@ def create_draft(inquiry_id: int, request: Request, user: LoginUser, db: DB, bod
                        response_id=draft.id)
 
     try:
-        result = generate_draft(db, inquiry, getattr(request.app.state, "faq_search", None), llm,
-                                timeout=get_settings().agent_timeout_seconds)
+        with tracing.trace(metadata={"inquiry_number": inquiry.inquiry_number, "requested_by": user.username},
+                           tags=["답변 초안", "상담원 요청"]):
+            result = generate_draft(db, inquiry, getattr(request.app.state, "faq_search", None), llm,
+                                    timeout=get_settings().agent_timeout_seconds)
     except Exception:  # noqa: BLE001  LLM 오류·시간 초과
         logger.exception("AI 초안 생성 실패: %s", inquiry.inquiry_number)
         raise AppError(502, "AI 초안을 만들지 못했습니다. 잠시 후 다시 시도하거나 직접 작성해 주세요.", "DRAFT_FAILED")

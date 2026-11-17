@@ -13,6 +13,7 @@ import logging
 from sqlalchemy import select
 
 from backend.agents.drafting import generate_draft
+from backend.core import tracing
 from backend.database.models import AgentLog, Inquiry, Response
 from backend.database.session import SessionLocal
 
@@ -28,7 +29,8 @@ def write_draft(inquiry_id: int, faq_search, llm, timeout: float) -> None:
             return  # 그사이 상담원이 초안을 만들었으면 건드리지 않음
         log = db.scalar(select(AgentLog).where(AgentLog.inquiry_id == inquiry_id).order_by(AgentLog.id.desc()).limit(1))
         try:
-            d = generate_draft(db, inquiry, faq_search, llm, timeout)
+            with tracing.trace(metadata={"inquiry_number": inquiry.inquiry_number}, tags=["답변 초안", "응답 뒤"]):
+                d = generate_draft(db, inquiry, faq_search, llm, timeout)
         except Exception as e:  # noqa: BLE001
             logger.exception("답변 초안 작성 실패: %s", inquiry.inquiry_number)
             if log is not None:

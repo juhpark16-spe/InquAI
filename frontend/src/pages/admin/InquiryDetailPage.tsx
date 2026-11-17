@@ -151,6 +151,13 @@ function AiDetails({ log, faqTitles }: { log: AgentLog | undefined; faqTitles: R
       </summary>
       <dl className="grid grid-cols-[6rem_1fr] gap-y-1.5 border-t border-slate-100 px-5 py-3 text-sm">
         {log.steps && log.steps.length > 0 && <Row label="처리 경로">{log.steps.join(" → ")}</Row>}
+        {log.trace_url && (
+          <Row label="추적">
+            <a href={log.trace_url} target="_blank" rel="noreferrer" className="text-indigo-600 hover:underline">
+              LangSmith에서 단계별로 보기 ↗
+            </a>
+          </Row>
+        )}
         <Row label="사용한 도구">{log.selected_tool ?? "-"} {log.tool_success === false && <span className="text-rose-700">(실패)</span>}</Row>
         <Row label="검색된 FAQ">
           {log.retrieved_faqs.length ? (

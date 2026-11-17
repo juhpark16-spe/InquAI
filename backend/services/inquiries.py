@@ -89,7 +89,7 @@ def register_inquiry(db: Session, body: InquiryCreate, analyzer, faq_search, llm
         tool_success=result.tool_success, tool_output=result.tool_output, retrieved_faqs=result.retrieved_faqs,
         used_faq_ids=result.used_faq_ids, reason=result.reason, response_text=result.answer,
         llm_model=result.llm_model, tokens=result.tokens, latency_ms=result.latency_ms, error=result.error,
-        steps=result.steps or None,
+        steps=result.steps or None, trace_url=result.trace_url,
     ))
     inquiry.status = result.status
     # 5. 사람이 볼 문의(검토 대기·담당자 처리)는 담당 유형이 맞는 상담원에게 자동 배정

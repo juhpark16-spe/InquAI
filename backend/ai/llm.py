@@ -12,7 +12,10 @@ class LLM:
         if not settings.openai_api_key:
             raise RuntimeError("OPENAI_API_KEY 가 없습니다.")
         # 재시도는 하지 않음: 제한 시간(20초) 안에 끝나지 않으면 상담원 검토로 넘기는 편이 낫다
-        self.client = OpenAI(api_key=settings.openai_api_key, max_retries=0)
+        # wrap_openai: LangSmith 추적이 켜진 곳(tracing.trace 안)에서만 프롬프트·응답·토큰을 기록, 아니면 그냥 통과
+        from langsmith.wrappers import wrap_openai
+
+        self.client = wrap_openai(OpenAI(api_key=settings.openai_api_key, max_retries=0))
         self.model = settings.openai_model
         self.effort = settings.llm_reasoning_effort
         self.label = f"{self.model} (reasoning_effort={self.effort})"

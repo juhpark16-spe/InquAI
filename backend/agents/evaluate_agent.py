@@ -132,6 +132,8 @@ def main() -> None:
     p.add_argument("--engine", default="kure", choices=["kure", "tfidf"], help="FAQ 검색 방식")
     p.add_argument("--label", default="", help="결과 파일 이름 뒤에 붙일 말 (예: after-langgraph)")
     p.add_argument("--only", nargs="*", help="일부 사례만 (예: P09 P18)")
+    p.add_argument("--trace", action="store_true",
+                   help="LangSmith에 기록 (프로젝트 inquai-eval, 개인정보 가림). 직접 작성한 사례에만 쓰고 AI Hub 데이터에는 쓰지 않음")
     p.add_argument("--repeat", type=int, default=1, help="같은 사례를 몇 번 돌릴지 (LLM 판단이 흔들리는지 확인)")
     args = p.parse_args()
 
@@ -149,7 +151,11 @@ def main() -> None:
     from backend.database.session import SessionLocal, init_db
     from backend.rag.evaluate_search import make_searcher
 
+    from backend.core import tracing
+
     settings = get_settings()
+    if args.trace and tracing.setup(settings.model_copy(update={"langsmith_project": "inquai-eval"})):
+        print("LangSmith 기록: 프로젝트 inquai-eval")
     if not settings.openai_api_key:
         raise SystemExit(".env 에 OPENAI_API_KEY 가 필요합니다.")
     cases = json.loads(CASES.read_text(encoding="utf-8"))
@@ -200,6 +206,7 @@ def main() -> None:
                   + (f"  ✗ {', '.join(bad)}" if bad else ""))
         db.rollback()   # 임시 DB라 남기지 않아도 됨
 
+    tracing.flush()
     summary = summarize(rows)
     meta = {"run_at": datetime.now().strftime("%Y-%m-%d %H:%M"), "engine": args.engine, "llm": llm.label,
             "cases": len(cases), "repeat": args.repeat}

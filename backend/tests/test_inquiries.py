@@ -1,6 +1,6 @@
 """문의 등록·조회 API 테스트. 분류 모델과 LLM은 가짜로 바꿔 흐름(규칙·도구·저장·상태)만 확인합니다.
 
-실제 모델·LLM 품질은 backend/training/evaluate.py, backend/ai/prompt_check.py 로 따로 검증합니다.
+실제 모델·LLM 품질은 backend/training/evaluate.py, backend/agents/evaluate_agent.py 로 따로 검증합니다.
 """
 
 from datetime import timedelta

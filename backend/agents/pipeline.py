@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from sqlalchemy.orm import Session
 
 from backend.agents.graph import AGENT_GRAPH, AgentDeps
+from backend.core import tracing
 from backend.database.models import Inquiry
 
 STATUS_BY_DECISION = {"자동 답변": "자동 처리", "답변 초안": "검토 대기", "담당자 연결": "담당자 처리"}
@@ -36,6 +37,7 @@ class AgentResult:
     latency_ms: int = 0
     error: str | None = None
     steps: list = field(default_factory=list)          # 지나간 그래프 노드
+    trace_url: str | None = None                       # LangSmith 화면 주소 (추적이 켜져 있을 때)
 
     @property
     def status(self) -> str:
@@ -50,9 +52,14 @@ def needs_draft(result: AgentResult) -> bool:
 def run_agent(db: Session, inquiry: Inquiry, analysis: dict, faq_search, llm, timeout: float) -> AgentResult:
     start = time.monotonic()
     deps = AgentDeps(db=db, inquiry=inquiry, faq_search=faq_search, llm=llm, deadline=start + timeout)
+    run_id = tracing.new_run_id()
+    meta = {"inquiry_number": inquiry.inquiry_number, "category": analysis.get("category"),
+            "urgency": analysis.get("urgency")}
     try:
-        s = AGENT_GRAPH.invoke({"text": inquiry.content, "analysis": analysis,
-                                "tokens": {"input": 0, "output": 0, "calls": 0}, "steps": []}, context=deps)
+        with tracing.trace(metadata=meta, tags=["문의 처리"]):
+            s = AGENT_GRAPH.invoke({"text": inquiry.content, "analysis": analysis,
+                                    "tokens": {"input": 0, "output": 0, "calls": 0}, "steps": []}, context=deps,
+                                   config={"run_id": run_id, "run_name": "문의 처리"})
         result = AgentResult(
             decision=s["decision"], decided_by=s["decided_by"], reason=s["reason"], selected_tool=s.get("selected_tool"),
             tool_success=s.get("tool_success"), tool_output=s.get("tool_output"),
@@ -66,4 +73,5 @@ def run_agent(db: Session, inquiry: Inquiry, analysis: dict, faq_search, llm, ti
                              retrieved_faqs=[], error=f"{type(e).__name__}: {e}"[:1000],
                              llm_model=llm.label if llm else None)
     result.latency_ms = int((time.monotonic() - start) * 1000)
+    result.trace_url = tracing.run_url(run_id)
     return result

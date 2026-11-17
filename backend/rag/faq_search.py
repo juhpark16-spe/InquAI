@@ -1,7 +1,7 @@
 """FAQ 검색 (가벼운 대체용): 글자 2~4개 단위 TF-IDF. 기본은 KURE-v1 + ChromaDB (embedding_search.py)이고,
 모델을 불러오지 않는 테스트나 KURE를 쓸 수 없을 때 이 검색을 씁니다.
 
-1주차 프롬프트 검증(backend/ai/prompt_check.py)과 같은 방식이라 검증 결과를 그대로 기대할 수 있습니다.
+1주차 프롬프트 검증(backend/ai/prompt_check.py)이 쓰던 방식입니다.
 FAQ가 바뀌면 FaqSearch 를 다시 만들어야 합니다 (FAQ 관리 API를 만들 때 연결).
 """
 
