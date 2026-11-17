@@ -74,7 +74,7 @@ def summary(
     daily = {date_from + timedelta(days=i): {"total": 0, "open": 0, "done": 0, "auto": 0, "by_category": Counter()}
              for i in range(days)}
     status_c, urgency_c, category_c, decision_c, decided_by_c = Counter(), Counter(), Counter(), Counter(), Counter()
-    tokens_in, tokens_out, llm_calls, errors, low_conf = 0, 0, 0, 0, 0
+    tokens_in, tokens_out, llm_calls, errors, draft_failures, low_conf = 0, 0, 0, 0, 0, 0
     edited = approved = 0
     ratings = {"ai": Counter(), "agent": Counter()}  # 고객 평가: AI 자동 답변 / 상담원 답변
 
@@ -100,7 +100,10 @@ def summary(
             tokens_in += t.get("input", 0)
             tokens_out += t.get("output", 0)
             llm_calls += t.get("calls", 0)
-            errors += bool(log.error)
+            if log.error and log.error.startswith("초안 작성 실패"):
+                draft_failures += 1      # 판단은 됐고 초안만 못 씀 (상담원이 버튼으로 다시 만들 수 있음)
+            else:
+                errors += bool(log.error)
         for r in i.responses:
             if r.status == "발송" and r.rating:
                 ratings["ai" if r.approved_by is None else "agent"]["up" if r.rating > 0 else "down"] += 1
@@ -163,6 +166,7 @@ def summary(
             "llm_calls": llm_calls,
             "tokens": {"input": tokens_in, "output": tokens_out},
             "errors": errors,                # LLM 오류·시간 초과로 검토 대기로 넘어간 건
+            "draft_failures": draft_failures,  # 판단 뒤 답변 초안 작성만 실패한 건
         },
         "staff": list(per_staff.values()),
     }

@@ -160,6 +160,7 @@ class AgentLogOut(ORM):
     latency_ms: int | None
     trace_url: str | None
     error: str | None
+    steps: list | None = None  # 처리 경로 (LangGraph 노드)
     created_at: UTCDateTime
 
 

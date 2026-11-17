@@ -139,6 +139,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | notifications | inquiry_id, channel, recipient, subject, body, status | 답변 알림 기록 (메일 서버 없이 시연용으로 기록만) |
 
 - inquiries에 **privacy_agreed_at**(개인정보 동의 시각), responses에 **rating**(1 / -1)·**rated_at** 추가
+- agent_logs에 **steps**(JSON, 3주차): 지나간 LangGraph 노드 이름 목록
 - responses에 **check_points**(JSON, 3주차): AI 초안에서 상담원이 발송 전에 확인할 것 (본문의 `[확인 필요: …]`와 같은 내용)
 
 ### label_corrections — 관리자가 고친 분류 결과 (재학습 데이터)

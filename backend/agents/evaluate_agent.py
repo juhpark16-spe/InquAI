@@ -71,6 +71,8 @@ def summarize(rows: list[dict]) -> dict:
     llm = sorted(r["latency_ms"] for r in rows if r["decided_by"] == "LLM" or r["tokens"].get("calls"))
     out["latency_ms"] = {"avg": round(sum(lat) / len(lat)), "max": lat[-1],
                          "llm_avg": round(sum(llm) / len(llm)) if llm else None}
+    drafts = sorted(r["draft_ms"] for r in rows if r.get("draft_ms") is not None)
+    out["draft_ms"] = {"avg": round(sum(drafts) / len(drafts)), "max": drafts[-1], "n": len(drafts)} if drafts else None
     out["tokens"] = dict(sum((Counter(r["tokens"]) for r in rows), Counter()))
     out["decisions"] = dict(Counter(r["decision"] for r in rows))
     return out
@@ -85,8 +87,10 @@ def write_report(rows: list[dict], summary: dict, meta: dict, path: Path) -> Non
              f"- 실행: {meta['run_at']} · FAQ 검색: `{meta['engine']}` · LLM: `{meta['llm']}` · 사례 {meta['cases']}개 × {meta['repeat']}번",
              f"- LLM 호출 {summary['tokens'].get('calls', 0)}회 (입력 {summary['tokens'].get('input', 0):,} · "
              f"출력 {summary['tokens'].get('output', 0):,} 토큰)",
-             f"- 처리 시간: 평균 {summary['latency_ms']['avg'] / 1000:.1f}초 · 최대 {summary['latency_ms']['max'] / 1000:.1f}초"
+             f"- 고객 대기 시간 (판단까지): 평균 {summary['latency_ms']['avg'] / 1000:.1f}초 · 최대 {summary['latency_ms']['max'] / 1000:.1f}초"
              + (f" · LLM을 쓴 사례 평균 {summary['latency_ms']['llm_avg'] / 1000:.1f}초" if summary["latency_ms"]["llm_avg"] else ""),
+             (f"- 답변 초안 (고객 응답 뒤): {summary['draft_ms']['n']}건 · 평균 {summary['draft_ms']['avg'] / 1000:.1f}초 · "
+              f"최대 {summary['draft_ms']['max'] / 1000:.1f}초" if summary.get("draft_ms") else "- 답변 초안: 없음"),
              "", "| 지표 | 결과 | 목표 |", "| --- | --- | --- |"]
     for key, name, goal in CHECKS:
         s = summary[key]
@@ -135,7 +139,8 @@ def main() -> None:
     tmp = Path(tempfile.mkdtemp(prefix="inquai_agent_eval_"))
     os.environ["DATABASE_URL"] = f"sqlite:///{(tmp / 'eval.db').as_posix()}"
 
-    from backend.agents.pipeline import run_agent
+    from backend.agents.drafting import generate_draft
+    from backend.agents.pipeline import needs_draft, run_agent
     from backend.ai.classifier import Analyzer
     from backend.ai.llm import LLM
     from backend.core.config import get_settings
@@ -169,6 +174,17 @@ def main() -> None:
             db.flush()
             t0 = time.monotonic()
             result = run_agent(db, inquiry, analysis, faq_search, llm, settings.agent_timeout_seconds)
+            draft_ms = None
+            if needs_draft(result):  # 서버처럼 고객 응답 뒤에 초안을 씀 (시간은 따로 잼)
+                t1 = time.monotonic()
+                try:
+                    d = generate_draft(db, inquiry, faq_search, llm, settings.agent_timeout_seconds, analysis=analysis)
+                    result.answer, result.grounded = d.answer, d.grounded
+                    result.check_points, result.used_faq_ids = d.check_points, d.used_faq_ids
+                    result.tokens = {k: result.tokens.get(k, 0) + d.tokens.get(k, 0) for k in ("input", "output", "calls")}
+                except Exception as e:  # noqa: BLE001
+                    result.error = f"초안 작성 실패 {type(e).__name__}: {e}"[:1000]
+                draft_ms = int((time.monotonic() - t1) * 1000)
             checks = score(case, result)
             rows.append({
                 **case, "run": run, "analysis": {k: analysis[k] for k in ("category", "confidence", "sentiment", "urgency", "route")},
@@ -176,6 +192,7 @@ def main() -> None:
                 "reason": result.reason, "retrieved_faqs": result.retrieved_faqs, "used_faq_ids": result.used_faq_ids,
                 "answer": result.answer, "grounded": result.grounded, "check_points": result.check_points,
                 "error": result.error, "tokens": result.tokens, "latency_ms": result.latency_ms,
+                "draft_ms": draft_ms, "steps": result.steps,
                 "wall_ms": int((time.monotonic() - t0) * 1000), "checks": checks,
             })
             bad = [k for k, v in checks.items() if v is False]

@@ -151,6 +151,7 @@ export interface AgentLog {
   latency_ms: number | null;
   trace_url: string | null;
   error: string | null;
+  steps: string[] | null; // 처리 경로 (LangGraph 노드)
   created_at: string;
 }
 

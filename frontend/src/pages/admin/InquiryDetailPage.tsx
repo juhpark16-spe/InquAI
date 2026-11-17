@@ -149,6 +149,7 @@ function AiDetails({ log, faqTitles }: { log: AgentLog | undefined; faqTitles: R
         AI 처리 상세 <span className="text-xs font-normal text-slate-400">점검용 · 펼치기 <span className="inline-block transition group-open:rotate-180">⌄</span></span>
       </summary>
       <dl className="grid grid-cols-[6rem_1fr] gap-y-1.5 border-t border-slate-100 px-5 py-3 text-sm">
+        {log.steps && log.steps.length > 0 && <Row label="처리 경로">{log.steps.join(" → ")}</Row>}
         <Row label="사용한 도구">{log.selected_tool ?? "-"} {log.tool_success === false && <span className="text-rose-700">(실패)</span>}</Row>
         <Row label="검색된 FAQ">
           {log.retrieved_faqs.length ? (

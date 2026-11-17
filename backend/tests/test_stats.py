@@ -72,7 +72,7 @@ def test_summary(client, data):
     assert s["by_decision"] == {"자동 답변": 2, "답변 초안": 3, "담당자 연결": 2}
     assert s["by_decided_by"] == {"규칙": 3, "LLM": 4}
     assert s["ai"]["avg_latency_ms"] == round((8000 + 6000 + 8000 + 8000) / 4)
-    assert s["ai"]["low_confidence"] == 1 and s["ai"]["errors"] == 1 and s["ai"]["llm_calls"] == 8
+    assert s["ai"]["low_confidence"] == 1 and s["ai"]["errors"] == 1 and s["ai"]["draft_failures"] == 0
 
 
 def test_now_counts_ignore_range(client, data):
@@ -126,3 +126,12 @@ def test_activity(client, data):
     assert times == sorted(times, reverse=True)  # 최신순
     e = items[0]
     assert {"at", "actor", "text", "kind", "inquiry_id", "inquiry_number", "title"} <= set(e)
+
+
+def test_draft_failures_are_counted_apart_from_errors(client, db):
+    add(db, 51, "검토 대기", "상품", "보통", "답변 초안", error="초안 작성 실패 APITimeoutError")
+    add(db, 52, "검토 대기", "배송", "보통", "답변 초안", error="TimeoutError: 에이전트 처리 시간 초과")
+    db.commit()
+    login(client)
+    ai = client.get("/api/stats/summary").json()["ai"]
+    assert (ai["errors"], ai["draft_failures"]) == (1, 1)

@@ -368,6 +368,8 @@ export default function DashboardPage() {
             <dt className="text-muted">확신도 0.8 미만 → 담당자 연결</dt><dd className="text-right tabular-nums text-ink">{data.ai.low_confidence}건</dd>
             <dt className="text-muted">LLM 오류·시간 초과</dt>
             <dd className={cx("text-right tabular-nums", data.ai.errors ? "font-semibold text-rose-700" : "text-ink")}>{data.ai.errors}건</dd>
+            <dt className="text-muted">답변 초안 작성 실패</dt>
+            <dd className={cx("text-right tabular-nums", data.ai.draft_failures ? "font-semibold text-amber-700" : "text-ink")}>{data.ai.draft_failures}건</dd>
             <dt className="text-muted">LLM 호출</dt><dd className="text-right tabular-nums text-ink">{data.ai.llm_calls}회</dd>
             <dt className="text-muted">토큰 (입력 / 출력)</dt>
             <dd className="text-right tabular-nums text-ink">{data.ai.tokens.input.toLocaleString()} / {data.ai.tokens.output.toLocaleString()}</dd>

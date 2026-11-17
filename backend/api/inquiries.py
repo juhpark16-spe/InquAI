@@ -1,6 +1,6 @@
 """고객 API (공개): 문의 등록, 사진 올리기, 내 문의 조회, 추가 문의, 답변 평가 (docs/api_spec.md 3장)."""
 
-from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Request, UploadFile
 from fastapi.responses import FileResponse
 
 from backend.core.config import get_settings
@@ -10,6 +10,7 @@ from backend.core.rate_limit import FailureLock, rate_limit
 from backend.database.models import Attachment
 from backend.schemas.inquiry import (FollowUpCreate, InquiryCreate, InquiryCreated, InquiryLookup, InquiryLookupResult,
                                      RatingCreate, UploadOut)
+from backend.services.drafts import write_draft
 from backend.services import sla, uploads
 from backend.services.inquiries import (add_follow_up, find_owned_inquiry, find_public_inquiries, rate_answer,
                                         register_inquiry)
@@ -55,8 +56,12 @@ async def upload_photo(db: DB, file: UploadFile = File(...)):
 # def 로 두면 FastAPI가 별도 스레드에서 실행해, LLM을 기다리는 동안 다른 요청을 막지 않음
 @router.post("", status_code=201, response_model=InquiryCreated, summary="문의 등록 → 분석 → 에이전트 처리",
              dependencies=[Depends(rate_limit("inquiry_create", 5, 60))])
-def create_inquiry(body: InquiryCreate, db: DB, ai: dict = Depends(get_ai)):
-    return register_inquiry(db, body, timeout=get_settings().agent_timeout_seconds, **ai)
+def create_inquiry(body: InquiryCreate, db: DB, background: BackgroundTasks, ai: dict = Depends(get_ai)):
+    timeout = get_settings().agent_timeout_seconds
+    # 답변 초안은 고객에게 응답한 뒤에 씀 (고객이 기다리지 않게, backend/services/drafts.py)
+    schedule = lambda inquiry_id: background.add_task(  # noqa: E731
+        write_draft, inquiry_id, ai["faq_search"], ai["llm"], timeout)
+    return register_inquiry(db, body, timeout=timeout, schedule_draft=schedule, **ai)
 
 
 @router.post("/lookup", response_model=InquiryLookupResult, summary="내 문의 조회 (이메일 + 조회 비밀번호)",

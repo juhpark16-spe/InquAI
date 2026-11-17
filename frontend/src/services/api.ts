@@ -145,7 +145,7 @@ export interface StatsSummary {
   by_urgency: Record<string, number>;
   by_decision: Record<string, number>;
   by_decided_by: Record<string, number>;
-  ai: { avg_latency_ms: number | null; low_confidence: number; llm_calls: number; tokens: { input: number; output: number }; errors: number };
+  ai: { avg_latency_ms: number | null; low_confidence: number; llm_calls: number; tokens: { input: number; output: number }; errors: number; draft_failures: number };
   staff: { id: number; display_name: string; role: string; open: number; urgent_open: number }[];
 }
 

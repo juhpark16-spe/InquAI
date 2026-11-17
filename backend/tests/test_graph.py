@@ -1,0 +1,55 @@
+"""LangGraph 처리 흐름: 그래프 모양, 문의마다 지나간 단계, 초안은 응답 뒤에"""
+
+from sqlalchemy import select
+
+from backend.agents.graph import AGENT_GRAPH
+from backend.database.models import AgentLog, Response
+from backend.tests.test_drafting import DRAFT
+from backend.tests.test_inquiries import ai, post, route_reply, saved  # noqa: F401  (fixture 재사용)
+
+
+def test_graph_shape():
+    g = AGENT_GRAPH.get_graph()
+    nodes = set(g.nodes) - {"__start__", "__end__"}
+    assert nodes == {"search_faq", "rule_check", "llm_route", "verify_order", "faq_answer", "check_answer",
+                     "lookup_shipping", "open_ticket", "escalate", "record_faqs"}
+    mermaid = g.draw_mermaid()
+    assert "rule_check" in mermaid and "llm_route" in mermaid
+
+
+def steps_of(db, number):
+    return saved(db, number)[1].steps
+
+
+def test_rule_path_skips_llm(client, db, ai):
+    ai["analyzer"].next = {"confidence": 0.6}
+    number = post(client).json()["inquiry_number"]
+    assert steps_of(db, number) == ["FAQ 검색", "규칙 판단", "주문 본인 확인", "상담원 이관"]
+    assert ai["llm"].calls == []
+
+
+def test_auto_answer_path(client, db, ai):
+    ai["llm"].replies = {"route": route_reply("자동 답변", "FAQ 검색", ["F05"]),
+                         "answer": {"answer": "보통 1~3일 걸립니다.", "used_faq_ids": ["F05"], "grounded": True}}
+    number = post(client).json()["inquiry_number"]
+    assert steps_of(db, number) == ["FAQ 검색", "규칙 판단", "LLM 판단", "주문 본인 확인", "FAQ 답변", "답변 검사"]
+
+
+def test_other_persons_order_goes_to_staff(client, db, ai):
+    ai["llm"].replies = {"route": route_reply("답변 초안", "배송 조회")}
+    number = post(client, order_number="20261110-0001", customer_email="someone@example.com").json()["inquiry_number"]
+    inquiry, log = saved(db, number)
+    assert inquiry.status == "담당자 처리" and log.decided_by == "규칙"
+    assert log.steps[-2:] == ["주문 본인 확인", "상담원 이관"]
+
+
+def test_draft_is_written_after_response(client, db, ai):
+    """답변 초안 판단: 고객 응답에는 초안 시간이 들지 않고(별도 작업), 초안은 응답 뒤에 저장됨"""
+    ai["llm"].replies = {"route": route_reply("답변 초안", "FAQ 검색"), "draft": DRAFT}
+    body = post(client).json()
+    inquiry, log = saved(db, body["inquiry_number"])
+    assert log.steps[-1] == "FAQ 기록" and "초안" not in "".join(log.steps)   # 그래프에는 초안 단계가 없음
+    assert ai["llm"].calls == ["route", "draft"]                               # 판단 → (응답 뒤) 초안
+    draft = db.scalar(select(Response).where(Response.inquiry_id == inquiry.id))
+    assert draft.status == "초안" and log.response_text == draft.draft_text
+    assert "draft_ms" in log.tool_output

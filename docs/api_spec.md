@@ -123,17 +123,18 @@
 **서버 처리 순서**
 1. `inquiries` 저장 (status = 접수), 문의 번호 발급
 2. 분류 모델: 유형·감정·확신도 → 규칙: 처리 경로·긴급도 (`rules.py`) → `analysis_results` 저장
-3. 에이전트: 규칙 판단(확신도 0.8 미만, 긴급도 높음, 기타 → 담당자 연결) 또는 LLM 판단 → 도구 실행 → 자동 답변이면 FAQ 근거 답변 생성 (`prompts.py`)
+3. 에이전트 (LangGraph, `backend/agents/graph.py`, 그림 `docs/agent_graph.md`): FAQ 검색 → 규칙 판단(확신도 0.8 미만, 긴급도 높음, 기타 → 담당자 연결) 또는 LLM 판단 → 주문 본인 확인 → 도구 실행 → 자동 답변이면 FAQ 근거 답변 생성과 답변 검사 (`prompts.py`)
 4. `responses`, `tickets`, `agent_logs` 저장, `inquiries.status` 갱신
 5. 사람이 볼 문의(`검토 대기`·`담당자 처리`)는 **자동 배정** (`backend/services/assignment.py`): 활성 상담원 중 담당 유형에 이 문의 유형이 있는 사람 → 없으면 전체 담당(담당 유형을 비운 상담원) → 그중 지금 미처리가 가장 적은 사람. 아무도 없으면 미배정. 작업 기록 `auto_assign`. 관리자는 언제든 재배정 가능
 
-- **동기 방식** (11장 결정 사항): 분석과 에이전트 처리가 끝난 뒤 응답합니다. 분석은 1초 이내, LLM 판단·답변까지 최대 8~10초 (프롬프트 검증 기준). 화면에 "답변을 작성하고 있습니다" 표시가 필요합니다.
+- **동기 방식** (11장 결정 사항): 분석과 에이전트 판단이 끝난 뒤 응답합니다. 분석은 1초 이내, LLM 판단·자동 답변까지 보통 5~8초 (`docs/agent_eval.md`). 화면에 "답변을 작성하고 있습니다" 표시가 필요합니다.
+- **답변 초안은 응답 뒤에** (3주차): '답변 초안'으로 판단하면 고객에게 바로 접수 안내를 보내고, 초안은 FastAPI BackgroundTasks로 그 뒤에 씁니다 (`backend/services/drafts.py`). 결과는 `responses`(초안)와 `agent_logs`(초안 글·토큰, 실패하면 `error = 초안 작성 실패 …`)에 남습니다.
 - **실패 처리:** LLM 오류나 20초 초과 시 자동 답변 없이 `검토 대기`로 저장하고 `agent_logs.error`에 기록합니다. 고객 응답은 위의 "접수되었습니다" 형식입니다.
 - **주문번호가 있으면** 배송 조회·티켓 접수 전에 주문의 고객 이메일과 `customer_email`이 같은지 확인합니다. 다르면 도구를 실행하지 않고 `담당자 처리`로 보냅니다 (기획서 2-4).
 - **입력 제한:** content 5~2,000자, title 1~200자, 이메일 형식 확인. 같은 IP에서 1분에 5건 초과 시 429.
-- **2주차 구현 범위** (`backend/services/inquiries.py`, `backend/agents/pipeline.py`):
+- **구현** (`backend/services/inquiries.py`, `backend/agents/pipeline.py` → `graph.py`):
   - 처리 흐름은 위 순서대로 동작하고, FAQ 검색은 KURE-v1 임베딩 + ChromaDB입니다 (모델을 못 불러오면 TF-IDF로 대신, docs/faq_search_eval.md).
-  - 답변 초안(검토 대기)은 도구 결과(배송 조회 결과, 티켓 번호)만 `agent_logs.tool_output`에 남기고, 초안 문장 작성은 3주차에 붙입니다. 자동 답변이었다가 근거 부족으로 내려간 경우에만 초안 문장이 `responses`에 들어갑니다.
+  - `agent_logs.steps`에 지나간 그래프 노드(예: FAQ 검색 → 규칙 판단 → LLM 판단 → 주문 본인 확인 → 티켓 접수)를 남겨 상세 화면 'AI 실행 기록'에 보여 줍니다.
   - 티켓 접수는 주문번호가 있을 때만 만들고, 없으면 `tool_success=false`로 남겨 상담원이 고객에게 확인합니다.
   - 분류 모델이 준비되지 않았으면 503 `MODEL_NOT_READY`.
 

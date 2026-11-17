@@ -192,6 +192,7 @@ class AgentLog(TimestampMixin, Base):
     tokens: Mapped[dict | None] = mapped_column(JSON)
     latency_ms: Mapped[int | None] = mapped_column(Integer)
     trace_url: Mapped[str | None] = mapped_column(String(500))
+    steps: Mapped[list | None] = mapped_column(JSON)   # 지나간 처리 단계 (LangGraph 노드, 3주차)
     error: Mapped[str | None] = mapped_column(Text)
 
     inquiry: Mapped[Inquiry] = relationship(back_populates="agent_logs")

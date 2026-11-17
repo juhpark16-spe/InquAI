@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from backend.agents.pipeline import run_agent
+from backend.agents.pipeline import needs_draft, run_agent
 from backend.core.security import hash_password, verify_password
 from backend.services import notify, uploads
 from backend.services.assignment import auto_assign
@@ -51,7 +51,9 @@ def _save_inquiry(db: Session, body: InquiryCreate) -> Inquiry:
     raise RuntimeError("문의 번호 발급 실패")
 
 
-def register_inquiry(db: Session, body: InquiryCreate, analyzer, faq_search, llm, timeout: float) -> dict:
+def register_inquiry(db: Session, body: InquiryCreate, analyzer, faq_search, llm, timeout: float,
+                     schedule_draft=None) -> dict:
+    """schedule_draft(inquiry_id): 답변 초안을 고객 응답 뒤에 쓰도록 맡길 함수 (API의 BackgroundTasks)"""
     # 1. 저장 (접수). 이후 단계가 실패해도 문의는 남음
     inquiry = _save_inquiry(db, body)
 
@@ -87,6 +89,7 @@ def register_inquiry(db: Session, body: InquiryCreate, analyzer, faq_search, llm
         tool_success=result.tool_success, tool_output=result.tool_output, retrieved_faqs=result.retrieved_faqs,
         used_faq_ids=result.used_faq_ids, reason=result.reason, response_text=result.answer,
         llm_model=result.llm_model, tokens=result.tokens, latency_ms=result.latency_ms, error=result.error,
+        steps=result.steps or None,
     ))
     inquiry.status = result.status
     # 5. 사람이 볼 문의(검토 대기·담당자 처리)는 담당 유형이 맞는 상담원에게 자동 배정
@@ -94,6 +97,9 @@ def register_inquiry(db: Session, body: InquiryCreate, analyzer, faq_search, llm
     if sent:
         notify.answer_registered(db, inquiry)  # 자동 답변도 고객에게 알림 (시연용 기록)
     db.commit()
+    # 6. 답변 초안: 고객은 기다리지 않게 응답 뒤에 씀 (backend/services/drafts.py)
+    if needs_draft(result) and schedule_draft is not None:
+        schedule_draft(inquiry.id)
     return _customer_response(inquiry, result.answer if sent else None)
 
 

@@ -313,7 +313,7 @@ def seed_inquiries(db: Session, *, now: datetime | None = None, days: int = DAYS
             retrieved_faqs=[[f, round(rng.uniform(0.62, 0.83), 4)] for f in sc.faqs], used_faq_ids=sc.faqs,
             reason=sc.reason, response_text=ai_text, llm_model=LLM_LABEL if llm else None,
             tokens={"input": rng.randint(1500, 2300), "output": rng.randint(150, 380), "calls": 2} if llm else {"calls": 0},
-            latency_ms=latency, created_at=decided_at,
+            latency_ms=latency, created_at=decided_at, steps=_steps(sc),
         ))
 
         if sc.decision == "자동 답변":
@@ -401,6 +401,14 @@ def seed_inquiries(db: Session, *, now: datetime | None = None, days: int = DAYS
 
     db.flush()
     return len(plan)
+
+
+def _steps(sc: Scenario) -> list[str]:
+    """에이전트 그래프(graph.py)에서 이 시나리오가 지나가는 노드 이름"""
+    steps = ["FAQ 검색", "규칙 판단"] + (["LLM 판단"] if sc.decided_by == "LLM" else []) + ["주문 본인 확인"]
+    if sc.decision == "자동 답변":
+        return steps + ["FAQ 답변", "답변 검사"]
+    return steps + [{"FAQ 검색": "FAQ 기록"}.get(sc.tool, sc.tool)]
 
 
 def _rate(response: Response, now: datetime, sent_at: datetime, rng: random.Random) -> None:
