@@ -154,6 +154,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | corrected_by | FK → admin_users | |
 
 재학습할 때 `text, after_label`을 `docs/labeling_guide.md` 기준으로 확인한 뒤 학습 데이터에 합칩니다.
+내보내기: `python -m backend.training.export_corrections` → `data/corrections/*.csv` (문의·항목마다 마지막 정답 1줄, 처음 모델 라벨 함께. Git 제외)
 
 ### customers — 고객 (모의 데이터)
 

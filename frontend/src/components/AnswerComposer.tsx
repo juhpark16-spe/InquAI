@@ -110,7 +110,7 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
   const thread: Item[] = [
     { type: "customer" as const, at: data.created_at, text: data.content, messageId: null, followUp: false },
     ...data.messages.map((m) => ({ type: "customer" as const, at: m.created_at, text: m.text, messageId: m.id, followUp: true })),
-    ...data.history.filter((e) => e.kind === "ai" || e.kind === "assign" || e.kind === "status").map((e) => ({
+    ...data.history.filter((e) => e.kind === "ai" || e.kind === "assign" || e.kind === "status" || e.kind === "correct").map((e) => ({
       type: "note" as const, at: e.at, warn: e.kind === "ai" && e.text.includes("오류"), text: `${e.actor} · ${e.text}`,
     })),
     ...data.notifications.map((n) => ({ type: "note" as const, at: n.created_at, warn: false, text: `고객에게 답변 알림 (${n.channel === "email" ? "이메일" : n.channel}, 시연용 ${n.status})` })),

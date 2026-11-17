@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
 
 import { useAuth } from "../../auth/AuthProvider";
+import AnalysisEditor from "../../components/AnalysisEditor";
 import AnswerComposer from "../../components/AnswerComposer";
 import { Alert, Badge, Button, Card, Select, Spinner, cx, formatDate } from "../../components/ui";
 import { errorMessage, inquiryApi } from "../../services/api";
@@ -324,8 +325,9 @@ export default function InquiryDetailPage() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-2 text-xs text-slate-400">분류 수정(재학습 데이터)은 3주차 · 모델 {a.model_version}</p>
+                  <p className="mt-2 text-xs text-slate-400">모델 {a.model_version}</p>
                 </details>
+                <AnalysisEditor key={`${a.category}-${a.sentiment}`} data={data} onSaved={load} />
               </>
             )}
           </Card>

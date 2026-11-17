@@ -1,5 +1,6 @@
 // FastAPI 응답 형식 (docs/api_spec.md). 서버 스키마(backend/schemas)와 맞춰 둡니다.
 
+export const SENTIMENTS = ["긍정", "중립", "부정"] as const;
 export const CATEGORIES = ["배송", "주문 취소", "교환", "반품·환불", "결제", "상품", "쿠폰·적립금·회원", "기타"] as const;
 export const URGENCIES = ["높음", "보통", "낮음"] as const;
 export const STATUSES = ["접수", "자동 처리", "검토 대기", "담당자 처리", "완료"] as const;
@@ -174,7 +175,7 @@ export interface InquiryDetail {
   email_orders: OrderCard[]; // 문의 이메일로 찾은 다른 주문 (본인 확인 필요)
   customer_history: { id: number; inquiry_number: string; title: string; status: string; created_at: string }[];
   faq_titles: Record<string, string>;
-  history: { at: string; actor: string; text: string; kind: "received" | "followup" | "ai" | "assign" | "status" | "draft" | "sent" }[];
+  history: { at: string; actor: string; text: string; kind: "received" | "followup" | "ai" | "assign" | "status" | "draft" | "sent" | "correct" }[];
   due_at: string;
   overdue: boolean;
   messages: { id: number; text: string; created_at: string }[];

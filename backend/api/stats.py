@@ -15,7 +15,8 @@ from backend.core.dependencies import DB, AdminOnly
 from backend.core.errors import AppError
 from backend.services import sla
 from backend.services.inquiry_context import history
-from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminUser, Inquiry, as_utc)
+from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminUser, Inquiry, LabelCorrection,
+                                     as_utc)
 from backend.training.labels import CATEGORY_LABELS
 
 router = APIRouter(prefix="/stats", tags=["통계"])
@@ -115,6 +116,15 @@ def summary(
     total = len(rows)
     analyzed = sum(category_c.values())
 
+    # 기간 안에 상담원이 고친 분류 (재학습 데이터, 모델이 자주 틀리는 유형을 보는 데도 씀)
+    start = datetime.combine(date_from, time.min, KST).astimezone(timezone.utc)
+    end = datetime.combine(date_to + timedelta(days=1), time.min, KST).astimezone(timezone.utc)
+    fixes = db.scalars(select(LabelCorrection).where(LabelCorrection.created_at >= start,
+                                                     LabelCorrection.created_at < end)).all()
+    corrections = {"category": sum(c.field == "category" for c in fixes),
+                   "sentiment": sum(c.field == "sentiment" for c in fixes),
+                   "by_category": dict(Counter(c.before_label for c in fixes if c.field == "category"))}  # AI가 고른 유형
+
     # ---- 지금 시점의 미처리 현황 (기간과 관계없이 현재 쌓여 있는 일) ----
     open_rows = db.scalars(select(Inquiry).where(Inquiry.status.in_(OPEN_STATUSES))
                            .options(selectinload(Inquiry.analysis))).all()
@@ -167,6 +177,7 @@ def summary(
             "tokens": {"input": tokens_in, "output": tokens_out},
             "errors": errors,                # LLM 오류·시간 초과로 검토 대기로 넘어간 건
             "draft_failures": draft_failures,  # 판단 뒤 답변 초안 작성만 실패한 건
+            "corrections": corrections,      # 상담원이 고친 분류 (유형·감정)
         },
         "staff": list(per_staff.values()),
     }

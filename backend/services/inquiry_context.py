@@ -122,6 +122,10 @@ def history(db: Session, inquiry: Inquiry) -> list[dict]:
             text = "답변 작성"
         elif a.action == "response_edit":
             text = "답변 초안 수정"
+        elif a.action == "label_correct":
+            names = {"category": "유형", "sentiment": "감정", "route": "처리 경로", "urgency": "긴급도"}
+            parts = [f"{names[f]} {b} → {c}" for f, (b, c) in {**d.get("changes", {}), **d.get("rule", {})}.items()]
+            text, kind = "분류 수정: " + " · ".join(parts), "correct"
         elif a.action == "draft_generate":
             text = "AI 초안 다시 만들기" if d.get("replaced") else "AI 초안 만들기"
         else:

@@ -2,9 +2,10 @@
 
 from typing import Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.schemas.common import UTCDateTime
+from backend.training.labels import CATEGORY_LABELS, SENTIMENT_LABELS
 
 T = TypeVar("T")
 
@@ -74,6 +75,18 @@ class NotificationOut(BaseModel):
     subject: str
     status: str
     created_at: UTCDateTime
+
+
+class AnalysisCorrection(BaseModel):
+    """분류 결과 수정 (재학습 데이터). 바꿀 것만 보냄"""
+    category: Literal[tuple(CATEGORY_LABELS)] | None = None  # type: ignore[valid-type]
+    sentiment: Literal[tuple(SENTIMENT_LABELS)] | None = None  # type: ignore[valid-type]
+
+    @model_validator(mode="after")
+    def _one_or_more(self):
+        if self.category is None and self.sentiment is None:
+            raise ValueError("고칠 유형이나 감정을 하나 이상 골라 주세요.")
+        return self
 
 
 class AssignRequest(BaseModel):
@@ -166,9 +179,9 @@ class AgentLogOut(ORM):
 
 class CorrectionOut(ORM):
     id: int
-    field: str
-    before_label: str
-    after_label: str
+    field: str            # category / sentiment
+    before_label: str     # 고치기 전 (처음이면 모델 예측)
+    after_label: str      # 상담원이 고른 정답
     corrected_by: int
     created_at: UTCDateTime
 

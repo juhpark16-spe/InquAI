@@ -177,6 +177,7 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 
 const ACTIVITY_ICON: Record<ActivityItem["kind"], IconName> = {
   received: "inbox", followup: "message", ai: "bot", assign: "swap", status: "check", draft: "message", sent: "send",
+  correct: "eye",
 };
 
 function Activity({ items }: { items: ActivityItem[] | null }) {
@@ -368,6 +369,10 @@ export default function DashboardPage() {
             <dt className="text-muted">확신도 0.8 미만 → 담당자 연결</dt><dd className="text-right tabular-nums text-ink">{data.ai.low_confidence}건</dd>
             <dt className="text-muted">LLM 오류·시간 초과</dt>
             <dd className={cx("text-right tabular-nums", data.ai.errors ? "font-semibold text-rose-700" : "text-ink")}>{data.ai.errors}건</dd>
+            <dt className="text-muted" title="상담원이 고친 유형·감정. 재학습 데이터로 모읍니다">분류 수정 (재학습 데이터)</dt>
+            <dd className="text-right tabular-nums text-ink">
+              유형 {data.ai.corrections.category}건 · 감정 {data.ai.corrections.sentiment}건
+            </dd>
             <dt className="text-muted">답변 초안 작성 실패</dt>
             <dd className={cx("text-right tabular-nums", data.ai.draft_failures ? "font-semibold text-amber-700" : "text-ink")}>{data.ai.draft_failures}건</dd>
             <dt className="text-muted">LLM 호출</dt><dd className="text-right tabular-nums text-ink">{data.ai.llm_calls}회</dd>

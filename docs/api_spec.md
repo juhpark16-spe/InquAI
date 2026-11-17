@@ -244,14 +244,22 @@
 
 - 대시보드 `now.overdue_open`(기한 초과 미처리), `ratings.ai / ratings.agent`(👍·👎 수와 만족도) 추가
 
-### PATCH /api/inquiries/{id}/analysis — 분류 결과 수정 (재학습 데이터)
+### PATCH /api/inquiries/{id}/analysis — 분류 결과 수정 (재학습 데이터, 3주차 구현)
 ```json
 // 요청 (바꿀 것만)
 { "category": "반품·환불", "sentiment": "부정" }
 // 200 응답: 바뀐 analysis
 ```
-- 바뀐 항목마다 `label_corrections` 1줄 (원문 복사본 포함), `admin_audit_logs` (label_correct)
-- 유형이 바뀌면 `route`, `urgency`를 규칙으로 다시 계산합니다. 에이전트는 다시 실행하지 않습니다.
+- 권한은 문의와 같습니다 (관리자 전체, 상담원은 배정된 문의만). 화면: 문의 상세 "AI 분석" 카드의 **[분류 고치기]**
+- 값: `category` 8개 유형, `sentiment` 긍정 / 중립 / 부정 (`backend/training/labels.py`). 둘 다 없으면 422
+- 바뀐 항목마다 `label_corrections` 1줄 (원문 복사본 포함), `admin_audit_logs` (label_correct, 바뀐 값과 규칙 재계산 결과)
+- 유형·감정이 바뀌면 `route`, `urgency`를 규칙으로 다시 계산합니다 → 답변 기한(긴급 4시간)도 따라 바뀝니다.
+  모델 확신도·점수는 모델이 낸 값 그대로 둡니다. 에이전트·답변은 다시 실행하지 않습니다.
+- 지금과 같은 값만 보내면 400 `NO_CHANGE`, AI 분석이 없는 문의는 400 `NO_ANALYSIS`
+- 처리 이력: "분류 수정: 유형 배송 → 반품·환불 · 긴급도 낮음 → 높음" (kind `correct`)
+- 대시보드 `ai.corrections`: 기간 안 수정 건수 (유형·감정), AI가 고른 유형별 수정 수 (`by_category`, 모델이 자주 틀리는 유형)
+- 재학습용 내보내기: `python -m backend.training.export_corrections` → `data/corrections/{category,sentiment}_corrections.csv`
+  (text + 정답 라벨 + 처음 모델 라벨. 고객 원문이 있어 Git 제외)
 
 ### PATCH /api/inquiries/{id}/assign — 배정·재배정 (관리자)
 ```json

@@ -15,7 +15,8 @@ from backend.core.dependencies import DB, AdminOnly, LoginUser
 from backend.core.errors import AppError
 from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminUser, AnalysisResult, Attachment,
                                      Inquiry, InquiryNote, LabelCorrection, Notification, utcnow)
-from backend.schemas.inquiry_admin import (AssignRequest, InquiryDetail, InquiryListItem, InquiryState, NoteCreate,
+from backend.ai.rules import get_route, get_urgency
+from backend.schemas.inquiry_admin import (AnalysisCorrection, AnalysisOut, AssignRequest, InquiryDetail, InquiryListItem, InquiryState, NoteCreate,
                                            NoteOut, Page, StatusRequest)
 from backend.services import inquiry_context as ctx
 from backend.services import sla, uploads
@@ -147,6 +148,35 @@ def change_status(inquiry_id: int, body: StatusRequest, request: Request, user: 
     db.commit()
     db.refresh(inquiry)
     return _state(inquiry)
+
+
+@router.patch("/{inquiry_id}/analysis", response_model=AnalysisOut, summary="분류 결과 수정 (로그인, 재학습 데이터)")
+def correct_analysis(inquiry_id: int, body: AnalysisCorrection, request: Request, user: LoginUser, db: DB):
+    """AI가 잘못 고른 유형·감정을 고칩니다. 바뀐 항목마다 label_corrections에 원문과 함께 남겨 재학습에 씁니다.
+
+    유형·감정이 바뀌면 처리 경로와 긴급도(답변 기한)를 규칙으로 다시 계산합니다. 에이전트는 다시 실행하지 않습니다.
+    """
+    inquiry = get_inquiry_for_user(db, inquiry_id, user)
+    a = inquiry.analysis
+    if a is None:
+        raise AppError(400, "AI 분석이 없는 문의는 고칠 분류가 없습니다.", "NO_ANALYSIS")
+    changes = {f: (getattr(a, f), v) for f, v in body.model_dump(exclude_none=True).items() if v != getattr(a, f)}
+    if not changes:
+        raise AppError(400, "지금과 같은 분류입니다.", "NO_CHANGE")
+
+    for field, (before, after) in changes.items():
+        db.add(LabelCorrection(inquiry_id=inquiry.id, field=field, before_label=before, after_label=after,
+                               text=inquiry.content, corrected_by=user.id))
+        setattr(a, field, after)
+    before_rule = {"route": a.route, "urgency": a.urgency}
+    a.route = get_route(a.category)
+    a.urgency = get_urgency(a.category, a.sentiment, inquiry.content)
+    rule = {k: [before_rule[k], getattr(a, k)] for k in before_rule if before_rule[k] != getattr(a, k)}
+    add_audit(db, request, "label_correct", user, "inquiry", inquiry.id,
+              changes={f: list(v) for f, v in changes.items()}, rule=rule)
+    db.commit()
+    db.refresh(a)
+    return a
 
 
 @router.get("/{inquiry_id}", response_model=InquiryDetail, summary="문의 상세 (로그인)")

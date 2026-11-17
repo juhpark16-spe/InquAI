@@ -116,6 +116,9 @@ export const inquiryApi = {
   setStatus: (id: number, status: string) =>
     http.patch<InquiryState>(`/inquiries/${id}/status`, { status }).then((r) => r.data),
   staff: () => http.get<User[]>("/admin/staff").then((r) => r.data),
+  // 분류 결과 수정 (재학습 데이터): 바꿀 것만 보냄
+  correctAnalysis: (id: number, body: { category?: string; sentiment?: string }) =>
+    http.patch(`/inquiries/${id}/analysis`, body).then((r) => r.data),
   addNote: (id: number, text: string) => http.post(`/inquiries/${id}/notes`, { text }).then((r) => r.data),
   attachmentUrl: (inquiryId: number, attachmentId: number) => `/api/inquiries/${inquiryId}/attachments/${attachmentId}`,
 };
@@ -145,7 +148,8 @@ export interface StatsSummary {
   by_urgency: Record<string, number>;
   by_decision: Record<string, number>;
   by_decided_by: Record<string, number>;
-  ai: { avg_latency_ms: number | null; low_confidence: number; llm_calls: number; tokens: { input: number; output: number }; errors: number; draft_failures: number };
+  ai: { avg_latency_ms: number | null; low_confidence: number; llm_calls: number; tokens: { input: number; output: number }; errors: number; draft_failures: number;
+    corrections: { category: number; sentiment: number; by_category: Record<string, number> } };
   staff: { id: number; display_name: string; role: string; open: number; urgent_open: number }[];
 }
 
@@ -158,7 +162,7 @@ export interface ActivityItem {
   at: string;
   actor: string;
   text: string;
-  kind: "received" | "followup" | "ai" | "assign" | "status" | "draft" | "sent";
+  kind: "received" | "followup" | "ai" | "assign" | "status" | "draft" | "sent" | "correct";
   inquiry_id: number;
   inquiry_number: string;
   title: string;
