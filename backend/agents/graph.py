@@ -100,12 +100,13 @@ def llm_route(state: AgentState, runtime: Ctx) -> dict:
 
 
 def verify_order(state: AgentState, runtime: Ctx) -> dict:
-    """배송 조회·티켓 접수 전에 주문번호와 문의 이메일이 맞는지 확인 (아니면 담당자에게)"""
+    """주문번호가 있으면 문의 이메일과 맞는지 확인. 배송 조회·티켓 접수인데 맞지 않으면 담당자에게.
+    자동 답변이면 확인된 주문의 상품 이름을 답변에서 언급 (맞지 않으면 언급하지 않을 뿐)"""
     inquiry, plan, out = runtime.context.inquiry, state["plan"], {}
     order = None
-    if plan["tool"] in ORDER_TOOLS and inquiry.order_number:
+    if inquiry.order_number:
         order = find_customer_order(runtime.context.db, inquiry.order_number, inquiry.customer_email)
-        if order is None:
+        if order is None and plan["tool"] in ORDER_TOOLS:
             plan = {"decision": "담당자 연결", "tool": "상담원 이관", "faq_ids": [],
                     "reason": "주문번호와 이메일이 일치하지 않음"}
             out["decided_by"] = "규칙"
@@ -116,10 +117,13 @@ def verify_order(state: AgentState, runtime: Ctx) -> dict:
 def faq_answer(state: AgentState, runtime: Ctx) -> dict:
     deps = runtime.context
     chosen = [f for f in state["retrieved"] if f["id"] in state["plan"]["faq_ids"]] or state["retrieved"]
-    ans, tokens = deps.ask_llm(ANSWER_PROMPT, format_answer_input(state["text"], chosen), ANSWER_SCHEMA, "answer")
+    order = _order(state, runtime)   # 본인 확인된 주문 → 상품 이름만 답변에 언급 (상태·날짜·금액은 FAQ 근거가 아님)
+    product = order.product_name if order else None
+    ans, tokens = deps.ask_llm(ANSWER_PROMPT, format_answer_input(state["text"], chosen, product), ANSWER_SCHEMA, "answer")
+    output = {"faq_ids": [f["id"] for f in chosen], **({"order_product": product} if product else {})}
     return {"selected_tool": "FAQ 검색", "answer": ans["answer"], "grounded": ans["grounded"],
             "used_faq_ids": ans["used_faq_ids"], "tool_success": True,
-            "tool_output": {"faq_ids": [f["id"] for f in chosen]}, "tokens": tokens, "llm_model": deps.llm.label,
+            "tool_output": output, "tokens": tokens, "llm_model": deps.llm.label,
             "steps": ["FAQ 답변"]}
 
 

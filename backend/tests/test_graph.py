@@ -80,3 +80,26 @@ def test_check_tool_table():
     assert check_tool(plan("담당자 연결", "티켓 접수"), "접수형")["tool"] == "상담원 이관"
     same = plan("답변 초안", "티켓 접수")
     assert check_tool(same, "접수형") is same
+
+
+def _auto(ai):
+    ai["llm"].replies = {"route": route_reply("자동 답변", "FAQ 검색", ["F05"]),
+                         "answer": {"answer": "주문하신 맨투맨은 보통 1~3일 안에 도착합니다.", "used_faq_ids": ["F05"],
+                                    "grounded": True}}
+
+
+def test_auto_answer_mentions_verified_order_product(client, db, ai):
+    _auto(ai)
+    number = post(client, order_number="20261110-0001").json()["inquiry_number"]   # customer01 의 맨투맨 주문
+    _, log = saved(db, number)
+    assert "[확인된 주문] 상품: 맨투맨" in ai["llm"].inputs["answer"]
+    assert log.tool_output["order_product"] == "맨투맨" and log.decision == "자동 답변"
+
+
+def test_auto_answer_does_not_mention_unverified_order(client, db, ai):
+    """주문번호가 다른 사람 것이면 상품을 알려 주지 않음 (자동 답변은 그대로, 담당자로 넘기지도 않음)"""
+    _auto(ai)
+    number = post(client, order_number="20261110-0001", customer_email="someone@example.com").json()["inquiry_number"]
+    _, log = saved(db, number)
+    assert "확인된 주문" not in ai["llm"].inputs["answer"]
+    assert "order_product" not in log.tool_output and log.decision == "자동 답변"

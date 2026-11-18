@@ -39,9 +39,11 @@ class FakeLLM:
     def __init__(self):
         self.replies = {}   # name("route"/"answer") → dict 또는 Exception
         self.calls = []
+        self.inputs = {}    # name → 마지막으로 받은 입력 (프롬프트에 무엇이 들어갔는지 확인용)
 
     def json(self, system, user, schema, name, timeout):
         self.calls.append(name)
+        self.inputs[name] = user
         reply = self.replies[name]
         if isinstance(reply, Exception):
             raise reply

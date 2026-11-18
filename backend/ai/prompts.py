@@ -79,6 +79,8 @@ ANSWER_PROMPT = """너는 온라인 쇼핑몰 고객센터 상담원이다. 아�
 """ + CUSTOMER_TEXT_RULE + """
 - 쿠폰·적립금·환불·보상이 지급·승인·처리되었다고 쓰지 않는다 (FAQ의 일반 안내만 쓴다).
 - 2~5문장, 존댓말.
+- [확인된 주문]이 있으면 첫 문장에서 "주문하신 ○○"처럼 그 상품 이름을 자연스럽게 한 번 언급한다 (고객을 알아보는 답변).
+  주문 상태·날짜·금액은 FAQ 근거가 아니므로 쓰지 않는다. [확인된 주문]이 없으면 상품을 추측해 쓰지 않는다.
 - 고객이 불편·불만을 직접 표현했을 때만("불편하네요", "짜증나요") 첫 문장에 짧게 공감한다.
   단순 질문("비밀번호를 잊어버렸어요", "쿠폰 조건이 뭐예요?")에는 사과·공감 없이 바로 답한다.
 - used_faq_ids에는 실제로 근거로 쓴 FAQ 번호만 넣는다."""
@@ -151,9 +153,11 @@ def format_route_input(text, analysis, faqs) -> str:
             f"[고객 문의]\n{customer_text(text)}")
 
 
-def format_answer_input(text, faqs) -> str:
+def format_answer_input(text, faqs, product: str | None = None) -> str:
+    """product: 본인 확인된 주문의 상품 이름 (주문번호·이메일이 맞을 때만). 답변 첫 문장에서 언급"""
     faq_lines = "\n".join(f"[{f['id']}] Q: {f['question']}\nA: {f['answer']}" for f in faqs)
-    return f"[FAQ]\n{faq_lines}\n\n[고객 문의]\n{customer_text(text)}"
+    order_line = f"[확인된 주문] 상품: {product}\n\n" if product else ""
+    return f"[FAQ]\n{faq_lines}\n\n{order_line}[고객 문의]\n{customer_text(text)}"
 
 
 DRAFT_PROMPT = """너는 온라인 쇼핑몰 고객센터 상담원이 보낼 답변의 '초안'을 쓴다. 상담원이 읽고 고친 뒤 발송한다.
