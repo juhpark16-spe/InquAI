@@ -1,0 +1,46 @@
+# InquAI 한 번에 실행 (docs/docker.md)
+#   docker compose up -d --build     → http://localhost:8080
+#
+# 준비물 (저장소에 없는 것, 실행할 때 연결):
+#   .env                          OpenAI 키·JWT 비밀키·초기 계정 비밀번호 (.env.example 참고)
+#   models/category_classifier    문의 유형 분류 모델 (학습 결과, docs/model_card.md)
+#   models/sentiment_classifier   감정 분류 모델
+name: inquai
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    image: inquai-backend
+    env_file: .env
+    environment:
+      # 컨테이너 안 경로·주소로 맞춤 (.env 의 개발용 값보다 우선)
+      DATABASE_URL: sqlite:///./data/inquai.db
+      FRONTEND_ORIGINS: http://localhost:8080
+      COOKIE_SECURE: "false"         # http://localhost 시연용. https로 배포할 때는 true
+    volumes:
+      - inquai-data:/app/data                                              # DB·첨부 사진·FAQ 벡터·백업
+      - ./models/category_classifier:/app/models/category_classifier:ro
+      - ./models/sentiment_classifier:/app/models/sentiment_classifier:ro
+      # KURE-v1(약 2.2GB) 저장 위치. 기본은 볼륨(처음 한 번 내려받음).
+      # 이미 받아 둔 PC는 HF_CACHE=C:/Users/<이름>/.cache/huggingface 로 지정하면 다시 받지 않음
+      - ${HF_CACHE:-hf-cache}:/home/app/.cache/huggingface
+    expose:
+      - "8000"                       # 밖으로 열지 않음: 화면(nginx)을 거쳐서만 접속
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/web.Dockerfile
+    image: inquai-web
+    ports:
+      - "8080:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  inquai-data:
+  hf-cache:

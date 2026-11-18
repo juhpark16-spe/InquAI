@@ -1,0 +1,29 @@
+# 이미지에 넣지 않을 것: 비밀값, AI Hub 데이터·학습 모델, 개발 DB·사진, 빌드 결과·캐시
+.env
+.env.*
+!.env.example
+.git
+.github
+.claude
+.venv
+venv
+**/__pycache__
+**/*.py[cod]
+
+# 학습 모델은 실행할 때 연결 (docker-compose.yml)
+models
+
+# 데이터: FAQ 원본과 재학습 시연용 직접 작성 문장(written_pool)만 이미지에 넣음
+data/*
+!data/faq
+!data/test
+data/test/*
+!data/test/written_pool.csv
+
+evaluation
+docs
+DESIGN.md
+
+frontend/node_modules
+frontend/dist
+**/*.tsbuildinfo
