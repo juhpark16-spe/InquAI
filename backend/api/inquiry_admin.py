@@ -169,6 +169,26 @@ def correct_analysis(inquiry_id: int, body: AnalysisCorrection, request: Request
     return a
 
 
+@router.get("/{inquiry_id}/queue", summary="처리 대기열에서 이전·다음 문의 (로그인)")
+def queue(inquiry_id: int, user: LoginUser, db: DB):
+    """상세 화면의 [이전]·[다음]과 '처리 후 다음 미처리 문의로'에 씀.
+
+    대기열 = 미처리 문의(접수·검토 대기·담당자 처리), 긴급도 높은 순 → 오래된 순 (먼저 온 문의부터).
+    상담원은 자신에게 배정된 문의만. 지금 문의가 대기열에 없으면(완료 등) next 는 대기열의 첫 문의.
+    """
+    get_inquiry_for_user(db, inquiry_id, user)
+    stmt = (select(Inquiry.id).outerjoin(AnalysisResult, AnalysisResult.inquiry_id == Inquiry.id)
+            .where(Inquiry.status.in_(sla.OPEN_STATUSES)))
+    if user.role != "admin":
+        stmt = stmt.where(Inquiry.assigned_to == user.id)
+    ids = list(db.scalars(stmt.order_by(URGENCY_ORDER, Inquiry.created_at, Inquiry.id)))
+    if inquiry_id in ids:
+        k = ids.index(inquiry_id)
+        return {"total": len(ids), "position": k + 1, "prev_id": ids[k - 1] if k > 0 else None,
+                "next_id": ids[k + 1] if k + 1 < len(ids) else None}
+    return {"total": len(ids), "position": None, "prev_id": None, "next_id": ids[0] if ids else None}
+
+
 @router.get("/{inquiry_id}", response_model=InquiryDetail, summary="문의 상세 (로그인)")
 def get_inquiry(inquiry_id: int, user: LoginUser, db: DB):
     inquiry = get_inquiry_for_user(db, inquiry_id, user)
@@ -189,6 +209,7 @@ def get_inquiry(inquiry_id: int, user: LoginUser, db: DB):
         "order": ctx.order_card(db, inquiry),
         "email_orders": ctx.email_orders(db, inquiry),
         "customer_history": ctx.customer_history(db, inquiry, user),
+        "customer_profile": ctx.customer_profile(db, inquiry),
         "faq_titles": ctx.faq_titles(db, inquiry),
         "history": ctx.history(db, inquiry),
         "due_at": sla.due_at(inquiry.created_at, urgency),

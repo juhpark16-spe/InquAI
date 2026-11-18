@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api import (agent_logs, auth, faqs_admin, faqs_public, health, inquiries, inquiry_admin, responses,
-                         retraining, shop, staff, stats)
+                         retraining, shop, staff, stats, tickets)
 from backend.core import tracing
 from backend.core.config import get_settings
 from backend.core.errors import register_error_handlers
@@ -88,3 +88,4 @@ app.include_router(faqs_admin.router, prefix="/api")
 app.include_router(stats.router, prefix="/api")
 app.include_router(agent_logs.router, prefix="/api")
 app.include_router(retraining.router, prefix="/api")
+app.include_router(tickets.router, prefix="/api")

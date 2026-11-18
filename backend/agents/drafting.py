@@ -77,7 +77,8 @@ def build_input(db: Session, inquiry: Inquiry, faqs: list[dict], analysis: dict 
     photos = db.scalar(select(func.count()).select_from(Attachment).where(Attachment.inquiry_id == inquiry.id))
     parts.append(f"[첨부 사진] {photos}장 (너는 사진을 볼 수 없음)" if photos else "[첨부 사진] 없음")
     tickets = db.scalars(select(Ticket).where(Ticket.inquiry_id == inquiry.id).order_by(Ticket.id)).all()
-    parts.append("[처리 기록]\n" + ("\n".join(f"티켓 #{t.id} {t.ticket_type} 접수 ({t.status})" for t in tickets) or "없음"))
+    parts.append("[처리 기록]\n" + ("\n".join(
+        f"티켓 #{t.id} {t.ticket_type} {t.status}" + (f" (상담원 메모: {t.memo})" if t.memo else "") for t in tickets) or "없음"))
     parts.append("[FAQ]\n" + ("\n".join(f"[{f['id']}] Q: {f['question']}\nA: {f['answer']}" for f in faqs) or "관련 FAQ 없음"))
 
     messages = db.scalars(select(CustomerMessage).where(CustomerMessage.inquiry_id == inquiry.id)
@@ -106,7 +107,8 @@ def _trace_inputs(inputs: dict) -> dict:
 
 @traceable(name="답변 초안 작성", run_type="chain", process_inputs=_trace_inputs)
 def generate_draft(db: Session, inquiry: Inquiry, faq_search, llm, timeout: float,
-                   analysis: dict | None = None) -> DraftResult:
+                   analysis: dict | None = None, instruction: str | None = None) -> DraftResult:
+    """instruction: 상담원 요청 (예: "더 짧게"). 고객 글과 섞이지 않게 [상담원 요청]으로 따로 넘김"""
     """초안 1개를 만듭니다. LLM 오류·시간 초과는 예외로 올라갑니다 (부르는 쪽에서 처리)."""
     if llm is None:
         raise RuntimeError("LLM을 쓸 수 없습니다 (OPENAI_API_KEY 없음).")
@@ -118,7 +120,10 @@ def generate_draft(db: Session, inquiry: Inquiry, faq_search, llm, timeout: floa
         analysis = {"category": a.category, "sentiment": a.sentiment, "urgency": a.urgency}
     faqs = faq_search.search(search_query(db, inquiry), 3) if faq_search else []
 
-    data, usage = llm.json(DRAFT_PROMPT, build_input(db, inquiry, faqs, analysis), DRAFT_SCHEMA, "draft", timeout=timeout)
+    user_input = build_input(db, inquiry, faqs, analysis)
+    if instruction and instruction.strip():
+        user_input += f"\n\n[상담원 요청]\n{instruction.strip()[:200]}"
+    data, usage = llm.json(DRAFT_PROMPT, user_input, DRAFT_SCHEMA, "draft", timeout=timeout)
     answer = FAQ_REF.sub("", data["answer"]).strip()[:MAX_LEN]
     known = {f["id"] for f in faqs}
     checks = [c.strip() for c in data["check_points"] if c.strip()][:10]

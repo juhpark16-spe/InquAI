@@ -1,5 +1,5 @@
 // 여러 화면이 같이 쓰는 작은 UI 조각
-import type { ButtonHTMLAttributes, InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, ComponentProps, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
 
 export function cx(...names: (string | false | null | undefined)[]) {
   return names.filter(Boolean).join(" ");
@@ -23,7 +23,8 @@ export function Input(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={cx(inputBase, props.className)} />;
 }
 
-export function Textarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+// ComponentProps<"textarea">: ref 도 받음 (React 19는 함수 컴포넌트에 ref 를 그대로 넘김, 답변 칸의 커서 자리에 넣기용)
+export function Textarea(props: ComponentProps<"textarea">) {
   return <textarea {...props} className={cx(inputBase, "min-h-32", props.className)} />;
 }
 

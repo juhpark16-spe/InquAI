@@ -296,6 +296,7 @@ class Ticket(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(5), default="접수")
     handled_by: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"))
     handled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    memo: Mapped[str | None] = mapped_column(Text)   # 승인·반려 메모 (반려는 사유 필수, 4주차)
 
     inquiry: Mapped[Inquiry] = relationship(back_populates="tickets")
     order: Mapped[Order | None] = relationship()

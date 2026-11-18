@@ -55,6 +55,7 @@ class ResponseUpdate(_Text):
 
 class DraftRequest(BaseModel):
     replace: bool = False  # 상담원이 고친 초안이 있어도 AI 초안으로 바꿀지
+    instruction: str | None = Field(None, max_length=200)  # 상담원 요청 (예: "더 짧게", "사과를 먼저")
 
 
 def _get_response_for_user(db: Session, response_id: int, user: AdminUser) -> Response:
@@ -135,6 +136,7 @@ def create_draft(inquiry_id: int, request: Request, user: LoginUser, db: DB, bod
     상담원이 고친(또는 직접 쓴) 초안이 있으면 replace=true 일 때만 바꿉니다 (작성 중인 글을 실수로 지우지 않게).
     """
     replace = body.replace if body else False
+    instruction = (body.instruction or "").strip() or None if body else None
     inquiry = get_inquiry_for_user(db, inquiry_id, user)
     llm = getattr(request.app.state, "llm", None)
     if llm is None:
@@ -149,7 +151,7 @@ def create_draft(inquiry_id: int, request: Request, user: LoginUser, db: DB, bod
         with tracing.trace(metadata={"inquiry_number": inquiry.inquiry_number, "requested_by": user.username},
                            tags=["답변 초안", "상담원 요청"]):
             result = generate_draft(db, inquiry, getattr(request.app.state, "faq_search", None), llm,
-                                    timeout=get_settings().agent_timeout_seconds)
+                                    timeout=get_settings().agent_timeout_seconds, instruction=instruction)
     except Exception:  # noqa: BLE001  LLM 오류·시간 초과
         logger.exception("AI 초안 생성 실패: %s", inquiry.inquiry_number)
         raise AppError(502, "AI 초안을 만들지 못했습니다. 잠시 후 다시 시도하거나 직접 작성해 주세요.", "DRAFT_FAILED")
@@ -161,6 +163,7 @@ def create_draft(inquiry_id: int, request: Request, user: LoginUser, db: DB, bod
     draft.used_faq_ids, draft.grounded, draft.check_points = result.used_faq_ids, result.grounded, result.check_points or None
     db.flush()
     add_audit(db, request, "draft_generate", user, "inquiry", inquiry.id, response_id=draft.id, replaced=edited,
+              instruction=instruction,
               faqs=result.retrieved_faqs, tokens=result.tokens, latency_ms=result.latency_ms, llm_model=result.llm_model)
     db.commit()
     db.refresh(draft)

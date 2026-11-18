@@ -102,3 +102,21 @@ def test_email_orders(client, setup):
     assert [o["order_number"] for o in no_number["email_orders"]] == ["A-2", "A-1"]  # 주문번호 없어도 최신순으로
     assert no_number["email_orders"][0]["cancellable"] is True
     assert client.get(f"/api/inquiries/{setup['other']}").json()["email_orders"] == []  # 이 이메일로 된 주문 없음
+
+def test_mask_phone():
+    from backend.services.inquiry_context import mask_phone
+    assert mask_phone("010-1234-5678") == "010-****-5678"
+    assert mask_phone("01012345678") == "010-****-5678"
+    assert mask_phone("123") == "****" and mask_phone(None) is None
+
+
+def test_customer_profile(client, db, setup):
+    r = db.query(Response).filter_by(inquiry_id=setup["old"]).one()
+    r.rating = -1                                                     # 이전 답변에 👎
+    db.commit()
+    login(client)
+    p = client.get(f"/api/inquiries/{setup['main']}").json()["customer_profile"]
+    assert p == {"member": False, "phone": "010-****-0000", "orders": 2, "inquiries": 2,
+                 "negative_inquiries": 0, "negative_ratings": 1}
+    other = client.get(f"/api/inquiries/{setup['other']}").json()["customer_profile"]
+    assert other["phone"] is None and other["orders"] == 0 and other["inquiries"] == 1   # 쇼핑몰 고객 정보 없음

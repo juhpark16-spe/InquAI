@@ -134,6 +134,7 @@ export interface Ticket {
   status: string;
   handled_by: number | null;
   handled_at: string | null;
+  memo: string | null;     // 승인·반려 메모 (반려 사유)
   created_at: string;
 }
 
@@ -161,6 +162,9 @@ export interface InquiryDetail {
   id: number;
   inquiry_number: string;
   customer: { name: string; email: string; order_number: string | null };
+  // 고객 카드: 쇼핑몰 회원 여부, 전화번호(가림), 주문·문의 수, 불만 신호
+  customer_profile: { member: boolean; phone: string | null; orders: number; inquiries: number;
+    negative_inquiries: number; negative_ratings: number } | null;
   title: string;
   content: string;
   status: string;
@@ -176,7 +180,7 @@ export interface InquiryDetail {
   email_orders: OrderCard[]; // 문의 이메일로 찾은 다른 주문 (본인 확인 필요)
   customer_history: { id: number; inquiry_number: string; title: string; status: string; created_at: string }[];
   faq_titles: Record<string, string>;
-  history: { at: string; actor: string; text: string; kind: "received" | "followup" | "ai" | "assign" | "status" | "draft" | "sent" | "correct" }[];
+  history: { at: string; actor: string; text: string; kind: "received" | "followup" | "ai" | "assign" | "status" | "draft" | "sent" | "correct" | "ticket" }[];
   due_at: string;
   overdue: boolean;
   messages: { id: number; text: string; created_at: string }[];

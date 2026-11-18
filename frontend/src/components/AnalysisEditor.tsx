@@ -48,12 +48,12 @@ export default function AnalysisEditor({ data, onSaved }: { data: InquiryDetail;
   if (!open) {
     return (
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-        <span className="text-xs text-slate-500">
+        <span className="text-sm text-slate-600">
           {fixed.length > 0
             ? fixed.map(([f, orig]) => `${NAMES[f]}: AI ${orig} → 상담원 ${a[f]}`).join(" · ")
             : "AI가 잘못 고른 분류는 고쳐 주세요 (재학습에 씁니다)"}
         </span>
-        <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => {
+        <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-sm" onClick={() => {
           setCategory(a.category);
           setSentiment(a.sentiment);
           setOpen(true);
@@ -64,7 +64,7 @@ export default function AnalysisEditor({ data, onSaved }: { data: InquiryDetail;
 
   return (
     <div className="mt-3 space-y-2 rounded-xl border border-indigo-200 bg-indigo-50/40 p-3">
-      <div className="grid grid-cols-[3rem_1fr] items-center gap-2 text-sm">
+      <div className="grid grid-cols-[3rem_1fr] items-center gap-2 text-[15px]">
         <span className="text-slate-600">유형</span>
         <Select value={category} onChange={(e) => setCategory(e.target.value)} aria-label="유형">
           {CATEGORIES.map((c) => <option key={c} value={c}>{c}{c === a.category ? " (지금)" : ""}</option>)}
@@ -74,13 +74,13 @@ export default function AnalysisEditor({ data, onSaved }: { data: InquiryDetail;
           {SENTIMENTS.map((s) => <option key={s} value={s}>{s}{s === a.sentiment ? " (지금)" : ""}</option>)}
         </Select>
       </div>
-      <p className="text-xs text-slate-500">
+      <p className="text-sm text-slate-600">
         저장하면 재학습 데이터로 남고, 처리 경로·긴급도(답변 기한)가 규칙으로 다시 정해집니다. 답변은 다시 만들지 않습니다.
       </p>
       {error && <Alert>{error}</Alert>}
       <div className="flex justify-end gap-2">
-        <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-xs" onClick={() => setOpen(false)} disabled={busy}>취소</Button>
-        <Button className="min-h-0 px-3 py-1.5 text-xs" onClick={save} disabled={busy || Object.keys(changed).length === 0}>
+        <Button variant="ghost" className="min-h-0 px-3 py-1.5 text-sm" onClick={() => setOpen(false)} disabled={busy}>취소</Button>
+        <Button className="min-h-0 px-3 py-1.5 text-sm" onClick={save} disabled={busy || Object.keys(changed).length === 0}>
           {busy ? <Spinner /> : "저장"}
         </Button>
       </div>

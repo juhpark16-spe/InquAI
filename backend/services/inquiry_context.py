@@ -8,7 +8,7 @@ from datetime import timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.database.models import AdminAuditLog, AdminUser, Customer, Faq, Inquiry, Order, as_utc, utcnow
+from backend.database.models import AdminAuditLog, AdminUser, Customer, Faq, Inquiry, Order, Response, as_utc, utcnow
 
 CANCELLABLE = ("결제 완료", "상품 준비 중")   # 출고 전 (docs/shop_policy.md 2장)
 RETURN_DAYS, DEFECT_RETURN_DAYS = 7, 30      # 단순 변심 / 불량·오배송 (4장)
@@ -74,6 +74,36 @@ def customer_history(db: Session, inquiry: Inquiry, user: AdminUser) -> list[dic
              "created_at": i.created_at} for i in rows]
 
 
+def mask_phone(phone: str | None) -> str | None:
+    """010-1234-5678 → 010-****-5678 (상담원 화면에서도 가운데는 가림)"""
+    if not phone:
+        return None
+    digits = "".join(ch for ch in phone if ch.isdigit())
+    return f"{digits[:3]}-****-{digits[-4:]}" if len(digits) >= 10 else "****"
+
+
+def customer_profile(db: Session, inquiry: Inquiry) -> dict:
+    """고객 카드: 쇼핑몰 회원 여부·전화번호(가림)·주문 수·문의 수·불만 신호 (같은 이메일 기준).
+
+    불만 신호 = 이전 답변에 '도움 안 됨'(👎)을 준 횟수, 부정 감정 문의 수 → 응대에 더 신경 쓸 고객을 미리 알아봄
+    """
+    email = inquiry.customer_email.lower()
+    customer = db.scalar(select(Customer).where(func.lower(Customer.email) == email))
+    inquiries = db.scalars(select(Inquiry).where(func.lower(Inquiry.customer_email) == email)).all()
+    ids = [i.id for i in inquiries]
+    negative_ratings = db.scalar(select(func.count()).select_from(Response)
+                                 .where(Response.inquiry_id.in_(ids), Response.rating == -1)) if ids else 0
+    negative = sum(1 for i in inquiries if i.analysis and i.analysis.sentiment == "부정")
+    return {
+        "member": bool(customer and customer.password_hash),
+        "phone": mask_phone(customer.phone) if customer else None,
+        "orders": len(customer.orders) if customer else 0,
+        "inquiries": len(inquiries),
+        "negative_inquiries": negative,
+        "negative_ratings": negative_ratings or 0,
+    }
+
+
 def faq_titles(db: Session, inquiry: Inquiry) -> dict[str, str]:
     """답변 근거·검색된 FAQ 번호 → 질문 (화면에서 번호 대신 내용을 보여 주려고)"""
     codes = set()
@@ -128,6 +158,16 @@ def history(db: Session, inquiry: Inquiry) -> list[dict]:
             text, kind = "분류 수정: " + " · ".join(parts), "correct"
         elif a.action == "draft_generate":
             text = "AI 초안 다시 만들기" if d.get("replaced") else "AI 초안 만들기"
+            if d.get("instruction"):
+                text += f" (요청: {d['instruction']})"
+        elif a.action in ("ticket_approve", "ticket_reject"):
+            result = "승인" if a.action == "ticket_approve" else "반려"
+            text = f"티켓 #{d.get('ticket_id')} {d.get('ticket_type')} {result}"
+            if d.get("order"):
+                text += f" · 주문 {d['order']['before']} → {d['order']['after']}"
+            if d.get("memo"):
+                text += f" ({d['memo']})"
+            kind = "ticket"
         else:
             text = a.action
         events.append({"at": a.created_at, "actor": actor, "text": text, "kind": kind})

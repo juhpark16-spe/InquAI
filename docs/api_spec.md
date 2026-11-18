@@ -255,6 +255,8 @@
              "ordered_at": "...", "delivered_at": "...", "cancellable": false,
              "return_until": "...", "returnable": true, "defect_return_until": "..." },   // 주문번호 없으면 null
   "customer_history": [ { "id": 3, "inquiry_number": "...", "title": "...", "status": "완료", "created_at": "..." } ],
+  "customer_profile": { "member": true, "phone": "010-****-5678", "orders": 3, "inquiries": 4,
+                        "negative_inquiries": 1, "negative_ratings": 0 },
   "faq_titles": { "F17": "반품 배송비는 얼마인가요?" },
   "history": [ { "at": "...", "actor": "AI", "text": "담당자 연결 판단 (규칙) · 상담원 이관" } ]
 }
@@ -262,6 +264,9 @@
 - `order`: 취소 가능(출고 전), 반품 기한(배송 완료 + 7일, 불량·오배송 30일)을 정책 기준으로 계산. `email_match=false`면 주문자와 문의자가 다를 수 있어 화면에 경고
 - `email_orders`: 문의 이메일과 같은 이메일로 주문한 내역 최근 5건 (`order`의 주문은 제외, 각 항목은 `order`와 같은 형식). 주문번호를 적지 않은 문의도 어떤 주문인지 짐작할 수 있게 함. 문의 이메일은 본인 인증 전이라 화면에 "본인 확인 후 안내" 경고를 함께 표시하며, 관리자 화면에만 보이고 고객에게는 나가지 않음
 - `customer_history`: 같은 이메일의 다른 문의 최근 5건. 상담원은 자신에게 배정된 것만
+- `customer_profile`: 고객 카드 (같은 이메일 기준). `member`=쇼핑몰 회원 로그인 가능 고객, `phone`은 가운데를 가림,
+  `orders`·`inquiries`=주문·문의 수, 불만 신호 `negative_ratings`(이전 답변에 👎 수)·`negative_inquiries`(부정 감정 문의 수).
+  화면은 👎가 있거나 부정 문의가 2건 이상이면 "응대에 신경 쓸 고객"으로 표시
 - `history`: 접수 → AI 판단 → 자동 배정·답변 발송 → 사람의 배정·상태 변경 (시간순)
 - 추가 필드: `due_at`·`overdue`(답변 기한: 긴급 4시간, 그 외 24시간), `messages`(고객 추가 문의), `notes`(내부 메모), `attachments`(사진 목록, token 은 내보내지 않음), `notifications`(알림 기록), `responses[].rating`
 
@@ -307,6 +312,14 @@
 - 바꿀 수 있는 값: `검토 대기`, `담당자 처리`, `완료` (완료한 문의 다시 열기 포함). `접수`·`자동 처리`는 시스템만 정하므로 422
 - 지금과 같은 상태로 바꾸면 400 `INVALID_STATE`. 상담원은 배정된 문의만 (아니면 403)
 
+
+### GET /api/inquiries/{id}/queue — 처리 대기열의 이전·다음 문의 (로그인, 4주차)
+```json
+{ "total": 12, "position": 3, "prev_id": 41, "next_id": 52 }
+```
+- 대기열 = 미처리(접수·검토 대기·담당자 처리), **긴급도 높은 순 → 오래된 순**. 상담원은 배정된 문의만.
+- 지금 문의가 대기열에 없으면(완료 등) `position: null`, `next_id` = 대기열의 첫 문의 → 상세 화면의 [◀][▶]와 "다음 미처리 문의 →" 버튼.
+
 ## 5. 답변 API (로그인, 2주차 구현)
 
 권한은 문의와 같습니다 (관리자 전체, 상담원은 배정된 문의만). 구현: `backend/api/responses.py`
@@ -333,7 +346,7 @@
 
 ### POST /api/inquiries/{id}/draft — AI 답변 초안 만들기 (3주차)
 ```json
-{ "replace": false }   // 본문 생략 가능
+{ "replace": false, "instruction": "더 짧게" }   // 본문 생략 가능, instruction은 선택 (200자)
 ```
 응답: 답변(`ResponseOut`). `status = 초안`, `generated_by = llm`, `check_points = ["택배사 파손 확인 결과", ...]`
 - 문의 상세의 **[AI 초안 만들기]** 버튼. 담당자 연결 문의나 추가 문의에도 상담원이 원할 때 씁니다.
@@ -344,6 +357,8 @@
   화면은 "발송 전에 확인할 것"으로 보여 주고, 표시가 남은 채로 [발송]하면 한 번 더 묻습니다.
 - 보내지 않은 초안이 있으면 그 자리에 씁니다 (초안은 항상 하나). 상담원이 고쳤거나 직접 쓴 초안이면 409 `DRAFT_EDITED`
   → 화면에서 확인을 받은 뒤 `replace: true`로 다시 요청합니다.
+- `instruction`: 상담원 요청 ("더 짧게", "사과를 먼저" 등). LLM 입력 끝에 `[상담원 요청]`으로 붙고, 정책·근거 규칙 안에서만
+  따릅니다 (약속 문구 금지 규칙은 그대로). 고객 글이 아니라 상담원 지시로 다룹니다. 이력에 "(요청: …)"으로 보입니다.
 - 오류: LLM 없음 503 `LLM_UNAVAILABLE`, LLM 오류·시간 초과(20초) 502 `DRAFT_FAILED` (기존 초안은 그대로). 같은 IP 1분 10회.
 - audit_logs (`draft_generate`: 근거 FAQ·토큰·처리 시간). 처리 이력에 "AI 초안 만들기 / 다시 만들기"로 보입니다.
 
@@ -359,11 +374,16 @@
 ### GET /api/tickets — 티켓 목록 (로그인)
 파라미터: `ticket_type`, `status`. 상담원은 배정된 문의의 티켓만.
 
-### PATCH /api/tickets/{id} — 승인·반려 (로그인, **추가**)
+### PATCH /api/tickets/{id} — 승인·반려 (로그인, 4주차 구현: `backend/api/tickets.py`)
 ```json
-{ "status": "승인", "memo": "택 제거 전 상태 확인" }
+{ "status": "승인", "memo": "택 제거 전 상태 확인" }   // 200: 티켓 (status, memo, handled_by, handled_at)
 ```
-- audit_logs (ticket_approve / ticket_reject)
+- 권한: 관리자, 또는 그 문의를 배정받은 상담원 (아니면 403). 취소·교환·환불 티켓만 (이관 티켓은 422), 이미 처리된 티켓은 409 `TICKET_DONE`.
+- **취소 승인**은 출고 전 주문(결제 완료·상품 준비 중)만 → 주문 상태를 '취소'로 바꿈. 이미 출고된 주문은 409 (반려 후 반품 안내).
+- 교환·환불 승인은 티켓만 승인 (회수·환불은 실제 쇼핑몰 시스템의 일, 시연에서는 기록만). **반려는 `memo`(사유) 필수** (422).
+- audit_logs `ticket_approve` / `ticket_reject` (target: 문의, detail: ticket_id·ticket_type·memo·주문 상태 전→후) → 문의 처리 이력에 "티켓 #8 취소 승인 · 주문 결제 완료 → 취소".
+- [AI 초안 다시 만들기]의 근거(처리 기록)에 티켓 상태·메모가 들어가 결과를 반영한 답변 초안을 씁니다.
+- 화면: 문의 상세 오른쪽 "접수된 티켓" (처리할 티켓이 있으면 맨 위), [취소 승인] / [반려 + 사유].
 
 ## 7. 주문 API
 

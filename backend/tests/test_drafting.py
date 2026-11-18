@@ -175,3 +175,19 @@ def test_draft_with_promise_gets_check_point(client, db, ai):
     d = client.post(f"/api/inquiries/{inquiry.id}/draft", headers=login(client)).json()
     assert d["grounded"] is False and any("적립해 드렸" in c for c in d["check_points"])
     assert rec.inputs["draft"].count("<고객 글>") == 1
+
+
+def test_draft_instruction_goes_to_llm_and_history(client, db, ai):
+    ai["analyzer"].next = {"confidence": 0.6}
+    inquiry, _ = saved(db, post(client).json()["inquiry_number"])
+    ai["llm"].replies = {"draft": {**DRAFT, "check_points": []}}
+    rec = Recorder(ai["llm"])
+    app.state.llm = rec
+    h = login(client)
+    r = client.post(f"/api/inquiries/{inquiry.id}/draft", headers=h, json={"instruction": "  더 짧게  "})
+    assert r.status_code == 200
+    assert "[상담원 요청]\n더 짧게" in rec.inputs["draft"]
+    history = [e["text"] for e in client.get(f"/api/inquiries/{inquiry.id}").json()["history"]]
+    assert history[-1] == "AI 초안 만들기 (요청: 더 짧게)"
+    too_long = client.post(f"/api/inquiries/{inquiry.id}/draft", headers=h, json={"instruction": "가" * 201})
+    assert too_long.status_code == 422

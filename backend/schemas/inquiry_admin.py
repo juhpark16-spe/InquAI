@@ -116,6 +116,15 @@ class CustomerInfo(BaseModel):
     order_number: str | None
 
 
+class CustomerProfile(BaseModel):
+    member: bool              # 쇼핑몰 회원 (로그인 연동 시연 고객)
+    phone: str | None         # 가운데를 가린 번호
+    orders: int
+    inquiries: int            # 이 문의 포함
+    negative_inquiries: int   # 부정 감정 문의 수
+    negative_ratings: int     # 답변에 '도움 안 됨'(👎)을 준 횟수
+
+
 class AnalysisOut(ORM):
     category: str
     confidence: float
@@ -154,6 +163,7 @@ class TicketOut(ORM):
     status: str
     handled_by: int | None
     handled_at: UTCDateTime | None
+    memo: str | None = None
     created_at: UTCDateTime
 
 
@@ -223,6 +233,7 @@ class InquiryDetail(BaseModel):
     id: int
     inquiry_number: str
     customer: CustomerInfo
+    customer_profile: CustomerProfile | None = None
     title: str
     content: str
     status: str

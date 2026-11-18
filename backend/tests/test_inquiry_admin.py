@@ -236,3 +236,33 @@ def test_staff_list_admin_only(client, inquiries):
     login(client, "admin")
     r = client.get("/api/admin/staff")
     assert r.status_code == 200 and [u["username"] for u in r.json()] == ["agent1", "admin"]
+
+def test_queue_prev_next(client, db):
+    """처리 대기열: 미처리만, 긴급도 높은 순 → 오래된 순, 상담원은 자기 문의만"""
+    from datetime import datetime, timedelta, timezone
+
+    from backend.database.models import AnalysisResult, Inquiry
+
+    base = datetime(2026, 11, 10, tzinfo=timezone.utc)
+    rows = [("Q1", "보통", "접수", 2, 0), ("Q2", "높음", "검토 대기", 2, 1), ("Q3", "보통", "담당자 처리", None, 2),
+            ("Q4", "낮음", "완료", 2, 3), ("Q5", "보통", "접수", 1, 4)]
+    ids = {}
+    for number, urgency, status, assigned, hours in rows:
+        i = Inquiry(inquiry_number=number, customer_name="c", customer_email="c@example.com", title="t", content="c",
+                    status=status, assigned_to=assigned, created_at=base + timedelta(hours=hours))
+        db.add(i)
+        db.flush()
+        db.add(AnalysisResult(inquiry_id=i.id, category="배송", confidence=0.9, sentiment="중립", sentiment_confidence=0.9,
+                              urgency=urgency, route="조회형", decision="답변 초안", decided_by="LLM", model_version="t",
+                              scores={}))
+        ids[number] = i.id
+    db.commit()
+    assert client.post("/api/auth/login", json={"username": "admin", "password": "test-password-1234"}).status_code == 200
+    q = client.get(f"/api/inquiries/{ids['Q1']}/queue").json()
+    assert q == {"total": 4, "position": 2, "prev_id": ids["Q2"], "next_id": ids["Q3"]}   # Q2(높음) → Q1 → Q3 → Q5 (Q4는 완료)
+    done = client.get(f"/api/inquiries/{ids['Q4']}/queue").json()
+    assert done["position"] is None and done["next_id"] == ids["Q2"]
+    client.post("/api/auth/logout", headers={"X-CSRF-Token": client.cookies.get("csrf_token")})
+    assert client.post("/api/auth/login", json={"username": "agent1", "password": "test-password-1234"}).status_code == 200
+    mine = client.get(f"/api/inquiries/{ids['Q1']}/queue").json()
+    assert mine == {"total": 2, "position": 2, "prev_id": ids["Q2"], "next_id": None}       # agent1(id 2)의 Q2·Q1만
