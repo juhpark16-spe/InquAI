@@ -5,17 +5,21 @@
     PUT    /api/faqs/{id}            수정 (유형·질문·답변·활성 여부)
     DELETE /api/faqs/{id}            비활성 (실제로 지우지 않음: 지난 답변의 근거 FAQ 번호가 남아 있기 때문)
     GET    /api/faqs/search-test?q=  이 질문이면 어떤 FAQ가 검색되는지 (에이전트·고객 추천과 같은 검색)
+    POST   /api/faqs/suggestions     FAQ 자동 추천: AI가 자동 답변하지 못한 비슷한 문의 묶음 → FAQ 초안 (services/faq_suggest.py)
 
 등록·수정·비활성 뒤에는 검색 색인(KURE + ChromaDB)을 바로 다시 만듭니다.
 """
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy import or_, select
 
+from backend.core.config import get_settings
 from backend.core.dependencies import DB, AdminOnly
 from backend.core.errors import AppError
+from backend.core.rate_limit import rate_limit
 from backend.database.models import Faq
-from backend.schemas.faqs import FaqAdmin, FaqCreate, FaqUpdate, SearchTest
+from backend.schemas.faqs import FaqAdmin, FaqCreate, FaqSuggestRequest, FaqSuggestResult, FaqUpdate, SearchTest
+from backend.services.faq_suggest import suggest
 from backend.services.audit import add_audit
 from backend.services.faqs import next_code, refresh_search, usage
 
@@ -61,6 +65,15 @@ def search_test(request: Request, _: AdminOnly, q: str = Query(min_length=2, max
     hits = [{"code": h["id"], "category": h["category"], "question": h["question"], "score": round(h["score"], 4),
              "suggested": h["score"] >= search.suggest_min_score} for h in search.search(q, k)]
     return {"engine": search.engine, "suggest_min_score": search.suggest_min_score, "hits": hits}
+
+
+# def: LLM을 기다리는 동안 다른 요청을 막지 않도록 별도 스레드에서 실행
+@router.post("/suggestions", response_model=FaqSuggestResult, summary="FAQ 자동 추천 (관리자)",
+             dependencies=[Depends(rate_limit("faq_suggest_admin", 5, 60))])
+def faq_suggestions(body: FaqSuggestRequest, request: Request, _: AdminOnly, db: DB):
+    state = request.app.state
+    return suggest(db, getattr(state, "faq_search", None), getattr(state, "llm", None), days=body.days,
+                   min_count=body.min_count, timeout=get_settings().agent_timeout_seconds)
 
 
 @router.post("", response_model=FaqAdmin, status_code=201, summary="FAQ 등록 (관리자)")

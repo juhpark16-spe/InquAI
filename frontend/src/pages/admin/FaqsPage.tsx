@@ -1,11 +1,12 @@
 // FAQ 관리 (/admin/faqs, 관리자만): FAQ 목록·검색, 등록, 수정, 비활성·다시 활성, 검색 미리 보기
 // FAQ는 AI 자동 답변의 유일한 근거라, 저장하면 서버가 검색 색인을 바로 다시 만들어 에이전트·고객 추천에 반영됩니다.
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Link } from "react-router";
 
 import Icon from "../../components/Icon";
 import { Alert, Button, Card, Field, Input, Select, Spinner, Textarea, cx, formatDate } from "../../components/ui";
 import { errorMessage, faqApi, type FaqInput } from "../../services/api";
-import { CATEGORIES, type FaqAdmin, type FaqSearchTest } from "../../services/types";
+import { CATEGORIES, type FaqAdmin, type FaqSearchTest, type FaqSuggestResult, type FaqSuggestion } from "../../services/types";
 
 const EMPTY: FaqInput = { category: "배송", question: "", answer: "" };
 const ANSWER_MAX = 1000;
@@ -32,10 +33,20 @@ function FaqFields({ value, onChange, disabled }: { value: FaqInput; onChange: (
   );
 }
 
-function CreateForm({ onCreated }: { onCreated: (f: FaqAdmin) => void }) {
+type Prefill = FaqInput & { key: number };
+
+function CreateForm({ onCreated, prefill }: { onCreated: (f: FaqAdmin) => void; prefill: Prefill | null }) {
   const [form, setForm] = useState(EMPTY);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // FAQ 추천에서 [등록 폼 채우기]를 누르면 내용을 채우고 이 카드로 이동 (관리자가 고친 뒤 등록)
+  useEffect(() => {
+    if (!prefill) return;
+    setForm({ category: prefill.category, question: prefill.question, answer: prefill.answer });
+    ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [prefill]);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -52,14 +63,95 @@ function CreateForm({ onCreated }: { onCreated: (f: FaqAdmin) => void }) {
     }
   }
 
+  const unchecked = /\[확인 필요/.test(form.answer);
   return (
+    <div ref={ref} className="scroll-mt-4">
     <Card title="새 FAQ 등록">
       <form onSubmit={submit} className="space-y-3">
         <FaqFields value={form} onChange={setForm} disabled={busy} />
+        {unchecked && <Alert kind="info">답변에 [확인 필요: …]가 남아 있습니다. 정책을 확인해 고친 뒤 등록해 주세요.</Alert>}
         <p className="text-xs text-slate-500">번호는 자동으로 붙습니다 (다음 번호).</p>
         {error && <Alert>{error}</Alert>}
-        <Button type="submit" disabled={busy} className="w-full">{busy ? <Spinner /> : "등록"}</Button>
+        <Button type="submit" disabled={busy || unchecked} className="w-full">{busy ? <Spinner /> : "등록"}</Button>
       </form>
+    </Card>
+    </div>
+  );
+}
+
+function SuggestionItem({ s, onUse }: { s: FaqSuggestion; onUse: (s: FaqSuggestion) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <li className="rounded-xl border border-hairline p-3">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <span className="rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-800">비슷한 문의 {s.count}건</span>
+        <span className="rounded-full bg-primary-soft px-2 py-0.5 text-primary">{s.category}</span>
+        {s.nearest_faq && <span className="text-slate-400" title={s.nearest_faq.question}>가장 비슷한 FAQ {s.nearest_faq.code} {s.nearest_faq.score.toFixed(2)}</span>}
+      </div>
+      <p className="mt-2 text-sm font-semibold text-ink">Q. {s.question}</p>
+      {s.answer ? <p className="mt-1 whitespace-pre-line text-sm text-body">A. {s.answer}</p>
+        : <p className="mt-1 text-xs text-slate-500">AI 초안 없이 묶음만 찾았습니다 (LLM 사용 불가). 질문·답변을 직접 써 주세요.</p>}
+      {s.check_points.length > 0 && (
+        <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-amber-800">
+          {s.check_points.map((c) => <li key={c}>확인 필요: {c}</li>)}
+        </ul>
+      )}
+      <p className="mt-2 text-xs text-slate-500">초안 근거: 상담원이 보낸 답변 {s.with_staff_answer}건</p>
+      <button type="button" className="mt-1 text-xs text-primary hover:underline" onClick={() => setOpen(!open)} aria-expanded={open}>
+        묶인 문의 {open ? "접기" : "보기"}
+      </button>
+      {open && (
+        <ul className="mt-1 space-y-1 text-xs">
+          {s.examples.map((e) => (
+            <li key={e.inquiry_id} className="text-body">
+              <Link to={`/admin/inquiries/${e.inquiry_id}`} className="font-mono text-primary hover:underline">{e.inquiry_number}</Link>{" "}
+              {e.content}
+            </li>
+          ))}
+        </ul>
+      )}
+      <Button variant="ghost" className="mt-2 min-h-9 w-full px-3 py-1" onClick={() => onUse(s)}>이 내용으로 등록 폼 채우기</Button>
+    </li>
+  );
+}
+
+/** AI가 자동 답변하지 못한 비슷한 문의 묶음 → FAQ 후보 (관리자가 검토 후 등록, 자동 등록 없음) */
+function Suggestions({ onUse }: { onUse: (s: FaqSuggestion) => void }) {
+  const [result, setResult] = useState<FaqSuggestResult | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function run() {
+    setError("");
+    setBusy(true);
+    try {
+      setResult(await faqApi.suggestions(30));
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card title="FAQ 추천 (AI)">
+      <p className="mb-3 text-sm text-slate-500">
+        최근 30일 동안 AI가 자동 답변하지 못했고 비슷한 FAQ도 없던 문의를 묶어, 자주 나오는 질문을 FAQ 후보로 보여 줍니다.
+        답변 초안은 상담원이 보낸 답변만 근거로 씁니다.
+      </p>
+      <Button onClick={run} disabled={busy} className="w-full">
+        {busy ? <span className="inline-flex items-center gap-2"><Spinner />문의를 묶고 초안을 쓰는 중…</span> : result ? "다시 추천 받기" : "추천 받기"}
+      </Button>
+      {error && <div className="mt-3"><Alert>{error}</Alert></div>}
+      {result && (
+        <div className="mt-3 space-y-2">
+          <p className="text-xs text-slate-500">
+            검토한 문의 {result.candidates}건 (자동 답변 못 함 + 비슷한 FAQ 없음) · 추천 {result.items.length}개
+          </p>
+          {result.items.length === 0 && <p className="text-sm text-slate-500">2건 이상 반복된 문의가 없어 추천할 FAQ가 없습니다.</p>}
+          <ul className="space-y-2">{result.items.map((s, i) => <SuggestionItem key={i} s={s} onUse={onUse} />)}</ul>
+        </div>
+      )}
     </Card>
   );
 }
@@ -220,6 +312,7 @@ export default function FaqsPage() {
   const [q, setQ] = useState("");
   const [showInactive, setShowInactive] = useState(false);
   const [version, setVersion] = useState(0);   // 저장할 때마다 올림 → 검색 미리 보기 새로 고침
+  const [prefill, setPrefill] = useState<Prefill | null>(null);
 
   const load = useCallback(() => {
     faqApi.list().then(setFaqs).catch((err) => setError(errorMessage(err)));
@@ -283,7 +376,8 @@ export default function FaqsPage() {
         </div>
 
         <div className="space-y-4">
-          <CreateForm onCreated={(f) => changed(`${f.code} "${f.question}"을(를) 등록했습니다. 바로 검색됩니다.`)} />
+          <Suggestions onUse={(s) => setPrefill({ category: s.category, question: s.question, answer: s.answer, key: Date.now() })} />
+          <CreateForm prefill={prefill} onCreated={(f) => changed(`${f.code} "${f.question}"을(를) 등록했습니다. 바로 검색됩니다.`)} />
           <SearchPreview version={version} />
         </div>
       </div>

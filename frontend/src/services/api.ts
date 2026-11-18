@@ -5,7 +5,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 
 import type {
-  AgentLogPage, ShopCustomer, ShopOrder, FaqAdmin, FaqPublic, FaqSearchTest, InquiryCreate, ResponseItem, InquiryCreated, InquiryDetail, InquiryListItem, InquiryPublic, InquiryState, Page, Role, User,
+  AgentLogPage, FaqSuggestResult, ShopCustomer, ShopOrder, FaqAdmin, FaqPublic, FaqSearchTest, InquiryCreate, ResponseItem, InquiryCreated, InquiryDetail, InquiryListItem, InquiryPublic, InquiryState, Page, Role, User,
   UserDetail,
 } from "./types";
 
@@ -195,6 +195,8 @@ export const faqApi = {
   update: (id: number, body: FaqInput & { is_active: boolean }) => http.put<FaqAdmin>(`/faqs/${id}`, body).then((r) => r.data),
   deactivate: (id: number) => http.delete<FaqAdmin>(`/faqs/${id}`).then((r) => r.data),
   searchTest: (q: string) => http.get<FaqSearchTest>("/faqs/search-test", { params: { q } }).then((r) => r.data),
+  // AI가 자동 답변하지 못한 비슷한 문의 묶음 → FAQ 초안 (LLM 호출이라 최대 수십 초)
+  suggestions: (days = 30) => http.post<FaqSuggestResult>("/faqs/suggestions", { days }, { timeout: 90000 }).then((r) => r.data),
 };
 
 // ---- AI 실행 로그 (관리자 전체, 상담원은 배정된 문의만) ----

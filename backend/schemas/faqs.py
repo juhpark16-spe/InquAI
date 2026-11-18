@@ -60,3 +60,40 @@ class SearchTest(BaseModel):
     engine: str | None
     suggest_min_score: float | None
     hits: list[SearchHit]
+
+
+class SuggestExample(BaseModel):
+    inquiry_id: int
+    inquiry_number: str
+    title: str
+    content: str
+
+
+class NearestFaq(BaseModel):
+    code: str
+    question: str
+    score: float
+
+
+class FaqSuggestion(BaseModel):
+    count: int                      # 묶인 문의 수
+    category: str
+    question: str
+    answer: str                     # LLM 초안 (상담원 답변만 근거, 확인할 곳은 [확인 필요: …])
+    check_points: list[str]
+    drafted: bool                   # LLM 초안을 썼는지 (LLM이 없거나 실패하면 False → 질문만)
+    with_staff_answer: int          # 상담원이 답변을 보낸 문의 수 (초안 근거)
+    nearest_faq: NearestFaq | None  # 지금 가장 비슷한 FAQ (기준값 미만이라 추천 대상)
+    examples: list[SuggestExample]
+
+
+class FaqSuggestRequest(BaseModel):
+    days: int = Field(30, ge=7, le=90)
+    min_count: int = Field(2, ge=2, le=10)
+
+
+class FaqSuggestResult(BaseModel):
+    days: int
+    candidates: int                 # 자동 답변하지 못했고 비슷한 FAQ도 없는 문의 수
+    engine: str
+    items: list[FaqSuggestion]

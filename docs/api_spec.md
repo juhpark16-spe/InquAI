@@ -386,11 +386,17 @@
 | PUT | /api/faqs/{id} | `{ category, question, answer, is_active }` 전체 수정. `is_active: true`로 다시 활성화 |
 | DELETE | /api/faqs/{id} | 실제로 지우지 않고 `is_active=false` (지난 답변의 근거 FAQ 번호가 남아 있어서) |
 | GET | /api/faqs/search-test?q=&k=3 | 검색 미리 보기: 이 질문이면 어떤 FAQ가 검색되는지 `{engine, suggest_min_score, hits:[{code, category, question, score, suggested}]}` |
+| POST | /api/faqs/suggestions | **FAQ 자동 추천** `{ "days": 30, "min_count": 2 }` → `{candidates, engine, items:[{count, category, question, answer, check_points, drafted, with_staff_answer, nearest_faq, examples}]}` (같은 IP 1분 5회) |
 
 - 입력 제한: 유형은 8개 중 하나, 질문 5~200자, 답변 10~1,000자 (422).
 - 등록·수정·비활성 뒤 **검색 색인(KURE + ChromaDB)을 바로 다시 만들어** 에이전트·고객 추천·FAQ 화면에 반영합니다 (`services/faqs.py` `refresh_search`, 바뀐 FAQ 벡터만 다시 계산). 실패하면 기존 색인을 유지하고 서버 로그에 남깁니다.
 - 작업 기록: `faq_create`, `faq_update`(바뀐 칸만 before·after), `faq_deactivate`. 바뀐 것이 없으면 기록하지 않습니다.
 - 답변을 바꿀 때는 `docs/shop_policy.md`와 맞는지 확인합니다. 이미 보낸 답변은 바뀌지 않습니다.
+- **FAQ 자동 추천** (`services/faq_suggest.py`, 4주차): 최근 N일 문의 중 AI가 자동 답변하지 못했고(초안·담당자 연결) 긴급도 높음(항의)이 아니며
+  **지금 FAQ 중 비슷한 것이 없는**(검색 1위 유사도 < 고객 추천 기준값) 문의를 FAQ 검색과 같은 방식(KURE, 없으면 TF-IDF)으로 묶습니다
+  (같은 묶음 기준 KURE 0.7 / TF-IDF 0.25). 2건 이상인 묶음마다 LLM이 질문·답변 초안을 쓰는데, 근거는 **상담원이 실제로 보낸 답변**만 쓰고
+  확인이 필요한 곳은 `[확인 필요: …]`로 남깁니다. 자동으로 등록하지 않고, 화면에서 [등록 폼 채우기] → 관리자가 고쳐서 등록합니다
+  (`[확인 필요` 가 남아 있으면 등록 버튼이 잠김). FAQ를 등록하면 그 묶음은 다음 추천에서 빠집니다. LLM이 없으면 묶음만 돌려줍니다.
 
 ## 9. 통계·로그 API
 

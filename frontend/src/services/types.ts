@@ -273,3 +273,17 @@ export interface ShopOrder {
   delivered_at: string | null;
   inquiry_count: number;
 }
+
+// ---- FAQ 자동 추천 ----
+export interface FaqSuggestion {
+  count: number;
+  category: string;
+  question: string;
+  answer: string;
+  check_points: string[];
+  drafted: boolean;
+  with_staff_answer: number;
+  nearest_faq: { code: string; question: string; score: number } | null;
+  examples: { inquiry_id: number; inquiry_number: string; title: string; content: string }[];
+}
+export interface FaqSuggestResult { days: number; candidates: number; engine: string; items: FaqSuggestion[] }
