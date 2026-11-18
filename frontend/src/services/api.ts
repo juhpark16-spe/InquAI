@@ -5,7 +5,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 
 import type {
-  AgentLogPage, FaqSuggestResult, ShopCustomer, ShopOrder, FaqAdmin, FaqPublic, FaqSearchTest, InquiryCreate, ResponseItem, InquiryCreated, InquiryDetail, InquiryListItem, InquiryPublic, InquiryState, Page, Role, User,
+  AgentLogPage, RetrainingStatus, FaqSuggestResult, ShopCustomer, ShopOrder, FaqAdmin, FaqPublic, FaqSearchTest, InquiryCreate, ResponseItem, InquiryCreated, InquiryDetail, InquiryListItem, InquiryPublic, InquiryState, Page, Role, User,
   UserDetail,
 } from "./types";
 
@@ -220,4 +220,9 @@ export const shopApi = {
       .then((r) => r.data),
   rate: (answerId: number, inquiry_number: string, helpful: boolean) =>
     http.post<{ rating: number }>(`/shop/answers/${answerId}/rating`, { helpful }, { params: { inquiry_number } }).then((r) => r.data),
+};
+
+// ---- 재학습 현황 (관리자) ----
+export const retrainingApi = {
+  status: () => http.get<RetrainingStatus>("/admin/retraining").then((r) => r.data),
 };

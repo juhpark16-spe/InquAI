@@ -287,3 +287,24 @@ export interface FaqSuggestion {
   examples: { inquiry_id: number; inquiry_number: string; title: string; content: string }[];
 }
 export interface FaqSuggestResult { days: number; candidates: number; engine: string; items: FaqSuggestion[] }
+
+// ---- 재학습 현황 ----
+export interface ModelVersion {
+  version: string;
+  trained_at?: string;
+  base_model?: string;
+  data?: string;
+  corrections_used?: number;
+  scores: { external?: number; written_eval?: number; real?: number };
+  note?: string;
+  current?: boolean;
+}
+export interface RetrainingStatus {
+  model: ModelVersion;
+  corrections: { total: number; by_field: Record<string, number>; pending: number };
+  patterns: { field: string; before: string; after: string; count: number; pending: number;
+    examples: { inquiry_id: number; text: string }[] }[];
+  recent: { id: number; inquiry_id: number; inquiry_number: string | null; field: string; before: string; after: string;
+    text: string; at: string; pending: boolean }[];
+  history: ModelVersion[];
+}

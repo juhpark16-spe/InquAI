@@ -173,6 +173,8 @@ class LabelCorrection(TimestampMixin, Base):
     text: Mapped[str] = mapped_column(Text)
     corrected_by: Mapped[int] = mapped_column(ForeignKey("admin_users.id"))
 
+    inquiry: Mapped[Inquiry] = relationship()   # 재학습 현황 화면에서 문의 번호를 보여 줄 때
+
 
 class AgentLog(TimestampMixin, Base):
     __tablename__ = "agent_logs"

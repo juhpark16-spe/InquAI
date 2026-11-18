@@ -464,6 +464,14 @@
 - `summary`는 필터에 맞는 **전체** 실행의 합계입니다 (현재 페이지만이 아님). 최신순 정렬.
 - 성공 지표 "도구 선택 정확도"는 정답 도구를 붙인 테스트 문의(`data/test/prompt_cases.json`)를 등록한 뒤 이 로그의 `selected_tool`과 비교해 계산합니다.
 
+### GET /api/admin/retraining — 재학습 현황 (관리자, 4주차)
+구현: `backend/api/retraining.py`, 화면 `/admin/retraining`
+- `model`: 지금 쓰는 모델 (`evaluation/model_history.json`의 current 항목 + `category_model_version`)
+- `corrections`: `{total, by_field: {유형, 감정}, pending}` — `pending`은 지금 모델 학습(`trained_at`) 뒤에 쌓인 수정 = 다음 재학습 대상
+- `patterns`: 자주 고친 패턴 `[{field, before, after, count, pending, examples[{inquiry_id, text}]}]` (많은 순) — 모델의 약점
+- `recent`: 최근 수정 20건, `history`: 모델 버전별 학습 데이터·점수(외부·직접 쓴 평가용·실전)·메모
+- 재학습 실행은 GPU가 필요해 API로 열지 않고 명령으로 합니다 (`docs/retraining.md`). 모델을 바꾸면 `model_history.json`에 한 줄 더하고 `current`를 옮깁니다.
+
 ### GET /api/admin/audit-logs — 작업 기록 (관리자)
 파라미터: `admin_id`, `action`, `target_type`, `from`, `to`
 
