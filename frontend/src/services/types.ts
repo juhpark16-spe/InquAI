@@ -51,7 +51,7 @@ export interface InquiryCreate {
   order_number: string | null;
   title: string;
   content: string;
-  password: string;
+  password: string | null; // 쇼핑몰 로그인 고객은 비워도 됨 ('내 문의'에서 바로 봄)
   privacy_agreed: boolean;
   attachment_tokens: string[];
 }
@@ -259,4 +259,17 @@ export interface AgentLogPage {
   };
   items: AgentLogRow[];
   faq_titles: Record<string, string>;
+}
+
+// ---- 쇼핑몰 로그인 연동 (고객, 시연용) ----
+export interface ShopCustomer { name: string; email: string }
+export interface ShopOrder {
+  order_number: string;
+  product_name: string;
+  amount: number;
+  order_status: string;
+  shipping_status: string | null;
+  ordered_at: string;
+  delivered_at: string | null;
+  inquiry_count: number;
 }

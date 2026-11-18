@@ -20,6 +20,10 @@ CSRF_COOKIE = "csrf_token"
 CSRF_HEADER = "X-CSRF-Token"
 COOKIE_PATH = "/api"
 CSRF_COOKIE_PATH = "/"
+# 고객 로그인(쇼핑몰 연동 시연)은 관리자 로그인과 쿠키·CSRF를 따로 씀 (한쪽 로그아웃이 다른 쪽을 끊지 않게)
+SHOP_COOKIE = "shop_session"
+SHOP_CSRF_COOKIE = "shop_csrf"
+SHOP_CSRF_HEADER = "X-Shop-CSRF"
 
 
 def hash_password(password: str) -> str:
@@ -60,6 +64,15 @@ def create_refresh_token(user_id: int) -> tuple[str, str, datetime]:
     return jwt.encode(payload, _secret(), algorithm=s.jwt_algorithm), jti, expires_at
 
 
+def create_shop_token(customer_id: int) -> str:
+    """고객 로그인 토큰 (종류 shop). 관리자 토큰과 종류가 달라 서로 대신 쓸 수 없음"""
+    s = get_settings()
+    now = datetime.now(timezone.utc)
+    payload = {"sub": str(customer_id), "type": "shop", "iat": now,
+               "exp": now + timedelta(hours=s.shop_session_hours)}
+    return jwt.encode(payload, _secret(), algorithm=s.jwt_algorithm)
+
+
 def decode_token(token: str, token_type: str) -> dict:
     """서명·만료·종류를 확인합니다. 실패하면 jwt.ExpiredSignatureError 또는 jwt.InvalidTokenError."""
     payload = jwt.decode(token, _secret(), algorithms=[get_settings().jwt_algorithm],
@@ -93,6 +106,19 @@ def clear_auth_cookies(response: Response) -> None:
     for name in (ACCESS_COOKIE, REFRESH_COOKIE, CSRF_COOKIE):
         response.delete_cookie(name, path=CSRF_COOKIE_PATH if name == CSRF_COOKIE else COOKIE_PATH,
                                secure=s.cookie_secure, samesite="lax", httponly=name != CSRF_COOKIE)
+
+
+def set_shop_cookies(response: Response, token: str) -> None:
+    s = get_settings()
+    common = {"secure": s.cookie_secure, "samesite": "lax", "max_age": s.shop_session_hours * 3600}
+    response.set_cookie(SHOP_COOKIE, token, httponly=True, path=COOKIE_PATH, **common)
+    response.set_cookie(SHOP_CSRF_COOKIE, secrets.token_urlsafe(32), httponly=False, path=CSRF_COOKIE_PATH, **common)
+
+
+def clear_shop_cookies(response: Response) -> None:
+    s = get_settings()
+    response.delete_cookie(SHOP_COOKIE, path=COOKIE_PATH, secure=s.cookie_secure, samesite="lax", httponly=True)
+    response.delete_cookie(SHOP_CSRF_COOKIE, path=CSRF_COOKIE_PATH, secure=s.cookie_secure, samesite="lax")
 
 
 def csrf_matches(cookie_value: str | None, header_value: str | None) -> bool:

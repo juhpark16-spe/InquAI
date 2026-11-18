@@ -446,6 +446,7 @@ def main() -> None:
         seed_data.seed_faqs(db)
         seed_data.seed_orders(db, reset=False)
         db.flush()
+        seed_admin.seed_customer_passwords(db)
         n = seed_inquiries(db)
         db.commit()
     print(f"[시연 문의] 최근 {DAYS}일 {n}건 · 조회 비밀번호 {DEMO_LOOKUP_PASSWORD} (고객 이메일 customerNN@example.com)")

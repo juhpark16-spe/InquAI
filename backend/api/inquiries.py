@@ -4,7 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Request, UploadFi
 from fastapi.responses import FileResponse
 
 from backend.core.config import get_settings
-from backend.core.dependencies import DB
+from backend.core.dependencies import DB, MaybeCustomer
 from backend.core.errors import AppError
 from backend.core.rate_limit import FailureLock, rate_limit
 from backend.database.models import Attachment
@@ -56,7 +56,15 @@ async def upload_photo(db: DB, file: UploadFile = File(...)):
 # def 로 두면 FastAPI가 별도 스레드에서 실행해, LLM을 기다리는 동안 다른 요청을 막지 않음
 @router.post("", status_code=201, response_model=InquiryCreated, summary="문의 등록 → 분석 → 에이전트 처리",
              dependencies=[Depends(rate_limit("inquiry_create", 5, 60))])
-def create_inquiry(body: InquiryCreate, db: DB, background: BackgroundTasks, ai: dict = Depends(get_ai)):
+def create_inquiry(body: InquiryCreate, db: DB, background: BackgroundTasks, customer: MaybeCustomer,
+                   ai: dict = Depends(get_ai)):
+    if customer is not None:
+        # 쇼핑몰 로그인 고객: 이름·이메일은 계정 정보로 (화면 값보다 우선), 주문번호는 본인 주문만
+        body.customer_name, body.customer_email = customer.name, customer.email
+        if body.order_number and not any(o.order_number == body.order_number for o in customer.orders):
+            raise AppError(422, "내 주문 목록에 없는 주문번호입니다.", "ORDER_NOT_FOUND")
+    elif not body.password:
+        raise AppError(422, "문의 조회 비밀번호를 입력해 주세요.", "VALIDATION_ERROR")
     timeout = get_settings().agent_timeout_seconds
     # 답변 초안은 고객에게 응답한 뒤에 씀 (고객이 기다리지 않게, backend/services/drafts.py)
     schedule = lambda inquiry_id: background.add_task(  # noqa: E731

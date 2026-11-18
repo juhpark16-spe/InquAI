@@ -11,8 +11,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api import (agent_logs, auth, faqs_admin, faqs_public, health, inquiries, inquiry_admin, responses, staff,
-                         stats)
+from backend.api import (agent_logs, auth, faqs_admin, faqs_public, health, inquiries, inquiry_admin, responses, shop,
+                         staff, stats)
 from backend.core import tracing
 from backend.core.config import get_settings
 from backend.core.errors import register_error_handlers
@@ -79,6 +79,7 @@ register_error_handlers(app)
 app.include_router(health.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(inquiries.router, prefix="/api")
+app.include_router(shop.router, prefix="/api")
 app.include_router(inquiry_admin.router, prefix="/api")
 app.include_router(responses.router, prefix="/api")
 app.include_router(staff.router, prefix="/api")

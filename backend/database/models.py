@@ -261,6 +261,9 @@ class Customer(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(50))
     email: Mapped[str] = mapped_column(String(255), unique=True)
     phone: Mapped[str] = mapped_column(String(20))
+    # 쇼핑몰 로그인 연동 시연용 (4주차). 실제로는 쇼핑몰이 로그인을 맡고 InquAI는 결과만 넘겨받음.
+    # 회원가입은 없고 seed_admin.py 가 시연 고객에게만 넣음. 비어 있으면 로그인할 수 없음
+    password_hash: Mapped[str | None] = mapped_column(String(255))
 
     orders: Mapped[list["Order"]] = relationship(back_populates="customer")
 

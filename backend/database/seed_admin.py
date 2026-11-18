@@ -2,6 +2,7 @@
 공개 회원가입은 없습니다 (관리자 화면에서 고객 개인정보가 보이기 때문).
 
 비밀번호는 .env 의 SEED_ADMIN_PASSWORD, SEED_AGENT_PASSWORD 에서 읽습니다.
+SEED_CUSTOMER_PASSWORD 가 있으면 시연 고객(customerNN@example.com)에게 쇼핑몰 로그인 비밀번호도 넣습니다 (연동 시연).
 이미 있는 계정은 건너뜁니다. 비밀번호를 바꾸려면 --reset-password 를 붙입니다.
 
 실행 (프로젝트 루트에서)
@@ -16,7 +17,7 @@ from sqlalchemy import select
 
 from backend.core.config import get_settings
 from backend.core.security import hash_password
-from backend.database.models import AdminUser, utcnow
+from backend.database.models import AdminUser, Customer, utcnow
 from backend.database.session import SessionLocal, init_db
 
 # (아이디, 역할, 화면 이름, 비밀번호 설정 이름, 담당 유형 — 비우면 전체 담당)
@@ -56,6 +57,19 @@ def seed_accounts(db, reset_password: bool = False) -> None:
             print(f"[건너뜀] {username} 이미 있음")
 
 
+def seed_customer_passwords(db, reset_password: bool = False) -> None:
+    """시연 고객에게 쇼핑몰 로그인 비밀번호를 넣습니다 (회원가입 없음). SEED_CUSTOMER_PASSWORD 가 비면 건너뜀"""
+    password = get_settings().seed_customer_password
+    if not password:
+        print("[고객 로그인] SEED_CUSTOMER_PASSWORD 가 없어 건너뜀 (비회원 문의만 사용)")
+        return
+    customers = db.scalars(select(Customer).where(True if reset_password else Customer.password_hash.is_(None))).all()
+    hashed = hash_password(password)   # 시연 고객은 모두 같은 비밀번호 (한 번만 계산)
+    for c in customers:
+        c.password_hash = hashed
+    print(f"[고객 로그인] 시연 고객 {len(customers)}명에게 비밀번호 설정 (customerNN@example.com)")
+
+
 def main():
     sys.stdout.reconfigure(encoding="utf-8")
     p = argparse.ArgumentParser(description="관리자·상담원 계정 만들기")
@@ -66,6 +80,7 @@ def main():
     init_db()
     with SessionLocal() as db:
         seed_accounts(db, args.reset_password)
+        seed_customer_passwords(db, args.reset_password)
         db.commit()
 
 

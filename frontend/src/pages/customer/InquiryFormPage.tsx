@@ -1,13 +1,15 @@
 // 고객 문의 폼 (/inquiry): 등록하면 그 자리에서 자동 답변 또는 접수 안내를 보여 줍니다 (동기 방식).
+// 쇼핑몰에 로그인한 고객은 이름·이메일·조회 비밀번호를 쓰지 않고, 주문을 목록에서 고릅니다 (/inquiry?order=… 로 미리 선택)
 import { useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
+import { useShop } from "../../auth/ShopProvider";
 import { Bubble, Note, Thumbs } from "../../components/Chat";
 import FaqSuggestions from "../../components/FaqSuggestions";
 import PhotoPicker, { type PickedPhoto } from "../../components/PhotoPicker";
-import { Alert, Button, Card, Field, Input, Spinner, Textarea, cx } from "../../components/ui";
-import { customerApi, errorMessage } from "../../services/api";
-import type { InquiryCreated } from "../../services/types";
+import { Alert, Button, Card, Field, Input, Select, Spinner, Textarea, cx } from "../../components/ui";
+import { customerApi, errorMessage, shopApi } from "../../services/api";
+import type { InquiryCreated, ShopOrder } from "../../services/types";
 
 const EMPTY = { customer_name: "", customer_email: "", order_number: "", title: "", content: "", password: "", password2: "" };
 // 주문과 관련된 문의로 보이는 표현 (주문번호 입력 권유용, 판단이 틀려도 입력은 선택이라 영향 없음)
@@ -15,7 +17,10 @@ const ORDER_WORDS = /배송|택배|송장|도착|못\s?받|안\s?와|출고|주�
 const WAIT_MESSAGES = ["문의 내용을 분석하고 있습니다…", "답변을 작성하고 있습니다…", "조금만 기다려 주세요…"];
 
 export default function InquiryFormPage() {
-  const [form, setForm] = useState(EMPTY);
+  const { customer } = useShop();
+  const [params] = useSearchParams();
+  const [orders, setOrders] = useState<ShopOrder[]>([]);
+  const [form, setForm] = useState({ ...EMPTY, order_number: params.get("order") ?? "" });
   const [sending, setSending] = useState(false);
   const [waitStep, setWaitStep] = useState(0);
   const [error, setError] = useState("");
@@ -32,20 +37,26 @@ export default function InquiryFormPage() {
     return () => clearInterval(timer);
   }, [sending]);
 
+  useEffect(() => {
+    if (customer) shopApi.orders().then(setOrders).catch(() => setOrders([]));
+  }, [customer]);
+
   const needsOrder = !form.order_number.trim() && ORDER_WORDS.test(`${form.title} ${form.content}`);
   const set = (key: keyof typeof EMPTY) => (e: { target: { value: string } }) => setForm({ ...form, [key]: e.target.value });
 
   async function submit(e: FormEvent) {
     e.preventDefault();
     setError("");
-    if (form.password !== form.password2) {
+    if (!customer && form.password !== form.password2) {
       setError("비밀번호 확인이 일치하지 않습니다.");
       return;
     }
     setSending(true);
     try {
       const { password2: _, ...body } = form;
-      setResult(await customerApi.create({ ...body, order_number: form.order_number.trim() || null,
+      // 로그인 고객: 이름·이메일은 서버가 계정 정보로 채움, 조회 비밀번호 없음
+      const who = customer ? { customer_name: customer.name, customer_email: customer.email, password: null } : {};
+      setResult(await customerApi.create({ ...body, ...who, order_number: form.order_number.trim() || null,
         privacy_agreed: agreed, attachment_tokens: photos.map((p) => p.token) }));
       setLookupEmail(form.customer_email);
       setSentAt(new Date().toISOString());
@@ -79,9 +90,9 @@ export default function InquiryFormPage() {
         <div className="flex gap-2">
           <Button variant="ghost" onClick={() => { setResult(null); setForm(EMPTY); setPhotos([]); setAgreed(false); }}>새 문의 작성</Button>
           {/* 이메일은 주소(URL)에 남기지 않고 화면 이동 상태로만 넘김 */}
-          <Link to="/inquiry/lookup" state={{ email: lookupEmail }}
+          <Link to={customer ? "/my" : "/inquiry/lookup"} state={customer ? undefined : { email: lookupEmail }}
             className="inline-flex min-h-11 items-center rounded-xl border border-hairline bg-canvas px-5 py-2.5 text-sm font-semibold text-ink hover:bg-surface-card">
-            문의 조회로 이동
+            {customer ? "내 문의 보기" : "문의 조회로 이동"}
           </Link>
         </div>
       </div>
@@ -91,6 +102,12 @@ export default function InquiryFormPage() {
   return (
     <Card title="1:1 문의하기">
       <form onSubmit={submit} className="space-y-4">
+        {customer ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-primary-soft px-4 py-3 text-sm">
+            <span><b className="text-ink">{customer.name}</b>님 ({customer.email})으로 문의합니다.</span>
+            <span className="text-xs text-muted">답변은 내 쇼핑에서 바로 볼 수 있어요</span>
+          </div>
+        ) : (
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="이름">
             <Input required maxLength={50} value={form.customer_name} onChange={set("customer_name")} disabled={sending} />
@@ -106,7 +123,12 @@ export default function InquiryFormPage() {
             <Input required type="password" minLength={6} maxLength={64} autoComplete="new-password"
               value={form.password2} onChange={set("password2")} disabled={sending} />
           </Field>
+          <p className="text-xs text-muted sm:col-span-2">
+            쇼핑몰 회원이면 <Link to="/shop/login" state={{ from: "/inquiry" }} className="text-primary hover:underline">로그인</Link>하고
+            주문에서 바로 문의할 수 있어요.
+          </p>
         </div>
+        )}
 
         <Field label="제목">
           <Input required maxLength={200} value={form.title} onChange={set("title")} disabled={sending} />
@@ -115,12 +137,24 @@ export default function InquiryFormPage() {
           <Textarea required minLength={5} maxLength={2000} value={form.content} onChange={set("content")} disabled={sending} />
         </Field>
         {/* 주문번호는 선택. 주문 관련 내용(배송·취소·교환·반품 등)을 쓰면 칸을 강조해 입력을 권유 */}
+        {customer ? (
+          <Field label="주문 (선택)" hint={needsOrder ? "주문 관련 문의 같아요. 해당 주문을 고르시면 바로 확인해 더 빨리 처리해 드려요." : "주문과 관련된 문의라면 골라 주세요."}>
+            <Select className={cx("w-full", needsOrder && "border-amber-400 bg-amber-50/50 ring-2 ring-amber-100")}
+              value={form.order_number} onChange={set("order_number")} disabled={sending}>
+              <option value="">주문과 관계없는 문의</option>
+              {orders.map((o) => (
+                <option key={o.order_number} value={o.order_number}>{o.product_name} · {o.order_number} ({o.order_status})</option>
+              ))}
+            </Select>
+          </Field>
+        ) : (
         <Field label="주문번호 (선택)"
           hint={needsOrder ? "주문 관련 문의 같아요. 주문번호를 적어 주시면 주문을 바로 확인해 더 빨리 처리해 드려요. 예: 20261103-0042"
             : "주문 관련 문의라면 입력해 주세요. 마이페이지 > 주문내역에서 확인할 수 있어요. 예: 20261103-0042"}>
           <Input maxLength={30} value={form.order_number} onChange={set("order_number")} disabled={sending}
             className={cx(needsOrder && "border-amber-400 bg-amber-50/50 ring-2 ring-amber-100")} />
         </Field>
+        )}
         <div className="space-y-1">
           <span className="text-sm font-medium text-slate-700">사진 첨부 (선택)</span>
           <PhotoPicker value={photos} onChange={setPhotos} disabled={sending} />

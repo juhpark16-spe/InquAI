@@ -33,7 +33,8 @@ def _next_inquiry_number(db: Session) -> str:
 
 def _save_inquiry(db: Session, body: InquiryCreate) -> Inquiry:
     fields = body.model_dump(exclude={"password", "privacy_agreed", "attachment_tokens"})
-    fields["lookup_password_hash"] = hash_password(body.password)  # 평문 비밀번호는 저장하지 않음
+    # 평문 비밀번호는 저장하지 않음. 로그인 고객은 비밀번호 없이 '내 문의'로 봄
+    fields["lookup_password_hash"] = hash_password(body.password) if body.password else None
     fields["privacy_agreed_at"] = utcnow()
     for _ in range(3):  # 동시에 들어와 번호가 겹치면 다시 발급
         inquiry = Inquiry(inquiry_number=_next_inquiry_number(db), **fields)
@@ -127,6 +128,16 @@ def find_public_inquiries(db: Session, email: str, password: str) -> list[dict]:
     그 사람은 자기 문의만 보고, 내 문의는 볼 수 없습니다.
     """
     return [_public(i) for i in _owned(db, email, password)]
+
+
+def find_customer_inquiries(db: Session, email: str, limit: int = 50) -> list[Inquiry]:
+    """쇼핑몰에 로그인한 고객의 문의 (이메일이 같은 문의 전부, 최신순). 로그인으로 본인 확인이 끝났으므로 조회 비밀번호는 보지 않음"""
+    return db.scalars(select(Inquiry).where(Inquiry.customer_email == email)
+                      .order_by(Inquiry.created_at.desc(), Inquiry.id.desc()).limit(limit)).all()
+
+
+def public_view(inquiry: Inquiry) -> dict:
+    return _public(inquiry)
 
 
 def find_owned_inquiry(db: Session, email: str, password: str, inquiry_number: str) -> Inquiry | None:

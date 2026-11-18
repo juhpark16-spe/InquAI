@@ -51,5 +51,7 @@ def client(db):
     rate_limit.reset()
     from backend.api.inquiries import lookup_failures
     lookup_failures.reset()
+    from backend.api.shop import login_failures
+    login_failures.reset()
     with TestClient(app) as c:
         yield c

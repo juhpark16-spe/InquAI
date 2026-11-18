@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     # 초기 계정 비밀번호 (seed_admin.py)
     seed_admin_password: str = ""
     seed_agent_password: str = ""
+    # 시연 고객(customerNN@example.com) 로그인 비밀번호. 비우면 고객 로그인을 쓰지 않음 (쇼핑몰 연동 시연, 4주차)
+    seed_customer_password: str = ""
+    shop_session_hours: int = 8   # 고객 로그인 유지 시간
 
     @property
     def origins(self) -> list[str]:

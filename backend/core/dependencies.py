@@ -14,8 +14,9 @@ from fastapi import Depends, Request
 from sqlalchemy.orm import Session
 
 from backend.core.errors import AppError
-from backend.core.security import ACCESS_COOKIE, CSRF_COOKIE, CSRF_HEADER, csrf_matches, decode_token
-from backend.database.models import AdminUser
+from backend.core.security import (ACCESS_COOKIE, CSRF_COOKIE, CSRF_HEADER, SHOP_COOKIE, SHOP_CSRF_COOKIE,
+                                   SHOP_CSRF_HEADER, csrf_matches, decode_token)
+from backend.database.models import AdminUser, Customer
 from backend.database.session import get_db
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
@@ -63,3 +64,35 @@ def require_admin(user: Annotated[AdminUser, Depends(get_current_user)]) -> Admi
 
 LoginUser = Annotated[AdminUser, Depends(get_current_user)]
 AdminOnly = Annotated[AdminUser, Depends(require_admin)]
+
+
+# ---- 고객 로그인 (쇼핑몰 연동 시연, 4주차) ---------------------------------------------
+def optional_customer(request: Request, db: DB) -> Customer | None:
+    """고객 로그인 쿠키가 유효하면 고객, 없으면 None (비회원 문의도 받는 API용).
+
+    로그인 상태로 상태를 바꾸는 요청(POST 등)이면 고객용 CSRF 헤더도 확인합니다.
+    """
+    token = request.cookies.get(SHOP_COOKIE)
+    if not token:
+        return None
+    try:
+        payload = decode_token(token, "shop")
+    except jwt.InvalidTokenError:  # 만료 포함 → 비회원처럼 처리 (화면은 /api/shop/me 로 로그인 상태를 다시 확인)
+        return None
+    customer = db.get(Customer, int(payload["sub"]))
+    if customer is None or customer.password_hash is None:
+        return None
+    if request.method not in SAFE_METHODS and not csrf_matches(request.cookies.get(SHOP_CSRF_COOKIE),
+                                                               request.headers.get(SHOP_CSRF_HEADER)):
+        raise AppError(403, "요청을 확인할 수 없습니다. 새로고침 후 다시 시도해 주세요.", "CSRF_FAILED")
+    return customer
+
+
+def require_customer(customer: Annotated[Customer | None, Depends(optional_customer)]) -> Customer:
+    if customer is None:
+        raise AppError(401, "쇼핑몰 로그인이 필요합니다.", "AUTH_REQUIRED")
+    return customer
+
+
+ShopCustomer = Annotated[Customer, Depends(require_customer)]
+MaybeCustomer = Annotated[Customer | None, Depends(optional_customer)]

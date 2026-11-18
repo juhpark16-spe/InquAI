@@ -16,6 +16,8 @@ import CustomerLayout from "./pages/customer/CustomerLayout";
 import FaqPage from "./pages/customer/FaqPage";
 import InquiryFormPage from "./pages/customer/InquiryFormPage";
 import InquiryLookupPage from "./pages/customer/InquiryLookupPage";
+import MyPage from "./pages/customer/MyPage";
+import ShopLoginPage from "./pages/customer/ShopLoginPage";
 import ProtectedRoute from "./routes/ProtectedRoute";
 
 // 대시보드는 차트 라이브러리(Recharts)가 커서, 고객 화면이 이 코드를 받지 않도록 필요할 때만 불러옴
@@ -41,6 +43,8 @@ export default function App() {
           <Route path="/faq" element={<FaqPage />} />
           <Route path="/inquiry" element={<InquiryFormPage />} />
           <Route path="/inquiry/lookup" element={<InquiryLookupPage />} />
+          <Route path="/shop/login" element={<ShopLoginPage />} />
+          <Route path="/my" element={<MyPage />} />
         </Route>
 
         {/* 관리 화면: 로그인 상태가 필요한 곳에서만 확인 */}

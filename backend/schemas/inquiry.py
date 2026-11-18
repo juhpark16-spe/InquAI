@@ -26,7 +26,8 @@ class InquiryCreate(_Email):
     title: str = Field(min_length=1, max_length=200)
     content: str = Field(min_length=5, max_length=2000)
     # 문의 조회용 비밀번호 (이메일과 함께 입력해 내 문의를 봄). 6자 이상: 4자리 숫자는 너무 쉽게 맞힐 수 있음
-    password: str = Field(min_length=LOOKUP_PASSWORD_MIN, max_length=64)
+    # 쇼핑몰에 로그인한 고객은 '내 문의'에서 바로 보므로 비워도 됨 (비회원은 필수, api/inquiries.py에서 확인)
+    password: str | None = Field(default=None, min_length=LOOKUP_PASSWORD_MIN, max_length=64)
     # 개인정보 수집·이용 동의 (비회원 문의에 이름·이메일을 받으므로 필수)
     # validate_default: 항목을 아예 보내지 않아도(기본값 False) 아래 검사를 거치게 함
     privacy_agreed: bool = Field(default=False, validate_default=True)

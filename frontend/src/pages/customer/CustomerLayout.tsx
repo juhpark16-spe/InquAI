@@ -1,8 +1,28 @@
-import { NavLink, Outlet } from "react-router";
+import { NavLink, Outlet, useNavigate } from "react-router";
 
+import { ShopProvider, useShop } from "../../auth/ShopProvider";
 import { cx } from "../../components/ui";
 
+// 쇼핑몰 로그인 상태 (연동 시연): 로그인하면 이름·내 쇼핑·로그아웃, 아니면 로그인
+function ShopMenu() {
+  const { customer, logout } = useShop();
+  const navigate = useNavigate();
+  if (!customer) return <NavLink to="/shop/login" className="whitespace-nowrap rounded-full px-3 py-2 text-sm text-muted hover:bg-white/60 hover:text-ink">로그인</NavLink>;
+  return (
+    <span className="flex items-center gap-1 text-sm">
+      <NavLink to="/my" className={({ isActive }) => cx("whitespace-nowrap rounded-full px-3 py-2 font-medium",
+        isActive ? "bg-primary text-white" : "text-ink hover:bg-white/60")}>{customer.name}님 · 내 쇼핑</NavLink>
+      <button className="whitespace-nowrap rounded-full px-2 py-2 text-muted hover:text-ink"
+        onClick={async () => { navigate("/inquiry"); await logout(); }}>로그아웃</button>
+    </span>
+  );
+}
+
 export default function CustomerLayout() {
+  return <ShopProvider><CustomerShell /></ShopProvider>;
+}
+
+function CustomerShell() {
   const link = ({ isActive }: { isActive: boolean }) =>
     cx("whitespace-nowrap rounded-full px-3 sm:px-4 py-2 text-sm font-medium", isActive ? "bg-primary text-white shadow-sm shadow-primary/25" : "text-muted hover:bg-white/60 hover:text-ink");
   return (
@@ -15,6 +35,7 @@ export default function CustomerLayout() {
             <NavLink to="/inquiry" end className={link}>문의하기</NavLink>
             <NavLink to="/inquiry/lookup" className={link}>문의 조회</NavLink>
           </nav>
+          <ShopMenu />
         </div>
       </header>
       <main className="mx-auto max-w-2xl px-4 py-10">

@@ -183,6 +183,29 @@
 - `/lookup` 응답 항목에 `answers[].id`, `answers[].rating`, `messages`(추가 문의), `attachment_count`, `attachments`, `can_follow_up`이 추가됐습니다.
 - **고객이 자기 사진 보기:** 고객은 로그인 쿠키가 없어 `<img>`로 사진을 부를 때 본인 확인을 할 수 없습니다. 그래서 본인 확인(이메일 + 비밀번호)을 통과한 `/lookup` 응답에만 `attachments[].url`로 **30분짜리 서명 주소**(`GET /api/inquiries/attachments/{id}?exp=&sig=`, JWT 키로 HMAC 서명)를 넣어 줍니다. 서명이 틀리거나 시간이 지나면 404
 
+## 3-1. 쇼핑몰 로그인 연동 API (고객, 시연용, 4주차)
+
+실제 서비스에서는 쇼핑몰이 고객 로그인을 맡고 고객센터는 로그인한 고객 정보를 넘겨받습니다. 시연에서는 모의 고객
+(`customerNN@example.com`, 비밀번호 `.env`의 `SEED_CUSTOMER_PASSWORD`)으로 그 흐름을 흉내 냅니다. 회원가입·비밀번호 찾기는 없습니다.
+구현: `backend/api/shop.py`, 화면 `/shop/login`, `/my`
+
+| 메서드 | 경로 | 설명 |
+| --- | --- | --- |
+| POST | /api/shop/login | `{ "email", "password" }` → 200 `{name, email}` + 쿠키. 틀리면 401 `INVALID_CREDENTIALS` (없는 이메일도 같은 응답·같은 시간), 같은 이메일 15분 5회 실패 시 429, 같은 IP 1분 10회 |
+| POST | /api/shop/logout | 204, 고객 쿠키 삭제 |
+| GET | /api/shop/me | 로그인한 고객 `{name, email}` (없으면 401) |
+| GET | /api/shop/orders | 내 주문 (최신순) `[{order_number, product_name, amount, order_status, shipping_status, ordered_at, delivered_at, inquiry_count}]` |
+| GET | /api/shop/inquiries | 내 문의 (조회 비밀번호 없이, `/api/inquiries/lookup`과 같은 형식) |
+| POST | /api/shop/inquiries/{번호}/follow-up | `{ content, attachment_tokens }` 추가 문의 (내 문의가 아니면 404) |
+| POST | /api/shop/answers/{id}/rating?inquiry_number= | `{ helpful }` 답변 평가 |
+
+- **쿠키:** `shop_session`(HttpOnly, `Path=/api`, 8시간, 종류 `shop` JWT) + `shop_csrf`(`Path=/`). 관리자 로그인 쿠키와 따로라
+  한쪽 로그아웃이 다른 쪽을 끊지 않고, 고객 토큰으로 관리자 API를 쓸 수 없습니다 (토큰 종류가 다름).
+- **CSRF:** 고객 로그인 상태의 POST는 `X-Shop-CSRF` 헤더에 `shop_csrf` 쿠키 값을 넣어야 합니다 (아니면 403).
+- **문의 등록(`POST /api/inquiries`)과의 연결:** 고객 쿠키가 있으면 이름·이메일을 계정 정보로 채우고(화면 값 무시), 조회 비밀번호(`password`)는
+  비워도 됩니다. 주문번호는 **내 주문만** (아니면 422 `ORDER_NOT_FOUND`). 비회원은 지금처럼 `password` 필수(없으면 422).
+- 로그인 고객이 문의할 때 주문을 고르면 에이전트가 그 주문으로 본인 확인·배송 조회·티켓 접수를 바로 합니다.
+
 ## 4. 문의 관리 API (로그인)
 
 ### GET /api/inquiries — 문의 목록

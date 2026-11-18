@@ -166,6 +166,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | name | VARCHAR(50) | |
 | email | VARCHAR(255) UNIQUE | 주문 확인 시 문의 이메일과 비교 |
 | phone | VARCHAR(20) | 화면에는 가운데를 가려서 표시 |
+| **password_hash** | VARCHAR(255) NULL | **쇼핑몰 로그인 연동 시연용** (4주차). 회원가입 없이 `seed_admin.py`가 `.env`의 `SEED_CUSTOMER_PASSWORD`로 시연 고객에게만 넣음. 비어 있으면 고객 로그인 불가 |
 
 ### orders — 주문·배송 (모의 데이터, 배송 조회 도구가 조회)
 

@@ -5,7 +5,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 
 import type {
-  AgentLogPage, FaqAdmin, FaqPublic, FaqSearchTest, InquiryCreate, ResponseItem, InquiryCreated, InquiryDetail, InquiryListItem, InquiryPublic, InquiryState, Page, Role, User,
+  AgentLogPage, ShopCustomer, ShopOrder, FaqAdmin, FaqPublic, FaqSearchTest, InquiryCreate, ResponseItem, InquiryCreated, InquiryDetail, InquiryListItem, InquiryPublic, InquiryState, Page, Role, User,
   UserDetail,
 } from "./types";
 
@@ -19,16 +19,18 @@ function readCookie(name: string): string | null {
 }
 
 http.interceptors.request.use((config) => {
-  const csrf = readCookie("csrf_token");
-  if (csrf && UNSAFE.has((config.method ?? "get").toLowerCase())) {
-    config.headers.set("X-CSRF-Token", csrf);
+  if (UNSAFE.has((config.method ?? "get").toLowerCase())) {
+    const csrf = readCookie("csrf_token");          // 관리자 로그인
+    if (csrf) config.headers.set("X-CSRF-Token", csrf);
+    const shopCsrf = readCookie("shop_csrf");       // 고객 로그인 (쇼핑몰 연동 시연, 따로 관리)
+    if (shopCsrf) config.headers.set("X-Shop-CSRF", shopCsrf);
   }
   return config;
 });
 
 // 동시에 여러 요청이 401을 받아도 refresh 는 한 번만
 let refreshing: Promise<void> | null = null;
-const NO_REFRESH = ["/auth/login", "/auth/refresh", "/auth/logout"];
+const NO_REFRESH = ["/auth/login", "/auth/refresh", "/auth/logout", "/shop/"]; // 고객 로그인은 관리자 refresh와 무관
 
 http.interceptors.response.use(undefined, async (error: AxiosError) => {
   const config = error.config as (InternalAxiosRequestConfig & { _retried?: boolean }) | undefined;
@@ -202,4 +204,18 @@ export interface AgentLogFilters {
 }
 export const agentLogApi = {
   list: (filters: AgentLogFilters) => http.get<AgentLogPage>("/admin/agent-logs", { params: filters }).then((r) => r.data),
+};
+
+// ---- 쇼핑몰 로그인 연동 (고객, 시연용): 관리자 로그인과 쿠키를 따로 씀 ----
+export const shopApi = {
+  login: (email: string, password: string) => http.post<ShopCustomer>("/shop/login", { email, password }).then((r) => r.data),
+  logout: () => http.post("/shop/logout"),
+  me: () => http.get<ShopCustomer>("/shop/me").then((r) => r.data),
+  orders: () => http.get<ShopOrder[]>("/shop/orders").then((r) => r.data),
+  inquiries: () => http.get<{ items: InquiryPublic[]; notice: string }>("/shop/inquiries").then((r) => r.data),
+  followUp: (inquiry_number: string, content: string, attachment_tokens: string[]) =>
+    http.post<{ status: string; message: string }>(`/shop/inquiries/${inquiry_number}/follow-up`, { content, attachment_tokens })
+      .then((r) => r.data),
+  rate: (answerId: number, inquiry_number: string, helpful: boolean) =>
+    http.post<{ rating: number }>(`/shop/answers/${answerId}/rating`, { helpful }, { params: { inquiry_number } }).then((r) => r.data),
 };
