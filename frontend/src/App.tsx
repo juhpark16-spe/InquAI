@@ -1,10 +1,11 @@
-// 화면 경로 (기획서 8장). 대시보드·FAQ 관리·AI 실행 로그 화면은 4주차에 추가합니다.
+// 화면 경로 (기획서 8장). AI 실행 로그 화면은 4주차에 추가합니다.
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router";
 
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import AccountPage from "./pages/admin/AccountPage";
 import AdminLayout from "./pages/admin/AdminLayout";
+import FaqsPage from "./pages/admin/FaqsPage";
 import InquiryDetailPage from "./pages/admin/InquiryDetailPage";
 import InquiryListPage from "./pages/admin/InquiryListPage";
 import LoginPage from "./pages/admin/LoginPage";
@@ -51,6 +52,7 @@ export default function App() {
               <Route path="/admin/account" element={<AccountPage />} />
               <Route element={<ProtectedRoute roles={["admin"]} />}>
                 <Route path="/admin/users" element={<UsersPage />} />
+                <Route path="/admin/faqs" element={<FaqsPage />} />
               </Route>
             </Route>
           </Route>

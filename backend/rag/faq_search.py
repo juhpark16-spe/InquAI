@@ -2,7 +2,7 @@
 모델을 불러오지 않는 테스트나 KURE를 쓸 수 없을 때 이 검색을 씁니다.
 
 1주차 프롬프트 검증(backend/ai/prompt_check.py)이 쓰던 방식입니다.
-FAQ가 바뀌면 FaqSearch 를 다시 만들어야 합니다 (FAQ 관리 API를 만들 때 연결).
+FAQ가 바뀌면 FAQ 관리 API가 색인을 다시 만듭니다 (backend/services/faqs.py refresh_search).
 """
 
 from sklearn.feature_extraction.text import TfidfVectorizer

@@ -347,15 +347,20 @@
 
 ## 8. FAQ API (관리자)
 
+관리자만 (상담원 403). 구현: `backend/api/faqs_admin.py`, 화면 `/admin/faqs` (4주차)
+
 | 메서드 | 경로 | 설명 |
 | --- | --- | --- |
-| GET | /api/faqs | 목록. `category`, `q`, `include_inactive` |
-| POST | /api/faqs | `{ "code": "F22", "category": "배송", "question": "...", "answer": "..." }` |
-| PUT | /api/faqs/{id} | 전체 수정 |
-| DELETE | /api/faqs/{id} | 실제로 지우지 않고 `is_active=false` |
+| GET | /api/faqs | 목록 (활성 먼저, 번호순). `category`, `q`(번호·질문·답변), `include_inactive`(기본 true). 항목마다 `used_count`·`last_used_at` (AI 자동 답변·초안의 근거로 쓰인 횟수, `agent_logs.used_faq_ids`) |
+| POST | /api/faqs | `{ "category": "배송", "question": "...", "answer": "...", "code": "F45" }` → 201. `code`를 비우면 다음 번호. 번호가 이미 있으면 409 `FAQ_CODE_TAKEN` |
+| PUT | /api/faqs/{id} | `{ category, question, answer, is_active }` 전체 수정. `is_active: true`로 다시 활성화 |
+| DELETE | /api/faqs/{id} | 실제로 지우지 않고 `is_active=false` (지난 답변의 근거 FAQ 번호가 남아 있어서) |
+| GET | /api/faqs/search-test?q=&k=3 | 검색 미리 보기: 이 질문이면 어떤 FAQ가 검색되는지 `{engine, suggest_min_score, hits:[{code, category, question, score, suggested}]}` |
 
-- 등록·수정·비활성 후 ChromaDB 색인을 다시 만듭니다 (3주차).
-- 답변을 바꿀 때는 `docs/shop_policy.md`와 맞는지 확인합니다.
+- 입력 제한: 유형은 8개 중 하나, 질문 5~200자, 답변 10~1,000자 (422).
+- 등록·수정·비활성 뒤 **검색 색인(KURE + ChromaDB)을 바로 다시 만들어** 에이전트·고객 추천·FAQ 화면에 반영합니다 (`services/faqs.py` `refresh_search`, 바뀐 FAQ 벡터만 다시 계산). 실패하면 기존 색인을 유지하고 서버 로그에 남깁니다.
+- 작업 기록: `faq_create`, `faq_update`(바뀐 칸만 before·after), `faq_deactivate`. 바뀐 것이 없으면 기록하지 않습니다.
+- 답변을 바꿀 때는 `docs/shop_policy.md`와 맞는지 확인합니다. 이미 보낸 답변은 바뀌지 않습니다.
 
 ## 9. 통계·로그 API
 

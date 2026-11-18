@@ -50,6 +50,7 @@ export default function AdminLayout() {
           {isAdmin && <MenuLink to="/admin" end icon="dashboard" label="대시보드" />}
           <MenuLink to="/admin/inquiries" icon="inbox" label="문의 관리" count={openCount} />
           <p className="hidden px-3 pb-1 pt-5 text-xs font-semibold tracking-wider text-muted lg:block">설정</p>
+          {isAdmin && <MenuLink to="/admin/faqs" icon="book" label="FAQ 관리" />}
           {isAdmin && <MenuLink to="/admin/users" icon="users" label="계정 관리" />}
           <MenuLink to="/admin/account" icon="lock" label="내 계정" />
         </nav>

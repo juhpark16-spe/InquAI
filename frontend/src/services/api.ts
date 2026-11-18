@@ -5,7 +5,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 
 import type {
-  FaqPublic, InquiryCreate, ResponseItem, InquiryCreated, InquiryDetail, InquiryListItem, InquiryPublic, InquiryState, Page, Role, User,
+  FaqAdmin, FaqPublic, FaqSearchTest, InquiryCreate, ResponseItem, InquiryCreated, InquiryDetail, InquiryListItem, InquiryPublic, InquiryState, Page, Role, User,
   UserDetail,
 } from "./types";
 
@@ -183,4 +183,14 @@ export const userApi = {
     http.patch<UserDetail>(`/admin/users/${id}`, body).then((r) => r.data),
   resetPassword: (id: number, password: string) =>
     http.post<UserDetail>(`/admin/users/${id}/reset-password`, { password }).then((r) => r.data),
+};
+
+// ---- FAQ 관리 (관리자) ----
+export interface FaqInput { category: string; question: string; answer: string }
+export const faqApi = {
+  list: () => http.get<FaqAdmin[]>("/faqs").then((r) => r.data),
+  create: (body: FaqInput & { code?: string }) => http.post<FaqAdmin>("/faqs", body).then((r) => r.data),
+  update: (id: number, body: FaqInput & { is_active: boolean }) => http.put<FaqAdmin>(`/faqs/${id}`, body).then((r) => r.data),
+  deactivate: (id: number) => http.delete<FaqAdmin>(`/faqs/${id}`).then((r) => r.data),
+  searchTest: (q: string) => http.get<FaqSearchTest>("/faqs/search-test", { params: { q } }).then((r) => r.data),
 };

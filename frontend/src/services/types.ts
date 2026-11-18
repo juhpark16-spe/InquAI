@@ -209,3 +209,23 @@ export interface InquiryState {
   assigned_to: Assignee | null;
   updated_at: string;
 }
+
+// ---- FAQ 관리 (관리자) ----
+export interface FaqAdmin {
+  id: number;
+  code: string;
+  category: string;
+  question: string;
+  answer: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  used_count: number;          // AI 자동 답변·초안의 근거로 쓰인 횟수
+  last_used_at: string | null;
+}
+
+export interface FaqSearchTest {
+  engine: string | null;
+  suggest_min_score: number | null;
+  hits: { code: string; category: string; question: string; score: number; suggested: boolean }[];
+}

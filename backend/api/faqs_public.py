@@ -1,6 +1,6 @@
 """고객용 FAQ API (공개): FAQ 목록, 문의 작성 중 비슷한 FAQ 추천.
 
-관리자용 FAQ 관리(등록·수정·비활성)는 /api/faqs (docs/api_spec.md 8장)로 따로 만듭니다.
+관리자용 FAQ 관리(등록·수정·비활성)는 /api/faqs (faqs_admin.py, docs/api_spec.md 8장).
 """
 
 from fastapi import APIRouter, Depends, Query, Request
