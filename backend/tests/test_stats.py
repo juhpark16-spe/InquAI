@@ -135,3 +135,37 @@ def test_draft_failures_are_counted_apart_from_errors(client, db):
     login(client)
     ai = client.get("/api/stats/summary").json()["ai"]
     assert (ai["errors"], ai["draft_failures"]) == (1, 1)
+
+
+def test_products(client, db):
+    """상품별 문의: 옵션이 달라도 같은 상품으로 묶고, 가장 많은 유형으로 상세페이지 개선 힌트"""
+    from backend.database.models import Customer, Order
+
+    cust = Customer(name="고객", email="p@example.com", phone="010")
+    db.add(cust)
+    db.flush()
+    now = datetime.now(timezone.utc)
+    for number, name in [("O-1", "와이드 데님 팬츠 (연청, 28)"), ("O-2", "와이드 데님 팬츠 (진청, 30)"), ("O-3", "선크림")]:
+        db.add(Order(customer_id=cust.id, order_number=number, product_name=name, amount=1, order_status="배송 완료",
+                     ordered_at=now))
+    for n, (number, cat, decision) in enumerate([("O-1", "교환", "답변 초안"), ("O-2", "교환", "답변 초안"),
+                                                 ("O-1", "상품", "자동 답변"), ("O-3", "배송", "자동 답변"),
+                                                 ("없는주문", "배송", "자동 답변"), (None, "결제", "자동 답변")], start=1):
+        i = add(db, 100 + n, "자동 처리", cat, "낮음", decision)
+        i.order_number = number
+    db.commit()
+    login(client)
+    body = client.get("/api/stats/products").json()
+    assert (body["total"], body["linked"], body["products"]) == (6, 4, 2)          # 실제 주문에 연결된 문의만
+    top = body["items"][0]
+    assert top["product"] == "와이드 데님 팬츠" and top["count"] == 3
+    assert top["by_category"] == {"교환": 2, "상품": 1} and top["top_category"] == "교환"
+    assert "사이즈표" in top["hint"] and top["auto"] == 1 and len(top["examples"]) == 3
+    assert client.get("/api/stats/products", params={"limit": 1}).json()["items"][0]["product"] == "와이드 데님 팬츠"
+    one = body["items"][1]
+    assert one["product"] == "선크림" and one["top_category"] is None and one["hint"] is None   # 1건뿐이면 신호 아님
+
+
+def test_products_admin_only(client, db):
+    login(client, "agent1")
+    assert client.get("/api/stats/products").status_code == 403

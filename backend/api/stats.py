@@ -4,6 +4,7 @@
 기간 안의 문의를 한 번에 읽어 파이썬에서 집계합니다 (SQLite·PostgreSQL 어디서나 같은 결과).
 """
 
+import re
 from collections import Counter
 from datetime import date, datetime, time, timedelta, timezone
 
@@ -16,7 +17,7 @@ from backend.core.errors import AppError
 from backend.services import sla
 from backend.services.inquiry_context import history
 from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminUser, Inquiry, LabelCorrection,
-                                     as_utc)
+                                     Order, as_utc)
 from backend.training.labels import CATEGORY_LABELS
 
 router = APIRouter(prefix="/stats", tags=["통계"])
@@ -193,3 +194,70 @@ def activity(_: AdminOnly, db: DB, limit: int = Query(8, ge=1, le=30)):
               for i in recent for e in history(db, i)]
     events.sort(key=lambda e: as_utc(e["at"]), reverse=True)
     return [{**e, "at": as_utc(e["at"]).isoformat()} for e in events[:limit]]
+
+
+# ---- 상품별 문의 (4주차, 채널톡 '주문 연동 상담' 벤치마킹) --------------------------------------
+# 같은 상품에 문의가 몰리면 상세페이지가 고객에게 충분히 설명하지 못한다는 신호. 가장 많은 유형에 맞춰 개선 힌트를 붙임
+PRODUCT_HINTS = {
+    "상품": "소재·사이즈·사용법 질문이 많아요 → 상세페이지 설명·실측 정보 보강",
+    "교환": "교환이 많아요 → 사이즈표·색상 실물 사진 보강",
+    "반품·환불": "반품이 많아요 → 설명과 실물 차이, 품질 점검",
+    "배송": "배송 문의가 많아요 → 출고 일정·배송 기간 안내 보강",
+    "주문 취소": "취소가 많아요 → 옵션 선택 안내·배송 일정 확인",
+    "결제": "결제 문의가 많아요 → 결제 수단·할부 안내 확인",
+    "쿠폰·적립금·회원": "쿠폰·적립 문의가 많아요 → 혜택 적용 조건 표시 확인",
+    "기타": "기타 문의가 많아요 → 문의 내용을 직접 확인",
+}
+OPTION = re.compile(r"\s*\([^()]*\)\s*$")   # "와이드 데님 팬츠 (연청, 28)" → "와이드 데님 팬츠" (옵션이 달라도 같은 상품)
+
+
+def product_base(name: str) -> str:
+    return OPTION.sub("", name).strip() or name
+
+
+@router.get("/products", summary="상품별 문의 (관리자)")
+def products(
+    _: AdminOnly,
+    db: DB,
+    date_from: date | None = Query(None, alias="from", description="시작일 (KST, 기본: 29일 전)"),
+    date_to: date | None = Query(None, alias="to", description="종료일 (KST, 기본: 오늘)"),
+    limit: int = Query(5, ge=1, le=20),
+):
+    date_to = date_to or _kst_today()
+    date_from = date_from or date_to - timedelta(days=29)
+    if date_from > date_to or (date_to - date_from).days >= MAX_DAYS:
+        raise AppError(422, f"기간은 시작일 이후, 최대 {MAX_DAYS}일입니다.", "INVALID_PARAM")
+    rows = _load(db, date_from, date_to)
+    numbers = {i.order_number for i in rows if i.order_number}
+    orders = {o.order_number: o for o in db.scalars(select(Order).where(Order.order_number.in_(numbers)))} if numbers else {}
+
+    groups: dict[str, list[Inquiry]] = {}
+    for i in rows:
+        order = orders.get(i.order_number or "")
+        if order:   # 실제 주문에 연결된 문의만 (주문번호를 잘못 적은 문의는 빠짐)
+            groups.setdefault(product_base(order.product_name), []).append(i)
+
+    items = []
+    for product, inqs in groups.items():
+        cats = Counter(i.analysis.category for i in inqs if i.analysis)
+        ranked = cats.most_common(2)
+        # 힌트는 한 유형이 2건 이상이고 다른 유형보다 분명히 많을 때만 (1·1·1처럼 고르게 나뉘면 신호가 아님)
+        clear = bool(ranked) and ranked[0][1] >= 2 and (len(ranked) == 1 or ranked[0][1] > ranked[1][1])
+        top = ranked[0][0] if clear else None
+        last_logs = [max(i.agent_logs, key=lambda log: log.id) for i in inqs if i.agent_logs]
+        items.append({
+            "product": product,
+            "count": len(inqs),
+            "by_category": dict(cats.most_common()),
+            "top_category": top,
+            "negative": sum(1 for i in inqs if i.analysis and i.analysis.sentiment == "부정"),
+            "auto": sum(1 for log in last_logs if log.decision == "자동 답변"),
+            "hint": PRODUCT_HINTS.get(top) if top else None,
+            "examples": [{"inquiry_id": i.id, "inquiry_number": i.inquiry_number, "title": i.title,
+                          "category": i.analysis.category if i.analysis else None}
+                         for i in sorted(inqs, key=lambda x: x.created_at, reverse=True)[:3]],
+        })
+    items.sort(key=lambda x: (-x["count"], x["product"]))
+    return {"range": {"from": date_from.isoformat(), "to": date_to.isoformat()},
+            "total": len(rows), "linked": sum(len(v) for v in groups.values()), "products": len(groups),
+            "items": items[:limit]}

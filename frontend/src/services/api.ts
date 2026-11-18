@@ -174,7 +174,22 @@ export const statsApi = {
   summary: (days: number) =>
     http.get<StatsSummary>("/stats/summary", { params: { from: kstDate(days - 1), to: kstDate(0) } }).then((r) => r.data),
   activity: (limit = 8) => http.get<ActivityItem[]>("/stats/activity", { params: { limit } }).then((r) => r.data),
+  products: (days: number, limit = 5) =>
+    http.get<ProductStats>("/stats/products", { params: { from: kstDate(days - 1), to: kstDate(0), limit } }).then((r) => r.data),
 };
+
+/** 상품별 문의 (주문에 연결된 문의만, 옵션이 달라도 같은 상품으로 묶음) */
+export interface ProductStats {
+  range: { from: string; to: string };
+  total: number;
+  linked: number;
+  products: number;
+  items: {
+    product: string; count: number; by_category: Record<string, number>; top_category: string | null;
+    negative: number; auto: number; hint: string | null;
+    examples: { inquiry_id: number; inquiry_number: string; title: string; category: string | null }[];
+  }[];
+}
 
 // ---- 계정 관리 (관리자) ----
 export const userApi = {

@@ -1,5 +1,5 @@
 // 관리자 대시보드 (/admin): 지금 처리할 일 → 기간 지표(지난 기간 대비) → 날짜별 유형 + 최근 활동
-// → 처리·미처리, 처리 방식·긴급도 → AI 현황, 담당자별 미처리
+// → 처리·미처리, 처리 방식·긴급도 → AI 현황, 담당자별 미처리 → 문의가 많은 상품 (상세페이지 개선 신호)
 // 색: 카드는 흰 바탕, 위험한 값(기한 초과·긴급)만 빨강. 유형 8개는 고정 순서의 범주 색(유형마다 항상 같은 색)
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
@@ -8,7 +8,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import { useAuth } from "../../auth/AuthProvider";
 import Icon, { type IconName } from "../../components/Icon";
 import { Alert, Spinner, cx, initialOf } from "../../components/ui";
-import { errorMessage, statsApi, type ActivityItem, type StatsSummary } from "../../services/api";
+import { errorMessage, statsApi, type ActivityItem, type ProductStats, type StatsSummary } from "../../services/api";
 import { CATEGORIES } from "../../services/types";
 
 // 범주 색 8개 (색약 구분 검증된 순서, 유형 순서와 1:1로 고정)
@@ -144,6 +144,44 @@ function ShareBars({ items, color, total }: { items: [string, number][]; color: 
   );
 }
 
+/** 문의가 많은 상품: 유형 비율 막대 + 가장 많은 유형에 맞춘 상세페이지 개선 힌트 (채널톡 '주문 연동 상담' 벤치마킹) */
+function Products({ data }: { data: ProductStats | null }) {
+  if (!data) return <p className="text-center text-muted"><Spinner /></p>;
+  if (data.items.length === 0) return <p className="text-sm text-muted">이 기간에 주문과 연결된 문의가 없습니다.</p>;
+  const max = data.items[0].count;
+  return (
+    <ul className="space-y-4">
+      {data.items.map((p, rank) => (
+        <li key={p.product}>
+          <div className="flex items-baseline justify-between gap-3 text-sm">
+            <span className="min-w-0 truncate font-semibold text-ink"><span className="mr-1.5 text-muted">{rank + 1}</span>{p.product}</span>
+            <span className="shrink-0 tabular-nums text-ink">{p.count}건
+              <span className="ml-1.5 text-xs text-muted">자동 답변 {p.auto} · 부정 {p.negative}</span>
+            </span>
+          </div>
+          <div className="mt-1.5 flex h-2 overflow-hidden rounded-full bg-surface-card" style={{ width: `${(p.count / max) * 100}%` }}
+            title={Object.entries(p.by_category).map(([c, n]) => `${c} ${n}`).join(" · ")}>
+            {Object.entries(p.by_category).map(([c, n]) => (
+              <span key={c} style={{ width: `${(n / p.count) * 100}%`, background: CATEGORY_COLOR[c] }} />
+            ))}
+          </div>
+          <div className="mt-1 flex flex-wrap gap-x-3 text-xs text-muted">
+            {Object.entries(p.by_category).map(([c, n]) => (
+              <span key={c} className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ background: CATEGORY_COLOR[c] }} />{c} {n}</span>
+            ))}
+          </div>
+          {p.hint && <p className="mt-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">💡 {p.hint}</p>}
+          <p className="mt-1 truncate text-xs text-muted">
+            {p.examples.map((e, k) => (
+              <span key={e.inquiry_id}>{k > 0 && " · "}<Link to={`/admin/inquiries/${e.inquiry_id}`} className="hover:underline">{e.title}</Link></span>
+            ))}
+          </p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 /** 범례: Recharts 기본 범례는 이름순으로 정렬돼 색 순서와 어긋나서, 정해진 순서대로 직접 그림 */
 function LegendRow({ items }: { items: [string, string][] }) {
   return (
@@ -211,10 +249,12 @@ export default function DashboardPage() {
   const [activity, setActivity] = useState<ActivityItem[] | null>(null);
   const [error, setError] = useState("");
   const [showTable, setShowTable] = useState(false);
+  const [products, setProducts] = useState<ProductStats | null>(null);
 
   useEffect(() => {
     setError("");
     statsApi.summary(days).then(setData).catch((err) => setError(errorMessage(err)));
+    statsApi.products(Math.max(days, 30)).then(setProducts).catch(() => setProducts(null));  // 상품별은 최소 30일 (건수가 적어서)
   }, [days]);
   useEffect(() => {
     statsApi.activity(8).then(setActivity).catch(() => setActivity([]));
@@ -411,6 +451,12 @@ export default function DashboardPage() {
           </ul>
         </Panel>
       </div>
+
+      <Panel icon="inbox" title="문의가 많은 상품" sub={products
+        ? `최근 ${Math.max(days, 30)}일 · 주문과 연결된 문의 ${products.linked}건 (전체 ${products.total}건) · 같은 상품에 문의가 몰리면 상세페이지 개선 신호`
+        : "주문과 연결된 문의"}>
+        <Products data={products} />
+      </Panel>
     </div>
   );
 }
