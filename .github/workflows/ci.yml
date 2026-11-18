@@ -1,0 +1,83 @@
+# CI: main에 푸시하거나 PR을 올릴 때마다 자동으로 확인합니다.
+#   backend  — pytest (모델·LLM·LangSmith 없이: 테스트는 가짜 모델과 임시 SQLite DB를 씀, backend/tests/conftest.py)
+#   frontend — 타입 검사 + 화면 빌드 (npm run build), 알려진 취약점 검사 (npm audit)
+#   security — 파이썬 패키지 취약점 검사 (pip-audit, docs/security_audit.md)
+# AI Hub 데이터·학습된 모델·.env 는 저장소에 없으므로 CI에서도 쓰지 않습니다.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: 백엔드 테스트
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: 패키지 설치 (PyTorch는 CPU 버전)
+        # requirements.txt 는 GPU(CUDA) 버전이라, CI에서는 같은 버전의 CPU 빌드로 바꿔 설치 (내려받는 양이 훨씬 적음)
+        run: |
+          sed -e '/download.pytorch.org/d' -e 's/+cu132/+cpu/' requirements.txt > requirements-ci.txt
+          pip install -r requirements-ci.txt --extra-index-url https://download.pytorch.org/whl/cpu
+      - name: pytest
+        run: python -m pytest backend/tests -q
+
+  frontend:
+    name: 화면 빌드
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: 타입 검사 + 빌드
+        run: npm run build
+      - name: npm 취약점 검사 — 화면에 실려 나가는 패키지 (high 이상이면 실패)
+        run: npm audit --omit=dev --audit-level=high
+      - name: npm 취약점 검사 — 빌드 도구 (알림만)
+        # 빌드 도구(vite 등)는 사용자에게 전달되지 않아 실패로 막지 않고 결과만 남김.
+        # 2026-11-18: picomatch ReDoS (GHSA-fc5q-39xc-vjpf), 고친 버전 없음 (docs/security_audit.md)
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
+  security:
+    name: 파이썬 패키지 취약점
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: pip-audit
+        # chromadb 1.5.9 의 4건은 Chroma HTTP 서버 전용이라 InquAI(파일만 읽고 씀)에는 해당 없음 (docs/security_audit.md).
+        # 고친 버전이 나오면 chromadb 를 올리고 아래 무시 목록을 지웁니다.
+        run: |
+          pip install pip-audit
+          sed -e '/download.pytorch.org/d' -e 's/+cu132//' -e 's/#.*//' requirements.txt > requirements-audit.txt
+          pip-audit -r requirements-audit.txt --no-deps --disable-pip --progress-spinner off \
+            --ignore-vuln PYSEC-2026-311 --ignore-vuln PYSEC-2026-3813 \
+            --ignore-vuln PYSEC-2026-3814 --ignore-vuln PYSEC-2026-3815

@@ -25,6 +25,19 @@
   - Docker Compose에서 Chroma를 서버 컨테이너(`chroma run`, `chromadb/chroma` 이미지)로 따로 띄우지 않습니다.
   - Chroma 새 버전이 나와 취약점이 고쳐지면 올리고 FAQ 검색 평가(`docs/faq_search_eval.md`)를 다시 돌립니다.
 
+## 2026-11-18 (CI를 만들며 다시 확인)
+
+| 대상 | 결과 |
+| --- | --- |
+| 프론트엔드, 화면에 실려 나가는 패키지 (`npm audit --omit=dev`) | **0건** |
+| 프론트엔드, 빌드 도구 (`npm audit`) | **picomatch 4.0.7 high 1건** (vite → tinyglobby·fdir를 거쳐 5개로 표시) |
+
+- 내용: picomatch에 특정 glob 패턴을 넣으면 처리 시간이 크게 늘어나는 ReDoS ([GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)). 2026-11-17 확인 때는 없던 새 공지입니다.
+- 영향: vite가 **빌드할 때** 파일을 찾는 데만 쓰고, 패턴은 우리 설정 파일에서 옵니다. 사용자에게 전달되는 화면 코드에는 들어가지 않아 해당 없음으로 판단했습니다.
+- 고친 picomatch 버전이 아직 없고, `npm audit fix --force`는 vite를 8 → 6으로 내려 빌드가 깨질 수 있어 쓰지 않습니다. 새 버전이 나오면 올립니다.
+- CI(`.github/workflows/ci.yml`)는 화면 패키지는 high 이상이면 실패, 빌드 도구는 결과만 남기도록 나눴습니다.
+- 파이썬은 CI에서 `requirements.txt`에 적은 패키지(직접 쓰는 것)만 검사합니다. 하위 패키지까지 보려면 아래처럼 실제 설치된 목록으로 검사합니다.
+
 ## 다시 돌리는 방법
 
 ```bash
