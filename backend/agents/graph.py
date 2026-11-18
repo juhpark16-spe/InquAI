@@ -23,7 +23,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 from sqlalchemy.orm import Session
 
-from backend.ai.prompts import (ANSWER_PROMPT, ANSWER_SCHEMA, ROUTE_PROMPT, ROUTE_SCHEMA, decide_by_rule,
+from backend.ai.prompts import (ANSWER_PROMPT, ANSWER_SCHEMA, ROUTE_PROMPT, ROUTE_SCHEMA, check_tool, decide_by_rule,
                                 find_promises, format_answer_input, format_route_input)
 from backend.database.models import Inquiry, Order
 from backend.tools.orders import find_customer_order, shipping_summary
@@ -94,7 +94,9 @@ def llm_route(state: AgentState, runtime: Ctx) -> dict:
     deps = runtime.context
     plan, tokens = deps.ask_llm(ROUTE_PROMPT, format_route_input(state["text"], state["analysis"], state["retrieved"]),
                                 ROUTE_SCHEMA, "route")
-    return {"plan": plan, "decided_by": "LLM", "tokens": tokens, "llm_model": deps.llm.label, "steps": ["LLM 판단"]}
+    checked = check_tool(plan, state["analysis"]["route"])   # 고른 도구가 처리 경로에 맞는지 (기획서 2-2의 4번)
+    steps = ["LLM 판단"] + (["도구 확인"] if checked is not plan else [])
+    return {"plan": checked, "decided_by": "LLM", "tokens": tokens, "llm_model": deps.llm.label, "steps": steps}
 
 
 def verify_order(state: AgentState, runtime: Ctx) -> dict:

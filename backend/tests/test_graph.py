@@ -53,3 +53,30 @@ def test_draft_is_written_after_response(client, db, ai):
     draft = db.scalar(select(Response).where(Response.inquiry_id == inquiry.id))
     assert draft.status == "초안" and log.response_text == draft.draft_text
     assert "draft_ms" in log.tool_output
+
+
+def test_tool_check_fixes_tool_that_does_not_fit_route(client, db, ai):
+    """결제(FAQ형) 문의 초안에 LLM이 '티켓 접수'를 고르면 코드가 FAQ 검색으로 바꿈 (기획서 2-2의 4번)"""
+    from backend.database.models import Ticket
+
+    ai["analyzer"].next = {"category": "결제"}
+    ai["llm"].replies = {"route": route_reply("답변 초안", "티켓 접수", reason="입금 확인 필요"),
+                         "draft": DRAFT}
+    number = post(client, content="남편 이름으로 입금했는데 미확인이에요").json()["inquiry_number"]
+    inquiry, log = saved(db, number)
+    assert log.selected_tool == "FAQ 검색" and "도구 확인: 티켓 접수 → FAQ 검색" in log.reason
+    assert log.steps[:5] == ["FAQ 검색", "규칙 판단", "LLM 판단", "도구 확인", "주문 본인 확인"]
+    assert db.scalars(select(Ticket).where(Ticket.inquiry_id == inquiry.id)).all() == []   # 엉뚱한 티켓을 만들지 않음
+
+
+def test_check_tool_table():
+    from backend.ai.prompts import check_tool
+
+    plan = lambda d, t: {"decision": d, "tool": t, "faq_ids": [], "reason": "r"}  # noqa: E731
+    assert check_tool(plan("답변 초안", "배송 조회"), "조회형")["tool"] == "배송 조회"        # 맞으면 그대로
+    assert check_tool(plan("답변 초안", "FAQ 검색"), "접수형")["tool"] == "FAQ 검색"          # 초안의 FAQ 검색은 허용
+    assert check_tool(plan("답변 초안", "배송 조회"), "접수형")["tool"] == "티켓 접수"
+    assert check_tool(plan("자동 답변", "배송 조회"), "조회형")["tool"] == "FAQ 검색"
+    assert check_tool(plan("담당자 연결", "티켓 접수"), "접수형")["tool"] == "상담원 이관"
+    same = plan("답변 초안", "티켓 접수")
+    assert check_tool(same, "접수형") is same

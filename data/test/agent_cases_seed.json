@@ -1,0 +1,2059 @@
+[
+ {
+  "id": "S001",
+  "text": "평일 오후 2시 이전에 결제하면 당일 출고된다고 적혀있던데 오늘 바로 나가는 거 맞나요?",
+  "expected_decision": [
+   "자동 답변"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [
+   "F14"
+  ],
+  "point": "당일 출고 기준이 FAQ에 그대로 있음",
+  "source": "seed_inquiries.csv INQ_0001",
+  "category": "배송",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S002",
+  "text": "주문번호 ORD-2026-1042입니다. 어제 발송됐다고 카톡은 왔는데 송장 조회가 아예 안 돼요. 확인 좀 해주세요.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "배송 조회"
+  ],
+  "expected_faqs": [],
+  "point": "주문번호 + 송장 조회 안 됨 → 주문 확인 필요",
+  "source": "seed_inquiries.csv INQ_0002",
+  "category": "배송",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S003",
+  "text": "이사해서 주소를 바꾼다는 걸 깜빡하고 예전 집으로 주문했어요ㅠㅠ ORD-2026-1088 아직 배송준비중이던데 배송지 변경 가능할까요?",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "배송 조회"
+  ],
+  "expected_faqs": [],
+  "point": "주문의 배송지 변경 요청 → 처리 필요",
+  "source": "seed_inquiries.csv INQ_0003",
+  "category": "배송",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S004",
+  "text": "아니 일주일 전에 시킨 게 아직도 상품준비중이면 어쩌자는 겁니까?? 당장 내일 입어야 하는데 오늘 안 보내주면 가만 안 있습니다!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0004",
+  "category": "배송",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S005",
+  "text": "택배 기사님은 배송완료라고 찍으셨는데 문 앞에 아무것도 없어요!! 분실된 것 같은데 빨리 찾아주시든지 조치해주세요 급해요!",
+  "expected_decision": [
+   "답변 초안",
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "배송 조회",
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "배송 완료인데 분실 (불만, 긴급도 규칙엔 안 걸림)",
+  "source": "seed_inquiries.csv INQ_0005",
+  "category": "배송",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S006",
+  "text": "급하게 선물할 거라 혹시 늦을까 봐 걱정했는데 하루 만에 칼배송 해주셔서 너무 감사해요!! 포장도 엄청 꼼꼼하네요ㅎㅎ",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "배송 조회"
+  ],
+  "expected_faqs": [],
+  "point": "감사·칭찬 (담당자 연결이 아니어야 함)",
+  "source": "seed_inquiries.csv INQ_0006",
+  "category": "배송",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S007",
+  "text": "주문한 지 10분밖에 안 지났는데 마이페이지에서 주문 취소 버튼이 안 눌려요. 어느 단계까지 직접 취소가 가능한가요?",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "취소 가능 단계(F20) + 버튼 안 눌림",
+  "source": "seed_inquiries.csv INQ_0007",
+  "category": "주문 취소",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S008",
+  "text": "주문번호 ORD-2026-1102 방금 결제했는데 색상을 잘못 골라서요. 아직 결제완료 상태니까 주문 취소 처리 좀 부탁드립니다.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "주문 취소 요청",
+  "source": "seed_inquiries.csv INQ_0008",
+  "category": "주문 취소",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S009",
+  "text": "ORD-2026-1150 같이 시킨 바지랑 코트 중에 바지만 부분 취소하고 싶은데 처리 가능할까요?",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "부분 취소 요청",
+  "source": "seed_inquiries.csv INQ_0009",
+  "category": "주문 취소",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S010",
+  "text": "아침부터 주문 취소해달라고 글 남겼는데 그걸 씹고 멋대로 발송 처리해버리면 어떡합니까?! 당장 택배 회수하고 취소 처리하세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0010",
+  "category": "주문 취소",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S011",
+  "text": "입금 대기 중인 주문을 취소하려고 하는데 자꾸 사이트 에러가 나요! 오늘 안에 취소 안 되면 내일 자동 출고되잖아요 빨리 취소해주세요!",
+  "expected_decision": [
+   "답변 초안",
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "티켓 접수",
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "입금 대기 취소 + 사이트 오류 (불만)",
+  "source": "seed_inquiries.csv INQ_0011",
+  "category": "주문 취소",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S012",
+  "text": "실수로 두 번 주문해서 취소 요청드렸는데 상담원분이 5분 만에 칼같이 주문 취소 도와주셔서 너무 다행이에요 감사합니다!",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "감사·칭찬 (담당자 연결이 아니어야 함)",
+  "source": "seed_inquiries.csv INQ_0012",
+  "category": "주문 취소",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S013",
+  "text": "사이즈가 안 맞아서 교환하려고 하는데 왕복 교환 배송비는 얼마고 택배 기사님은 직접 불러야 하나요?",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "교환 배송비(F19), 수거 방법은 FAQ에 일부만",
+  "source": "seed_inquiries.csv INQ_0013",
+  "category": "교환",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S014",
+  "text": "주문번호 ORD-2026-2011 방금 받아봤는데 바지 기장이 너무 길어서 한 치수 작은 S사이즈로 교환 신청합니다. 택은 그대로 있어요.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "교환 신청",
+  "source": "seed_inquiries.csv INQ_0014",
+  "category": "교환",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S015",
+  "text": "ORD-2026-2033 니트 블랙으로 시켰는데 그레이 색상이 잘못 왔어요. 오배송이니 배송비 없이 블랙으로 빠른 교환 부탁드려요.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "오배송 교환 요청",
+  "source": "seed_inquiries.csv INQ_0015",
+  "category": "교환",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S016",
+  "text": "불량 와서 교환 신청한 지가 열흘이 넘었는데 왜 아직도 새 상품은 안 보내주나요?! 이번 주말에 입어야 하니까 당장 내일까지 보내세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0016",
+  "category": "교환",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S017",
+  "text": "맞교환해 준다면서 수거만 해 가고 일주일째 감감무소식이네요! 장난합니까? 오늘 내로 교환 상품 출발 안 하면 가만 안 둡니다!",
+  "expected_decision": [
+   "담당자 연결",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "상담원 이관",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "맞교환 지연 분노 (강한 불만)",
+  "source": "seed_inquiries.csv INQ_0017",
+  "category": "교환",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S018",
+  "text": "사이즈 교환 문의드렸을 때 상담원분이 너무 친절하고 빠르게 맞교환 처리해 주셔서 오늘 새 상품 잘 받았습니다! 감사합니다~",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "감사·칭찬 (담당자 연결이 아니어야 함)",
+  "source": "seed_inquiries.csv INQ_0018",
+  "category": "교환",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S019",
+  "text": "단순 변심으로 반품하고 싶은데 수령 후 며칠 이내에 접수해야 하나요? 반품 주소지도 알려주세요.",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "반품 기한(F16), 반품 주소는 FAQ에 없음",
+  "source": "seed_inquiries.csv INQ_0019",
+  "category": "반품·환불",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S020",
+  "text": "주문번호 ORD-2026-2055 반품 수거해 가신 지가 4일이 지났는데 아직도 카드 취소 처리가 안 됐네요. 언제 환불되나요?",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0020",
+  "category": "반품·환불",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S021",
+  "text": "ORD-2026-2089 입어보니 저한테 안 어울려서 반품 신청합니다. 환불될 금액에서 반품 택배비 차감하고 환불해 주세요.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "반품 신청",
+  "source": "seed_inquiries.csv INQ_0021",
+  "category": "반품·환불",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S022",
+  "text": "장난해요 지금?? 새로 산 셔츠에 얼룩이 묻어있고 단추도 떨어져서 왔어요!! 검수 안 합니까? 당장 전액 환불해주세요 기분 더러워서 안 입어요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0022",
+  "category": "반품·환불",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S023",
+  "text": "반품 도착한 지가 일주일이 넘었는데 왜 아직도 내 계좌로 환불금을 안 넣어줍니까?! 소보원에 신고하기 전에 오늘 당장 입금하세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0023",
+  "category": "반품·환불",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S024",
+  "text": "반품 절차가 복잡할 줄 알았는데 수거도 바로 다음 날 와주시고 환불 입금도 하루 만에 해주셔서 믿음이 가네요. 다음에 또 이용할게요!",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "감사·칭찬 (담당자 연결이 아니어야 함)",
+  "source": "seed_inquiries.csv INQ_0024",
+  "category": "반품·환불",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S025",
+  "text": "무통장입금으로 주문하고 방금 입금했는데 입금 확인은 보통 얼마나 걸리나요? 현금영수증 자진발급도 가능한지 궁금해요.",
+  "expected_decision": [
+   "자동 답변"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "입금 확인 시간(F02) + 현금영수증(F01) 모두 FAQ에 있음",
+  "source": "seed_inquiries.csv INQ_0025",
+  "category": "결제",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S026",
+  "text": "주문할 때 주문자 이름이 아니라 남편 이름으로 무통장 입금을 했는데 입금 미확인으로 떠요. 입금 매칭 확인 부탁드립니다.",
+  "expected_decision": [
+   "답변 초안",
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "입금자명 다름 → 입금 확인 처리 필요",
+  "source": "seed_inquiries.csv INQ_0026",
+  "category": "결제",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S027",
+  "text": "회사 법인카드로 결제했는데 제출용 거래명세서랑 영수증은 어디에서 출력할 수 있나요?",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "법인카드는 매출전표가 증빙(F37)",
+  "source": "seed_inquiries.csv INQ_0027",
+  "category": "결제",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S028",
+  "text": "방금 결제창에서 오류가 나서 다시 눌렀더니 똑같은 금액으로 카드 승인 문자가 두 번 날아왔어요!! 중복 결제된 것 같은데 당장 하나 취소해주세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0028",
+  "category": "결제",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S029",
+  "text": "간편결제로 돈은 이미 빠져나갔는데 주문내역에는 아무것도 안 뜨고 고객센터도 먹통이네요?! 내 돈 날아간 겁니까? 빨리 확인해서 연락 주세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0029",
+  "category": "결제",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S030",
+  "text": "간편결제 종류도 다양하고 할부 혜택이 잘 되어 있어서 결제할 때마다 참 편하고 좋습니다ㅎㅎ",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "감사·칭찬 (담당자 연결이 아니어야 함)",
+  "source": "seed_inquiries.csv INQ_0030",
+  "category": "결제",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S031",
+  "text": "울 니트 가디건 세탁할 때 꼭 드라이클리닝 해야 하나요? 울샴푸로 손세탁해도 줄어들지 않는지 알고 싶어요.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "세탁 방법 (FAQ에 없는 상품 질문)",
+  "source": "seed_inquiries.csv INQ_0031",
+  "category": "상품",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S032",
+  "text": "키 163에 평소 55 입는데 이 슬랙스 M 사이즈 사면 허리 많이 클까요? 그리고 블랙 색상은 언제 재입고되나요?",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "사이즈 추천(FAQ에 일반 안내만) + 재입고(F11)",
+  "source": "seed_inquiries.csv INQ_0032",
+  "category": "상품",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S033",
+  "text": "판매 중인 비타민 유통기한이 최소 언제까지인 상품으로 발송되나요? 선물용이라 최근 제조 상품인지 확인 부탁드립니다.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "유통기한 (FAQ에 없음)",
+  "source": "seed_inquiries.csv INQ_0033",
+  "category": "상품",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S034",
+  "text": "상세페이지에는 분명히 면 100%라고 적어놓고 막상 받아보니 라벨에 폴리에스터 80%라고 적혀있네요?! 이거 완전 허위 과장 광고 아닙니까? 당장 해명하세요!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0034",
+  "category": "상품",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S035",
+  "text": "피부 자극 없다면서 바르자마자 얼굴 전체에 두드러기 나고 뒤집어졌어요!! 병원비 배상하고 당장 책임지세요 화나서 미치겠네 진짜!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0035",
+  "category": "상품",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S036",
+  "text": "이 앰플 두 통째 쓰고 있는데 진짜 인생템이에요ㅎㅎ 단종시키지 말고 평생 팔아주세요!!",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "감사·칭찬 (담당자 연결이 아니어야 함)",
+  "source": "seed_inquiries.csv INQ_0036",
+  "category": "상품",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S037",
+  "text": "회원 탈퇴는 마이페이지 어디에서 할 수 있나요? 탈퇴하면 보유 중인 적립금과 쿠폰도 다 바로 소멸되는지 궁금합니다.",
+  "expected_decision": [
+   "자동 답변"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [
+   "F10"
+  ],
+  "point": "탈퇴 위치·소멸(F10)",
+  "source": "seed_inquiries.csv INQ_0037",
+  "category": "쿠폰·적립금·회원",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S038",
+  "text": "신규 가입 10% 쿠폰이랑 적립금을 같이 쓰려고 하는데 결제창에서 쿠폰 적용이 안 돼요. 최소 주문 금액 조건이 따로 있나요?",
+  "expected_decision": [
+   "자동 답변"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [
+   "F05"
+  ],
+  "point": "쿠폰 조건(F05)",
+  "source": "seed_inquiries.csv INQ_0038",
+  "category": "쿠폰·적립금·회원",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S039",
+  "text": "비밀번호가 기억이 안 나서 5번 틀렸더니 계정이 잠겼다고 나와요. 15분 지났는데도 로그인이 안 되는 것 같은데 확인 좀 해주세요.",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "계정 잠금 (F08 일부)",
+  "source": "seed_inquiries.csv INQ_0039",
+  "category": "쿠폰·적립금·회원",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S040",
+  "text": "휴대폰 번호가 바뀌어서 본인인증 문자를 못 받는데 아이디랑 비밀번호 찾기를 도대체 어떻게 하라는 건가요? 타임세일 쿠폰 날아가게 생겼는데 빨리 좀 풀어주세요!",
+  "expected_decision": [
+   "답변 초안",
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "본인인증 못 받아 계정 찾기 (불만)",
+  "source": "seed_inquiries.csv INQ_0040",
+  "category": "쿠폰·적립금·회원",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S041",
+  "text": "제가 쓴 적도 없는 로그인 알림이 뜨고 내 적립금 5만 원이 다 사라졌어요!! 해킹당한 것 같은데 당장 확인해서 적립금 복구해 놓으세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0041",
+  "category": "쿠폰·적립금·회원",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S042",
+  "text": "생일 축하 쿠폰이랑 등급 적립금 넉넉하게 챙겨주셔서 덕분에 사고 싶었던 코트 저렴하게 잘 샀어요~ 멤버십 혜택 최고네요!",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "감사·칭찬 (담당자 연결이 아니어야 함)",
+  "source": "seed_inquiries.csv INQ_0042",
+  "category": "쿠폰·적립금·회원",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S043",
+  "text": "회사 행사 기념품으로 텀블러 200개 정도 대량 구매하려고 하는데 견적서 발급이나 대량 할인 문의는 어디로 드리면 될까요?",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0043",
+  "category": "기타",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S044",
+  "text": "5만 원 이상 구매 시 파우치 사은품 증정 이벤트 중이던데 별도로 신청 안 해도 조건 맞으면 알아서 같이 오는 건가요?",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0044",
+  "category": "기타",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S045",
+  "text": "방금 작성한 포토리뷰에 오타가 있어서 수정하고 싶은데 수정 버튼이 안 보여요. 어떻게 고치나요?",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0045",
+  "category": "기타",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S046",
+  "text": "10만 원 이상 사면 본품 사은품 준다더니 열어보니 샘플 쪼가리 하나만 들어있네요?! 사기 치는 겁니까? 누락된 사은품 당장 오늘 내로 보내세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0046",
+  "category": "배송",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S047",
+  "text": "고객센터 전화는 왜 수십 통을 걸어도 안 받습니까?! 챗봇만 앵무새처럼 돌리고 사람 장난하는 것도 아니고 당장 상담원 연결하세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0047",
+  "category": "기타",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S048",
+  "text": "늘 믿고 사는 쇼핑몰입니다! 상담원분들도 항상 친절하시고 서비스도 좋아서 주변에 많이 추천하고 있어요 번창하세요~",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0048",
+  "category": "기타",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S049",
+  "text": "주문번호 ORD-2026-1201 제주도인데 추가 배송비가 자동으로 결제됐어요. 혹시 우체국 택배로 보내주시나요? 주말 전에 받을 수 있을지 궁금합니다.",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "배송 조회"
+  ],
+  "expected_faqs": [],
+  "point": "제주 배송비·도착일 (주문번호 있음)",
+  "source": "seed_inquiries.csv INQ_0049",
+  "category": "배송",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S050",
+  "text": "ORD-2026-1205 바지 두 개 시켰는데 오늘 택배 뜯어보니 검정색 하나만 들어있어요;; 나머지 하나는 따로 배송되는 건가요? 송장은 하나만 등록돼 있던데요.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "배송 조회"
+  ],
+  "expected_faqs": [],
+  "point": "일부만 도착 → 주문 확인 필요",
+  "source": "seed_inquiries.csv INQ_0050",
+  "category": "배송",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S051",
+  "text": "집에 아기가 자고 있어서 그러는데 배송 기사님 오실 때 벨 누르지 마시고 문 앞에 조용히 두고 문자만 남겨달라고 배송 메시지에 꼭 좀 전달 부탁드려요.",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "배송 조회"
+  ],
+  "expected_faqs": [],
+  "point": "배송 요청사항 전달 방법(F23)",
+  "source": "seed_inquiries.csv INQ_0051",
+  "category": "배송",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S052",
+  "text": "ORD-2026-1219 공동현관 비밀번호를 잘못 적어서 기사님이 반송 처리하셨대요ㅠㅠ 지금 다시 배부 영업소에 있는 것 같은데 재배달 요청 좀 빨리 해주세요!",
+  "expected_decision": [
+   "답변 초안",
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "배송 조회",
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "반송 재배달 요청 (처리 필요)",
+  "source": "seed_inquiries.csv INQ_0052",
+  "category": "배송",
+  "sentiment": "부정",
+  "order": true
+ },
+ {
+  "id": "S053",
+  "text": "예약배송 상품인 줄 모르고 시켰는데 2주 뒤에나 발송된다고요?? 당장 모레 여행 갈 때 입어야 하는데 왜 제목에 안 적어놓습니까!! 빨리 보내주든가 해결해 주세요!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0053",
+  "category": "배송",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S054",
+  "text": "로켓배송 부럽지 않게 어제 저녁에 시켰는데 오늘 점심에 바로 도착했네요! 옷걸이까지 깔끔하게 걸려서 와서 기분 최고예요ㅎㅎ",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "배송 조회"
+  ],
+  "expected_faqs": [],
+  "point": "감사·칭찬 (담당자 연결이 아니어야 함)",
+  "source": "seed_inquiries.csv INQ_0054",
+  "category": "배송",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S055",
+  "text": "ORD-2026-1230 지금 옥천 허브에서 이틀째 멈춰있는데 택배 파업 지역인가요? 언제쯤 움직이는지 확인 좀 부탁드립니다.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "배송 조회"
+  ],
+  "expected_faqs": [],
+  "point": "허브에서 멈춤 → 배송 조회",
+  "source": "seed_inquiries.csv INQ_0055",
+  "category": "배송",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S056",
+  "text": "사무실로 시켰는데 금요일 오후까지 안 오면 주말에 택배 받을 사람이 없어요. ORD-2026-1244 오늘 출고되었는지 송장번호 좀 알려주세요.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "배송 조회"
+  ],
+  "expected_faqs": [],
+  "point": "출고 여부·송장 확인",
+  "source": "seed_inquiries.csv INQ_0056",
+  "category": "배송",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S057",
+  "text": "냉동식품인데 스티로폼 박스가 다 깨져서 아이스팩도 다 녹은 채로 이틀 만에 도착했어요!! 상해서 냄새나는데 배송 관리를 어떻게 하는 겁니까?!",
+  "expected_decision": [
+   "답변 초안",
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "배송 조회",
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "냉동식품 파손 (불만)",
+  "source": "seed_inquiries.csv INQ_0057",
+  "category": "배송",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S058",
+  "text": "비 오는 날이라 박스 젖을까 봐 비닐로 이중 포장해서 보내주신 센스에 감동했습니다! 택배도 안전하게 잘 받았어요~",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "배송 조회"
+  ],
+  "expected_faqs": [],
+  "point": "감사·칭찬 (담당자 연결이 아니어야 함)",
+  "source": "seed_inquiries.csv INQ_0058",
+  "category": "배송",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S059",
+  "text": "주문번호 ORD-2026-1301입니다. 방금 결제했는데 사이즈를 M이 아니라 L로 잘못 골랐어요. 아직 상품준비중이니까 취소 처리해 주세요 다시 주문할게요.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "주문 취소 요청 (옵션 잘못 고름)",
+  "source": "seed_inquiries.csv INQ_0059",
+  "category": "주문 취소",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S060",
+  "text": "무통장입금으로 주문만 해놓고 입금은 안 한 상태인데요, 자동 취소는 며칠 뒤에 되나요? 그냥 놔두면 알아서 취소되는지 궁금합니다.",
+  "expected_decision": [
+   "자동 답변"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [
+   "F02"
+  ],
+  "point": "입금 기한 지나면 자동 취소(F02)",
+  "source": "seed_inquiries.csv INQ_0060",
+  "category": "주문 취소",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S061",
+  "text": "ORD-2026-1315 배송 지연 안내 문자를 방금 받았는데 그렇게 늦어지면 필요가 없어요. 발송 전이니까 위약금 없이 전체 주문 취소 부탁드립니다.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "전체 취소 요청",
+  "source": "seed_inquiries.csv INQ_0061",
+  "category": "주문 취소",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S062",
+  "text": "ORD-2026-1322 양말이랑 가디건 같이 시켰는데 가디건만 주문 취소하면 무료배송 조건이 깨지잖아요. 이럴 땐 배송비 3천 원만 내면 취소 되나요?",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "부분 취소 배송비 기준(F28)",
+  "source": "seed_inquiries.csv INQ_0062",
+  "category": "주문 취소",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S063",
+  "text": "어제 밤에 분명히 취소 요청 버튼 눌렀는데 오늘 아침에 왜 송장번호가 뜨면서 취소 거절 처리가 됩니까?! 포장도 안 했으면서 강매하는 거에요 지금?? 당장 취소해 내세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0063",
+  "category": "주문 취소",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S064",
+  "text": "해외직구 상품이라 현지 발주 들어가면 취소 수수료 2만 원이 나온다고요?! 주문한 지 30분밖에 안 됐는데 무슨 발주가 벌써 들어갑니까 말도 안 되는 소리 말고 즉시 취소하세요!",
+  "expected_decision": [
+   "답변 초안",
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "티켓 접수",
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "취소 수수료 항의 + 즉시 취소 요구",
+  "source": "seed_inquiries.csv INQ_0064",
+  "category": "주문 취소",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S065",
+  "text": "ORD-2026-1340 주소를 잘못 적어서 일단 주문 취소하고 새로 결제했어요. 이전 주문 건은 출고 안 되게 빠른 취소 승인 부탁드려요!",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "이전 주문 취소 요청",
+  "source": "seed_inquiries.csv INQ_0065",
+  "category": "주문 취소",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S066",
+  "text": "품절이라 취소된다고 문자만 달랑 보내고 일방적으로 주문을 취소해 버리면 어떡합니까?! 일주일 동안 기다린 사람은 뭐가 돼요? 보상 대책 내놓으세요!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "일방 취소 + 보상 요구 → 담당자 (보상 요구)",
+  "source": "seed_inquiries.csv INQ_0066",
+  "category": "주문 취소",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S067",
+  "text": "급하게 취소 요청드렸는데 출고 직전에 택배 더미에서 찾아서 취소 도와주셨다고 들었어요ㅠㅠ 번거로우셨을 텐데 정말 감사합니다!!",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "감사·칭찬 (담당자 연결이 아니어야 함)",
+  "source": "seed_inquiries.csv INQ_0067",
+  "category": "주문 취소",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S068",
+  "text": "선물하기 기능으로 보낸 주문인데 받는 사람이 주소를 아직 입력 안 했어요. 이 상태에서 제가 바로 주문 취소할 수 있나요?",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "선물하기 주문 취소 (FAQ에 일반 취소만)",
+  "source": "seed_inquiries.csv INQ_0068",
+  "category": "주문 취소",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S069",
+  "text": "주문번호 ORD-2026-2101 어제 신발 받아서 실내에서 잠깐 신어봤는데 발볼이 너무 좁네요. 245 사이즈로 교환 신청합니다. 왕복 배송비는 동봉하면 되나요?",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "교환 신청",
+  "source": "seed_inquiries.csv INQ_0069",
+  "category": "교환",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S070",
+  "text": "ORD-2026-2112 코트 지퍼가 처음부터 뻑뻑해서 안 올라가요. 불량 상품이니까 배송비 부담 없이 새 상품으로 맞교환 접수해 주세요.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "불량 맞교환 접수 요청",
+  "source": "seed_inquiries.csv INQ_0070",
+  "category": "교환",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S071",
+  "text": "동일 상품 색상 교환만 되나요, 아니면 차액 결제하고 아예 다른 디자인의 바지로 교환하는 것도 가능한가요?",
+  "expected_decision": [
+   "자동 답변"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [
+   "F19"
+  ],
+  "point": "다른 상품은 반품 후 재주문(F19)",
+  "source": "seed_inquiries.csv INQ_0071",
+  "category": "교환",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S072",
+  "text": "ORD-2026-2130 교환 수거 신청해 놨는데 택배 기사님이 언제 오시는지 연락이 없어요. 그냥 편의점 택배로 제가 직접 보내도 되나요?",
+  "expected_decision": [
+   "답변 초안",
+   "자동 답변"
+  ],
+  "expected_tool": [
+   "티켓 접수",
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "교환 수거 지연 + 직접 보내도 되는지",
+  "source": "seed_inquiries.csv INQ_0072",
+  "category": "교환",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S073",
+  "text": "아니 불량이라서 교환 신청했더니 새로 보내준 상품도 똑같이 실밥이 다 터져있네요?! 두 번이나 불량을 보내면 어쩌라는 겁니까!! 제대로 검수된 걸로 오늘 당장 퀵으로라도 보내세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0073",
+  "category": "교환",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S074",
+  "text": "교환 신청할 때는 분명히 재고 있다고 해서 택배비까지 다 입금했는데, 이제 와서 품절이라 교환이 안 된다니요?! 사람 기만하는 것도 아니고 빨리 재고 구해오세요!",
+  "expected_decision": [
+   "담당자 연결",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "상담원 이관",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "품절로 교환 불가 항의 (강한 불만)",
+  "source": "seed_inquiries.csv INQ_0074",
+  "category": "교환",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S075",
+  "text": "ORD-2026-2155 아이보리로 교환 요청드렸는데 생각해보니 그냥 원래 시켰던 네이비로 입을게요. 아직 수거 전인데 교환 접수 취소 부탁드립니다.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "교환 접수 취소 요청",
+  "source": "seed_inquiries.csv INQ_0075",
+  "category": "교환",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S076",
+  "text": "바지 기장 수선을 이미 맡겨버렸는데 세탁해보니 물빠짐이 너무 심해요! 이건 원단 불량이니까 수선했어도 새 상품으로 교환해 주셔야 하는 거 아닌가요?!",
+  "expected_decision": [
+   "담당자 연결",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "상담원 이관",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "수선한 상품 교환 요구 (예외 처리)",
+  "source": "seed_inquiries.csv INQ_0076",
+  "category": "교환",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S077",
+  "text": "결혼식 하객룩으로 입으려고 급하게 사이즈 교환 부탁드렸는데, 입고되자마자 당일 발송으로 챙겨주셔서 무사히 입었습니다! 정말 감사해요ㅎㅎ",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "감사·칭찬 (담당자 연결이 아니어야 함)",
+  "source": "seed_inquiries.csv INQ_0077",
+  "category": "교환",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S078",
+  "text": "교환 보내실 때 처음에 왔던 옷걸이랑 더스트백도 그대로 다 넣어서 보내드려야 하나요? 비닐 포장지는 찢어져서 다른 봉투에 넣었어요.",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "교환 보낼 때 구성품 (FAQ에 없음)",
+  "source": "seed_inquiries.csv INQ_0078",
+  "category": "교환",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S079",
+  "text": "주문번호 ORD-2026-2201입니다. 두 개 시킨 것 중에 티셔츠 하나만 반품하고 싶은데 부분 반품 신청은 마이페이지 어디서 하나요?",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "부분 반품 신청 방법",
+  "source": "seed_inquiries.csv INQ_0079",
+  "category": "반품·환불",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S080",
+  "text": "ORD-2026-2215 반품 상품이 물류센터에 화요일에 도착했다고 조회되는데 아직도 검수 중으로만 뜨네요. 환불 처리는 언제 완료되나요?",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0080",
+  "category": "반품·환불",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S081",
+  "text": "무통장입금으로 결제했던 주문(ORD-2026-2230) 반품 신청했는데요, 환불받을 계좌번호는 어디에 입력하면 되나요? 국민은행으로 받고 싶습니다.",
+  "expected_decision": [
+   "답변 초안",
+   "자동 답변"
+  ],
+  "expected_tool": [
+   "티켓 접수",
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "환불 계좌 입력 위치 (주문 있음)",
+  "source": "seed_inquiries.csv INQ_0081",
+  "category": "반품·환불",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S082",
+  "text": "초기 배송비 무료 상품이었는데 반품하니까 왜 3천 원이 아니라 6천 원을 차감하고 환불해 주나요? 계산 기준 좀 알려주세요.",
+  "expected_decision": [
+   "자동 답변"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "반품 배송비 6,000원 기준(F17·F35)",
+  "source": "seed_inquiries.csv INQ_0082",
+  "category": "반품·환불",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S083",
+  "text": "누가 입던 옷에 향수 냄새가 진동을 하고 머리카락까지 붙어있는 걸 새 옷이라고 보냈습니까?! 사진 다 찍어놨으니까 반품 배송비고 뭐고 당장 100% 전액 환불하세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0083",
+  "category": "반품·환불",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S084",
+  "text": "택도 안 떼고 시착만 해봤는데 옷에서 담배 냄새가 난다며 반품 불가 판정을 내리고 착불로 다시 돌려보내요?! 완전 블랙컨슈머 취급하네 소비자원에 고발하겠습니다!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0084",
+  "category": "반품·환불",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S085",
+  "text": "ORD-2026-2260 카드 취소 완료됐다고 문자는 왔는데 카드사 앱에서 보면 아직도 결제 내역이 그대로 살아있어요. 영업일 기준 며칠이나 더 걸리나요?",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0085",
+  "category": "반품·환불",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S086",
+  "text": "환불해 준다면서 현금으로 안 주고 왜 멋대로 쇼핑몰 예치금으로 환불해 놓습니까?! 다시는 여기서 안 살 거니까 내 통장으로 당장 현금 입금하세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0086",
+  "category": "반품·환불",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S087",
+  "text": "반품 택배비 차감 기능 덕분에 따로 계좌이체 안 해도 돼서 너무 편하네요! 환불 안내 알림톡도 단계별로 잘 와서 안심됐습니다.",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "감사·칭찬 (담당자 연결이 아니어야 함)",
+  "source": "seed_inquiries.csv INQ_0087",
+  "category": "반품·환불",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S088",
+  "text": "ORD-2026-2299 세트 상품으로 구매한 트레이닝복인데 상의만 맘에 안 들어서 상의만 반품하고 하의는 입으려고요. 부분 환불 가능한가요?",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "티켓 접수"
+  ],
+  "expected_faqs": [],
+  "point": "부분 환불 가능 여부",
+  "source": "seed_inquiries.csv INQ_0088",
+  "category": "반품·환불",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S089",
+  "text": "결제 수단을 무통장입금에서 신용카드 할부 결제로 변경하고 싶은데 주문서 수정이 되나요, 아니면 취소 후 재결제해야 하나요?",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "결제 수단 변경 (FAQ에 없음)",
+  "source": "seed_inquiries.csv INQ_0089",
+  "category": "결제",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S090",
+  "text": "이번 달 5만 원 이상 결제 시 무이자 할부 적용되는 카드사가 어디 어디인지 안내 페이지가 안 보여요. 현대카드 3개월 무이자 되나요?",
+  "expected_decision": [
+   "자동 답변"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [
+   "F03"
+  ],
+  "point": "무이자 할부 안내 위치(F03)",
+  "source": "seed_inquiries.csv INQ_0090",
+  "category": "결제",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S091",
+  "text": "주문번호 ORD-2026-3102입니다. 사업자 지출증빙용 현금영수증으로 신청한다는 걸 소득공제용으로 잘못 눌렀어요. 사업자번호로 변경 발급 부탁드립니다.",
+  "expected_decision": [
+   "답변 초안",
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "현금영수증 변경 발급 요청 (처리 필요)",
+  "source": "seed_inquiries.csv INQ_0091",
+  "category": "결제",
+  "sentiment": "중립",
+  "order": true
+ },
+ {
+  "id": "S092",
+  "text": "무통장입금할 때 백 원 단위를 실수로 빼먹고 49,000원만 입금했어요ㅠㅠ 나머지 500원 지금 추가 입금하면 자동으로 입금 확인 처리되나요?",
+  "expected_decision": [
+   "답변 초안",
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "추가 입금 확인 (주문별 처리)",
+  "source": "seed_inquiries.csv INQ_0092",
+  "category": "결제",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S093",
+  "text": "앱에서 카카오페이로 결제 누르면 흰 화면만 뜨고 30분째 먹통입니다!! 오늘 자정까지 결제해야 할인받는데 결제 오류 빨리 안 고칩니까?!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0093",
+  "category": "결제",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S094",
+  "text": "분명히 주문 실패라고 떠서 다시 결제했는데 통장에서 돈이 두 번 빠져나갔어요!! 고객센터는 전화도 안 받고 내 돈 당장 돌려내세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0094",
+  "category": "결제",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S095",
+  "text": "해외에 거주 중이라 해외 발급 비자(VISA) 카드로 결제하려고 하는데 계속 승인 거절이 나네요. 해외 카드는 결제가 안 되는 시스템인가요?",
+  "expected_decision": [
+   "자동 답변"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [
+   "F04"
+  ],
+  "point": "해외 카드 미지원(F04)",
+  "source": "seed_inquiries.csv INQ_0095",
+  "category": "결제",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S096",
+  "text": "세금계산서 발행 요청드린 지가 일주일이 넘었는데 경리팀에서 아직도 안 들어왔다고 난리입니다! 오늘 오전까지 국세청 전송 안 해주면 거래 끊겠습니다!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0096",
+  "category": "결제",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S097",
+  "text": "토스페이 원터치 결제 연동되어 있어서 비밀번호 한 번만 누르면 1초 만에 결제되니까 진짜 편하네요! 자주 애용하겠습니다~",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "감사·칭찬 (담당자 연결이 아니어야 함)",
+  "source": "seed_inquiries.csv INQ_0097",
+  "category": "결제",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S098",
+  "text": "에스크로(구매안전서비스) 적용해서 계좌이체 결제하고 싶은데 결제창 어디에서 체크하면 되는지 알려주세요.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "에스크로 (FAQ에 없음)",
+  "source": "seed_inquiries.csv INQ_0098",
+  "category": "결제",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S099",
+  "text": "모델분이 착용하신 코트 색상이 아이보리인가요 오트밀인가요? 그리고 키 160이면 기장이 무릎 아래로 얼마나 내려오는지 궁금해요.",
+  "expected_decision": [
+   "답변 초안",
+   "자동 답변"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "모델 착용 색상·기장 (상품별 정보)",
+  "source": "seed_inquiries.csv INQ_0099",
+  "category": "상품",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S100",
+  "text": "임산부가 바르기에 안전한 화장품인가요? 레티놀이나 살리실산 같은 주의 성분이 들어있는지 전성분 표기 좀 확인해 주세요.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "화장품 성분 (상품별 정보)",
+  "source": "seed_inquiries.csv INQ_0100",
+  "category": "상품",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S101",
+  "text": "품절된 린넨 자켓 베이지 M 사이즈 재입고 알림 신청해 뒀는데, 이번 주 안에는 들어오나요? 아예 재생산 계획이 없는 건지 알고 싶습니다.",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [
+   "F11"
+  ],
+  "point": "재입고 일정(F11), 재생산 계획은 FAQ에 없음",
+  "source": "seed_inquiries.csv INQ_0101",
+  "category": "상품",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S102",
+  "text": "이 프라이팬 인덕션(IH)에서도 사용 가능한 제품 맞나요? 바닥 자성 인덕션 겸용인지 상세페이지에 안 나와 있어서 문의 남깁니다.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "인덕션 사용 가능 (상품별 정보)",
+  "source": "seed_inquiries.csv INQ_0102",
+  "category": "상품",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S103",
+  "text": "한 번 빨았는데 검은색 물이 다 빠져서 같이 세탁한 흰 옷들까지 전부 망가졌어요!! 물빠짐 없다고 광고하더니 세탁소 비용까지 다 물어내세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "물빠짐 피해 배상 요구 → 담당자 (보상 요구)",
+  "source": "seed_inquiries.csv INQ_0103",
+  "category": "상품",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S104",
+  "text": "강아지 간식 뜯자마자 파란 곰팡이가 피어있는데 이걸 먹이라고 파는 겁니까?! 유통기한은 내년까지던데 당장 식약처에 신고하겠습니다!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0104",
+  "category": "상품",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S105",
+  "text": "가방 스트랩 길이가 조절이 되는 형태인가요? 그리고 내부에 15인치 노트북이 들어갈 만큼 수납공간이 넉넉한지 실측 사이즈 알려주세요.",
+  "expected_decision": [
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "가방 실측 (상품별 정보)",
+  "source": "seed_inquiries.csv INQ_0105",
+  "category": "상품",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S106",
+  "text": "정품 맞습니까 이거?? 백화점에서 산 거랑 로고 폰트도 다르고 박음질이 완전 조잡한데 가품 팔아먹는 거면 고소합니다 정품 인증서 당장 올리세요!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0106",
+  "category": "상품",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S107",
+  "text": "기대 안 하고 샀는데 원단이 백화점 브랜드 못지않게 탄탄하고 핏이 예술이네요!! 깔별로 쟁여두려고 두 개 더 주문했습니다 대박 나세요!",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "감사·칭찬 (담당자 연결이 아니어야 함)",
+  "source": "seed_inquiries.csv INQ_0107",
+  "category": "상품",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S108",
+  "text": "선물 포장 옵션이 따로 없던데 쇼핑백이나 선물용 케이스가 기본으로 동봉되어 오는 상품인가요?",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0108",
+  "category": "기타",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S109",
+  "text": "포토리뷰 작성하면 2,000원 적립금 준다고 되어 있는데, 어제 올렸는데 아직 안 들어왔어요. 지급 기준일이 따로 있나요?",
+  "expected_decision": [
+   "자동 답변"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [
+   "F06"
+  ],
+  "point": "리뷰 적립금 3영업일(F06)",
+  "source": "seed_inquiries.csv INQ_0109",
+  "category": "쿠폰·적립금·회원",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S110",
+  "text": "카카오톡 간편 가입으로 로그인했는데 기존에 쓰던 일반 아이디랑 계정 통합이 가능한가요? 적립금을 하나로 합치고 싶어요.",
+  "expected_decision": [
+   "답변 초안",
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "계정 통합 (FAQ에 없음)",
+  "source": "seed_inquiries.csv INQ_0110",
+  "category": "쿠폰·적립금·회원",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S111",
+  "text": "주문 취소하면 그때 사용했던 생일 20% 할인 쿠폰과 적립금은 바로 다시 살아나나요? 유효기간이 오늘까지라 걱정돼서요.",
+  "expected_decision": [
+   "자동 답변"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [
+   "F41"
+  ],
+  "point": "취소 시 쿠폰·적립금(F41)",
+  "source": "seed_inquiries.csv INQ_0111",
+  "category": "쿠폰·적립금·회원",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S112",
+  "text": "개명을 해서 회원 정보의 이름을 바꾸려고 하는데 마이페이지에서는 수정이 안 되네요. 본인인증 다시 해서 이름 변경하는 방법 알려주세요.",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "이름 변경 (F39 일부)",
+  "source": "seed_inquiries.csv INQ_0112",
+  "category": "쿠폰·적립금·회원",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S113",
+  "text": "선착순 반값 쿠폰 받으려고 10시부터 대기 타서 정각에 눌렀는데 서버 터져서 접속도 안 되더니 1초 만에 마감이라니요?! 고객들 우롱하는 이딴 이벤트 당장 치우세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0113",
+  "category": "쿠폰·적립금·회원",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S114",
+  "text": "아무런 사전 안내 문자도 없이 내 적립금 3만 원을 유효기간 만료라며 멋대로 소멸시켜 버리면 어떡합니까?! 피 같은 내 돈 당장 원상복구 해놓으세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0114",
+  "category": "쿠폰·적립금·회원",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S115",
+  "text": "광고성 문자랑 이메일 수신 거부를 분명히 체크 해제했는데 왜 아침마다 스팸 카톡이 날아오나요? 즉시 수신 거부 처리 좀 해주세요.",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0115",
+  "category": "기타",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S116",
+  "text": "회원 탈퇴 버튼은 왜 꽁꽁 숨겨놔서 사람 열받게 합니까?! 탈퇴 신청하려니까 진행 중인 주문이 다 끝난 지가 언제인데 탈퇴가 안 된다고 떠요 당장 탈퇴 처리하세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 긴급도 높음 → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0116",
+  "category": "쿠폰·적립금·회원",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S117",
+  "text": "출석체크 이벤트랑 룰렛 적립금이 진짜 쏠쏠해서 매일 들어오게 되네요ㅎㅎ 모아둔 포인트로 이번 달에도 반값에 득템했습니다!",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색",
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "감사·칭찬 (담당자 연결이 아니어야 함)",
+  "source": "seed_inquiries.csv INQ_0117",
+  "category": "쿠폰·적립금·회원",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S118",
+  "text": "친구 추천인 코드 입력하고 가입했는데 추천인 적립금은 첫 구매 확정이 끝나야 들어오는 건가요?",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "추천인 적립금 시기 (FAQ에 없음, F06 일부)",
+  "source": "seed_inquiries.csv INQ_0118",
+  "category": "쿠폰·적립금·회원",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S119",
+  "text": "오프라인 팝업스토어나 직접 입어볼 수 있는 쇼룸 매장이 서울에 있는지 위치랑 영업시간 좀 알려주세요.",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0119",
+  "category": "기타",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S120",
+  "text": "산 지 두 달 된 가방인데 어깨끈 버클이 부러졌어요. 유상이라도 수선(A/S) 접수가 가능한지, 어디로 보내야 하는지 문의드립니다.",
+  "expected_decision": [
+   "자동 답변",
+   "답변 초안"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [],
+  "point": "AS 방법(F13)",
+  "source": "seed_inquiries.csv INQ_0120",
+  "category": "상품",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S121",
+  "text": "유튜브 패션 크리에이터인데 귀사 신상품 협찬 및 브랜디드 콘텐츠 제휴 제안을 드리고 싶습니다. 마케팅 담당자님 이메일 주소 알 수 있을까요?",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0121",
+  "category": "기타",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S122",
+  "text": "모바일 앱에서 장바구니 담기 버튼을 누르면 자꾸 앱이 강제 종료돼요. 아이폰 최신 버전인데 앱 업데이트 확인 좀 부탁드립니다.",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0122",
+  "category": "기타",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S123",
+  "text": "솔직하게 별점 1점짜리 불만 리뷰 남겼더니 관리자 마음대로 내 리뷰를 비공개 블라인드 처리해 버리네요?! 불리한 후기는 다 지우고 여론 조작합니까?!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0123",
+  "category": "기타",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S124",
+  "text": "상담원 연결 누르고 40분째 대기음만 듣다가 끊겼습니다!! 게시판 글도 이틀째 안 읽고 회사가 망한 겁니까? 당장 내 번호로 전화 주세요!!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0124",
+  "category": "기타",
+  "sentiment": "부정"
+ },
+ {
+  "id": "S125",
+  "text": "환경 생각해서 비닐 대신 종이 완충재랑 테이프 없는 친환경 박스로 포장해 주시는 점이 너무 인상 깊고 멋집니다! 앞으로도 응원할게요~",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0125",
+  "category": "기타",
+  "sentiment": "긍정"
+ },
+ {
+  "id": "S126",
+  "text": "인스타그램 라이브 방송 당첨자 발표는 언제 어디에 올라오나요? 당첨되면 개별 DM을 주시는지 궁금합니다.",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0126",
+  "category": "기타",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S127",
+  "text": "해외 배송(EMS)으로도 발송해 주시나요? 미국에 있는 가족에게 바로 보내고 싶은데 해외 배송 지원 여부가 궁금합니다.",
+  "expected_decision": [
+   "자동 답변"
+  ],
+  "expected_tool": [
+   "FAQ 검색"
+  ],
+  "expected_faqs": [
+   "F21"
+  ],
+  "point": "해외 배송 미지원(F21)",
+  "source": "seed_inquiries.csv INQ_0127",
+  "category": "배송",
+  "sentiment": "중립"
+ },
+ {
+  "id": "S128",
+  "text": "어제 전화 상담해주신 여성 상담원분 성함을 못 여쭤봤는데, 복잡한 문제를 끝까지 자기 일처럼 알아봐 주셔서 정말 감동받았습니다. 꼭 칭찬 전달 부탁드려요!",
+  "expected_decision": [
+   "담당자 연결"
+  ],
+  "expected_tool": [
+   "상담원 이관"
+  ],
+  "expected_faqs": [],
+  "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+  "source": "seed_inquiries.csv INQ_0128",
+  "category": "기타",
+  "sentiment": "긍정"
+ }
+]

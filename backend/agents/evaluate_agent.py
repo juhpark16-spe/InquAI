@@ -9,6 +9,7 @@ LangGraph로 옮기기 전과 후에 같은 명령으로 돌려 "구조만 바�
     python -m backend.agents.evaluate_agent --engine tfidf          # 옛 검색과 비교
     python -m backend.agents.evaluate_agent --label after-langgraph # 결과 파일 이름 뒤에 붙일 말
     python -m backend.agents.evaluate_agent --repeat 3              # 같은 사례를 3번 (LLM 답이 매번 조금씩 달라서)
+    python -m backend.agents.evaluate_agent --cases data/test/agent_cases_seed.json --label seed   # 확장 세트 128건 (4주차)
 
 LLM은 같은 문장에도 가끔 다르게 판단합니다 (예: P10이 4번 중 1번 자동 답변). 그래서 비교할 때는 --repeat 3 이상으로
 돌려 전체 정확도와 사례별 통과 횟수를 봅니다.
@@ -22,6 +23,7 @@ LLM은 같은 문장에도 가끔 다르게 판단합니다 (예: P10이 4번 �
 import argparse
 import json
 import os
+import re
 import sys
 import tempfile
 import time
@@ -33,6 +35,8 @@ ROOT = Path(__file__).resolve().parents[2]
 CASES = ROOT / "data" / "test" / "prompt_cases.json"
 OUT_DIR = ROOT / "evaluation"
 EVAL_EMAIL = "agent-eval@example.com"
+# 확장 세트 문장의 주문번호 표기 (예: ORD-2026-1042) → 평가 DB의 실제 모의 주문번호로 바꿈
+ORDER_TEXT = re.compile(r"ORD-\d{4}-\d{4}")
 
 CHECKS = [  # (키, 이름, 목표)
     ("decision", "처리 방식 정확도", "대부분 (1주차 기준 23/23)"),
@@ -132,6 +136,8 @@ def main() -> None:
     p.add_argument("--engine", default="kure", choices=["kure", "tfidf"], help="FAQ 검색 방식")
     p.add_argument("--label", default="", help="결과 파일 이름 뒤에 붙일 말 (예: after-langgraph)")
     p.add_argument("--only", nargs="*", help="일부 사례만 (예: P09 P18)")
+    p.add_argument("--cases", default=str(CASES),
+                   help="사례 파일 (기본: prompt_cases.json 23건, 확장: data/test/agent_cases_seed.json 128건)")
     p.add_argument("--trace", action="store_true",
                    help="LangSmith에 기록 (프로젝트 inquai-eval, 개인정보 가림). 직접 작성한 사례에만 쓰고 AI Hub 데이터에는 쓰지 않음")
     p.add_argument("--repeat", type=int, default=1, help="같은 사례를 몇 번 돌릴지 (LLM 판단이 흔들리는지 확인)")
@@ -158,7 +164,7 @@ def main() -> None:
         print("LangSmith 기록: 프로젝트 inquai-eval")
     if not settings.openai_api_key:
         raise SystemExit(".env 에 OPENAI_API_KEY 가 필요합니다.")
-    cases = json.loads(CASES.read_text(encoding="utf-8"))
+    cases = json.loads(Path(args.cases).read_text(encoding="utf-8"))
     if args.only:
         cases = [c for c in cases if c["id"] in args.only]
 
@@ -170,12 +176,21 @@ def main() -> None:
         seed_data.seed_faqs(db)
         seed_data.seed_orders(db, reset=False)
         db.commit()
+        # "order": true 인 사례는 모의 주문 하나를 차례로 붙임 → 주문번호·주문 고객 이메일로 본인 확인이 되는 경로까지 평가
+        from sqlalchemy import select
+        from backend.database.models import Order
+        orders = db.scalars(select(Order).order_by(Order.id)).all()
+        order_of = {c["id"]: orders[i % len(orders)] for i, c in enumerate(c for c in cases if c.get("order"))}
         runs = [(r, n, case) for r in range(1, args.repeat + 1) for n, case in enumerate(cases, start=1)]
         for run, n, case in runs:
-            analysis = analyzer.analyze(case["text"])
+            order = order_of.get(case["id"])
+            text = ORDER_TEXT.sub(order.order_number, case["text"]) if order else case["text"]
+            analysis = analyzer.analyze(text)
             analysis.update(case.get("override", {}))   # 예: 확신도를 0.55로 강제 (규칙 확인용)
-            inquiry = Inquiry(inquiry_number=f"INQ-EVAL-{run}-{n:04d}", customer_name="평가", customer_email=EVAL_EMAIL,
-                              title=case["text"][:30], content=case["text"], status="접수", privacy_agreed_at=utcnow())
+            inquiry = Inquiry(inquiry_number=f"INQ-EVAL-{run}-{n:04d}", customer_name="평가",
+                              customer_email=order.customer.email if order else EVAL_EMAIL,
+                              order_number=order.order_number if order else None,
+                              title=text[:30], content=text, status="접수", privacy_agreed_at=utcnow())
             db.add(inquiry)
             db.flush()
             t0 = time.monotonic()

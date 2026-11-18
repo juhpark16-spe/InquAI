@@ -121,6 +121,27 @@ def decide_by_rule(route: str, urgency: str, confidence: float):
     return None
 
 
+def check_tool(plan: dict, route: str) -> dict:
+    """LLM이 고른 도구가 처리 방식·처리 경로에 허용된 도구인지 확인하고, 아니면 표대로 바꿉니다 (기획서 2-2의 4번).
+
+    - 자동 답변 → FAQ 검색 / 담당자 연결 → 상담원 이관
+    - 답변 초안 → 처리 경로의 도구(조회형 배송 조회, 접수형 티켓 접수, FAQ형 FAQ 검색) 또는 FAQ 검색
+    예) 결제 문의(FAQ형) 초안에 LLM이 '티켓 접수'를 고르면 FAQ 검색으로 (티켓은 취소·교환·환불용).
+    바꾸면 판단 이유에 남깁니다.
+    """
+    decision, tool = plan["decision"], plan["tool"]
+    if decision == "자동 답변":
+        allowed, default = {"FAQ 검색"}, "FAQ 검색"
+    elif decision == "담당자 연결":
+        allowed, default = {"상담원 이관"}, "상담원 이관"
+    else:
+        default = ROUTE_TOOL.get(route, "FAQ 검색")
+        allowed = {default, "FAQ 검색"}
+    if tool in allowed:
+        return plan
+    return {**plan, "tool": default, "reason": f"{plan['reason']} / 도구 확인: {tool} → {default} (처리 경로 {route})"}
+
+
 def format_route_input(text, analysis, faqs) -> str:
     faq_lines = "\n".join(f"[{f['id']}] ({f['category']}, 유사도 {f['score']:.2f}) Q: {f['question']} A: {f['answer']}"
                           for f in faqs)
