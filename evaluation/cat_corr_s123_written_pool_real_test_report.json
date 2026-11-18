@@ -2,18 +2,18 @@
   "model_dir": "models/category_corr_s123",
   "test_file": "data/test/written_pool.csv",
   "num_samples": 120,
-  "accuracy": 0.9666666666666667,
-  "macro_f1": 0.966582992345993,
+  "accuracy": 0.975,
+  "macro_f1": 0.974664309550294,
   "accuracy_by_difficulty": {
-    "보통": 0.9705882352941176,
+    "보통": 0.9803921568627451,
     "애매": 0.9444444444444444
   },
-  "avg_latency_ms": 13.70955749953282,
+  "avg_latency_ms": 46.824017502513016,
   "classification_report": {
     "배송": {
-      "precision": 0.9333333333333333,
-      "recall": 0.9333333333333333,
-      "f1-score": 0.9333333333333333,
+      "precision": 0.9375,
+      "recall": 1.0,
+      "f1-score": 0.967741935483871,
       "support": 15.0
     },
     "주문 취소": {
@@ -35,9 +35,9 @@
       "support": 15.0
     },
     "결제": {
-      "precision": 0.8823529411764706,
+      "precision": 0.9375,
       "recall": 1.0,
-      "f1-score": 0.9375,
+      "f1-score": 0.967741935483871,
       "support": 15.0
     },
     "상품": {
@@ -58,17 +58,17 @@
       "f1-score": 0.9655172413793104,
       "support": 15.0
     },
-    "accuracy": 0.9666666666666667,
+    "accuracy": 0.975,
     "macro avg": {
-      "precision": 0.9691482843137256,
-      "recall": 0.9666666666666667,
-      "f1-score": 0.966582992345993,
+      "precision": 0.9765625,
+      "recall": 0.9750000000000001,
+      "f1-score": 0.974664309550294,
       "support": 120.0
     },
     "weighted avg": {
-      "precision": 0.9691482843137255,
-      "recall": 0.9666666666666667,
-      "f1-score": 0.9665829923459929,
+      "precision": 0.9765625,
+      "recall": 0.975,
+      "f1-score": 0.9746643095502939,
       "support": 120.0
     }
   },
@@ -85,11 +85,11 @@
     ],
     "matrix": [
       [
-        14,
+        15,
         0,
         0,
         0,
-        1,
+        0,
         0,
         0,
         0
@@ -168,28 +168,22 @@
   },
   "errors": [
     {
-      "text": "어제 결제한 운동화 오늘 출발했나요?",
-      "category": "배송",
-      "pred": "결제",
-      "confidence": 0.781
-    },
-    {
       "text": "주문 취소하면 카드 결제는 언제 풀려요",
       "category": "주문 취소",
       "pred": "결제",
-      "confidence": 0.8598
+      "confidence": 0.8935
     },
     {
       "text": "취소했는데 적립금으로 돌려받나요 카드로 돌려받나요",
       "category": "주문 취소",
       "pred": "쿠폰·적립금·회원",
-      "confidence": 0.8468
+      "confidence": 0.8717
     },
     {
       "text": "선물 포장 해 주시나요",
       "category": "기타",
       "pred": "배송",
-      "confidence": 0.7261
+      "confidence": 0.9327
     }
   ]
 }
