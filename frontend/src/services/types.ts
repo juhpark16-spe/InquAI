@@ -229,3 +229,33 @@ export interface FaqSearchTest {
   suggest_min_score: number | null;
   hits: { code: string; category: string; question: string; score: number; suggested: boolean }[];
 }
+
+// ---- AI 실행 로그 ----
+export interface AgentLogRow extends AgentLog {
+  inquiry_id: number;
+  inquiry_number: string;
+  inquiry_title: string;
+  inquiry_status: string;
+  category: string;
+  confidence: number;
+}
+
+export interface AgentLogPage {
+  total: number;
+  page: number;
+  size: number;
+  summary: {
+    count: number;
+    by_decision: Record<string, number>;
+    by_decided_by: Record<string, number>;
+    by_tool: Record<string, { count: number; failed: number }>;
+    errors: number;
+    tool_failures: number;
+    low_confidence: number;
+    avg_latency_ms: number | null;
+    max_latency_ms: number | null;
+    tokens: { input: number; output: number; calls: number };
+  };
+  items: AgentLogRow[];
+  faq_titles: Record<string, string>;
+}

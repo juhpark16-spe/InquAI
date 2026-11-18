@@ -5,7 +5,7 @@
 import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 
 import type {
-  FaqAdmin, FaqPublic, FaqSearchTest, InquiryCreate, ResponseItem, InquiryCreated, InquiryDetail, InquiryListItem, InquiryPublic, InquiryState, Page, Role, User,
+  AgentLogPage, FaqAdmin, FaqPublic, FaqSearchTest, InquiryCreate, ResponseItem, InquiryCreated, InquiryDetail, InquiryListItem, InquiryPublic, InquiryState, Page, Role, User,
   UserDetail,
 } from "./types";
 
@@ -153,7 +153,7 @@ export interface StatsSummary {
   staff: { id: number; display_name: string; role: string; open: number; urgent_open: number }[];
 }
 
-function kstDate(offsetDays = 0): string {
+export function kstDate(offsetDays = 0): string {
   const d = new Date(Date.now() + 9 * 3600 * 1000 - offsetDays * 86400 * 1000);
   return d.toISOString().slice(0, 10);
 }
@@ -193,4 +193,13 @@ export const faqApi = {
   update: (id: number, body: FaqInput & { is_active: boolean }) => http.put<FaqAdmin>(`/faqs/${id}`, body).then((r) => r.data),
   deactivate: (id: number) => http.delete<FaqAdmin>(`/faqs/${id}`).then((r) => r.data),
   searchTest: (q: string) => http.get<FaqSearchTest>("/faqs/search-test", { params: { q } }).then((r) => r.data),
+};
+
+// ---- AI 실행 로그 (관리자 전체, 상담원은 배정된 문의만) ----
+export interface AgentLogFilters {
+  decision?: string; decided_by?: string; selected_tool?: string; tool_success?: string; problem?: string;
+  inquiry_id?: number; from?: string; to?: string; page?: number; size?: number;
+}
+export const agentLogApi = {
+  list: (filters: AgentLogFilters) => http.get<AgentLogPage>("/admin/agent-logs", { params: filters }).then((r) => r.data),
 };

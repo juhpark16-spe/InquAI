@@ -404,9 +404,28 @@
 - 문의 목록 API 항목에 `confidence`(AI 유형 분류 확신도 0~1)를 추가했습니다. 목록의 확신도 막대에 씁니다 (0.8 미만 = 담당자 확인).
 
 ### GET /api/admin/agent-logs — AI 실행 로그 (관리자, 상담원은 배정된 문의만)
-파라미터: `inquiry_id`, `decision`, `selected_tool`, `tool_success`, `from`, `to`
+구현: `backend/api/agent_logs.py`, 화면 `/admin/agent-logs` (4주차)
+
+파라미터: `inquiry_id`, `decision`, `decided_by`(규칙 / LLM), `selected_tool`, `tool_success`, `problem`(true: 오류·도구 실패·확신도 0.8 미만만), `from`, `to` (KST 날짜, 최대 92일), `page`, `size`(1~100, 기본 30)
 - `decision`: 자동 답변 / 답변 초안 / 담당자 연결
 - `selected_tool`: FAQ 검색 / 배송 조회 / 티켓 접수 / 상담원 이관 (값은 `backend/ai/prompts.py`의 `DECISIONS`, `TOOLS`와 같음)
+```json
+{ "total": 51, "page": 1, "size": 30,
+  "summary": { "count": 51, "by_decision": { "자동 답변": 22, "답변 초안": 8, "담당자 연결": 21 },
+               "by_decided_by": { "LLM": 39, "규칙": 12 },
+               "by_tool": { "FAQ 검색": { "count": 27, "failed": 0 }, "배송 조회": { "count": 2, "failed": 2 } },
+               "errors": 0, "tool_failures": 2, "low_confidence": 1,
+               "avg_latency_ms": 4100, "max_latency_ms": 8500,      // LLM이 판단한 실행만 (규칙 판단은 0초)
+               "tokens": { "input": 52000, "output": 21000, "calls": 80 } },
+  "items": [ { "id": 51, "created_at": "...", "inquiry_id": 51, "inquiry_number": "INQ-20261117-0004",
+               "inquiry_title": "...", "inquiry_status": "자동 처리", "category": "배송", "confidence": 0.97,
+               "decision": "자동 답변", "decided_by": "LLM", "selected_tool": "FAQ 검색", "tool_success": true,
+               "retrieved_faqs": [["F21", 0.74]], "used_faq_ids": ["F21"], "steps": ["FAQ 검색", "규칙 판단", "LLM 판단"],
+               "reason": "...", "response_text": "...", "llm_model": "...", "tokens": {...}, "latency_ms": 3900,
+               "trace_url": "https://smith.langchain.com/...", "tool_output": {...}, "error": null } ],
+  "faq_titles": { "F21": "해외로도 배송되나요?" } }
+```
+- `summary`는 필터에 맞는 **전체** 실행의 합계입니다 (현재 페이지만이 아님). 최신순 정렬.
 - 성공 지표 "도구 선택 정확도"는 정답 도구를 붙인 테스트 문의(`data/test/prompt_cases.json`)를 등록한 뒤 이 로그의 `selected_tool`과 비교해 계산합니다.
 
 ### GET /api/admin/audit-logs — 작업 기록 (관리자)
