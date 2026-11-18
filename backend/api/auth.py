@@ -148,6 +148,7 @@ def change_password(body: PasswordChange, request: Request, response: Response, 
         raise AppError(400, "지금과 다른 비밀번호를 입력해 주세요.", "INVALID_PASSWORD")
     user.password_hash = hash_password(body.new_password)
     user.password_changed_at = utcnow()
+    user.must_change_password = False
     user.token_version = (user.token_version or 0) + 1  # 이전에 발급된 access_token 은 모두 무효 (dependencies.py)
     db.execute(update(RefreshToken).where(RefreshToken.user_id == user.id, RefreshToken.revoked_at.is_(None))
                .values(revoked_at=utcnow()))

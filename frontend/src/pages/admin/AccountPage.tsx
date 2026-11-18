@@ -8,7 +8,7 @@ import { authApi, errorMessage } from "../../services/api";
 const EMPTY = { current: "", next: "", confirm: "" };
 
 export default function AccountPage() {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const [form, setForm] = useState(EMPTY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -24,7 +24,7 @@ export default function AccountPage() {
     }
     setBusy(true);
     try {
-      await authApi.changePassword(form.current, form.next);
+      setUser(await authApi.changePassword(form.current, form.next));
       setForm(EMPTY);
       setDone(true);
     } catch (err) {

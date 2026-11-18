@@ -30,6 +30,7 @@ class UserDetail(BaseModel):
     locked_until: UTCDateTime | None
     last_login_at: UTCDateTime | None
     created_at: UTCDateTime
+    must_change_password: bool = False   # 임시 비밀번호 상태 (본인이 아직 바꾸지 않음)
 
     @field_validator("categories", mode="before")
     @classmethod

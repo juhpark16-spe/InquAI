@@ -78,7 +78,7 @@ function CreateForm({ onCreated }: { onCreated: (u: UserDetail) => void }) {
             <span className="block text-xs text-slate-500">고른 유형의 문의가 자동 배정됩니다. 비워 두면 담당자가 없는 유형을 받는 전체 담당입니다.</span>
           </div>
         )}
-        <Field label="처음 비밀번호" hint="최소 길이는 서버 설정을 따릅니다 (기본 8자). 계정 주인에게 따로 전달해 주세요.">
+        <Field label="임시 비밀번호" hint="계정 주인에게 따로 전달해 주세요. 첫 로그인 때 본인이 새 비밀번호로 바꿔야 관리 화면을 쓸 수 있습니다 (최소 길이는 서버 설정, 기본 8자).">
           <Input required type="password" autoComplete="new-password" value={form.password}
             onChange={(e) => setForm({ ...form, password: e.target.value })} />
         </Field>
@@ -149,6 +149,9 @@ function UserRow({ u, isMe, onChanged }: { u: UserDetail; isMe: boolean; onChang
       </td>
       <td className="whitespace-nowrap px-3 py-3">
         {u.is_active ? <Badge value={locked ? "잠김" : "활성"} /> : <Badge value="비활성" />}
+        {u.is_active && u.must_change_password && (
+          <div className="mt-1 text-xs text-amber-700" title="임시 비밀번호 상태: 다음 로그인 때 본인이 새 비밀번호를 정해야 합니다">비밀번호 변경 전</div>
+        )}
         {locked && <div className="mt-1 text-xs text-rose-600">{formatDate(u.locked_until)}까지</div>}
       </td>
       <td className="whitespace-nowrap px-3 py-3 text-slate-500">{formatDate(u.last_login_at)}</td>
@@ -171,7 +174,7 @@ function UserRow({ u, isMe, onChanged }: { u: UserDetail; isMe: boolean; onChang
         {resetting && (
           <form className="mt-2 flex gap-2"
             onSubmit={(e) => { e.preventDefault(); run(() => userApi.resetPassword(u.id, password), `${u.display_name}: 비밀번호를 바꿨습니다.`); }}>
-            <Input required type="password" autoComplete="new-password" placeholder="새 비밀번호"
+            <Input required type="password" autoComplete="new-password" placeholder="임시 비밀번호 (다음 로그인 때 본인이 바꿈)"
               value={password} onChange={(e) => setPassword(e.target.value)} />
             <Button type="submit" disabled={busy}>저장</Button>
           </form>

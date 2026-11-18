@@ -6,6 +6,7 @@ import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import AccountPage from "./pages/admin/AccountPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AgentLogsPage from "./pages/admin/AgentLogsPage";
+import ChangePasswordPage from "./pages/admin/ChangePasswordPage";
 import FaqsPage from "./pages/admin/FaqsPage";
 import InquiryDetailPage from "./pages/admin/InquiryDetailPage";
 import InquiryListPage from "./pages/admin/InquiryListPage";
@@ -46,6 +47,7 @@ export default function App() {
         <Route element={<AuthProvider><Outlet /></AuthProvider>}>
           <Route path="/login" element={<LoginPage />} />
           <Route element={<ProtectedRoute />}>
+            <Route path="/change-password" element={<ChangePasswordPage />} />
             <Route element={<AdminLayout />}>
               <Route path="/admin" element={<AdminHome />} />
               <Route path="/admin/inquiries" element={<InquiryListPage />} />

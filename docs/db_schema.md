@@ -40,6 +40,9 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | failed_login_count | INT | 연속 실패 횟수. 로그인 성공 시 0 |
 | **locked_until** | DATETIME NULL | **5회 실패 시 지금+15분. 이 시각이 지나면 자동 해제** (기획서 6장) |
 | last_login_at | DATETIME NULL | 마지막 로그인 |
+| **must_change_password** | BOOLEAN (기본 0) | **임시 비밀번호 상태.** 관리자가 계정을 만들거나 비밀번호를 초기화하면 1, 본인이 바꾸면 0. 1이면 내 정보·비밀번호 변경·로그아웃 외 API가 403 (4주차 추가) |
+
+- 이미 있는 SQLite DB에는 서버를 켤 때 `init_db`가 새 칸을 `ALTER TABLE`로 붙입니다 (기본값이 있거나 비어도 되는 칸만, 운영에서는 Alembic 같은 마이그레이션 도구 권장).
 
 처음 계정은 `backend/database/seed_admin.py`로, 이후 계정은 관리자가 계정 관리 화면(`/admin/users`)에서 만듭니다 (공개 회원가입 없음).
 

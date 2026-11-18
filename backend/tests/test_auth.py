@@ -33,7 +33,8 @@ def csrf(client):
 def test_login_sets_cookies_and_me(client):
     r = login(client)
     assert r.status_code == 200
-    assert r.json()["user"] == {"id": 1, "username": "admin", "display_name": "관리자", "role": "admin"}
+    assert r.json()["user"] == {"id": 1, "username": "admin", "display_name": "관리자", "role": "admin",
+                                "must_change_password": False}
 
     set_cookie = r.headers.get_list("set-cookie")
     by_name = {c.split("=", 1)[0]: c.lower() for c in set_cookie}

@@ -9,6 +9,7 @@ interface AuthState {
   loading: boolean;
   login: (username: string, password: string) => Promise<User>;
   logout: () => Promise<void>;
+  setUser: (u: User) => void;   // 비밀번호 변경처럼 서버가 새 사용자 정보를 돌려줄 때
 }
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -36,7 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
-  const value = useMemo(() => ({ user, loading, login, logout }), [user, loading, login, logout]);
+  const value = useMemo(() => ({ user, loading, login, logout, setUser }), [user, loading, login, logout]);
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 

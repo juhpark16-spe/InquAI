@@ -84,11 +84,18 @@
 - 현재 비밀번호가 틀리거나 새 비밀번호가 지금과 같으면 400 `INVALID_PASSWORD`. 최소 길이 미달은 422
 - 바꾸면 그 계정의 refresh_token을 모두 무효화해 다른 기기의 로그인을 끊고, 지금 화면은 새 쿠키로 로그인을 유지합니다. 작업 기록 `password_change` (비밀번호는 기록하지 않음)
 - 화면: 상단의 내 이름을 누르면 나오는 "내 계정"(`/admin/account`)
+- 성공하면 `must_change_password`가 false가 됩니다 (아래 "임시 비밀번호").
+
+### 임시 비밀번호 — 첫 로그인 때 비밀번호 변경 강제 (4주차 추가)
+- 관리자가 계정을 만들거나(`POST /api/admin/users`) 비밀번호를 초기화하면(`reset-password`) `must_change_password=true`. 관리자가 정한 비밀번호는 관리자도 알고 있기 때문입니다.
+- 이 상태로 로그인하면 `user.must_change_password: true`가 내려오고, `/api/auth/me`·`/api/auth/change-password`·`/api/auth/logout` 외 모든 로그인 API가 403 `PASSWORD_CHANGE_REQUIRED` (`core/dependencies.py`).
+- 화면: 로그인 직후 "새 비밀번호 정하기"(`/change-password`)로 이동하고, 바꾸기 전에는 다른 관리 화면으로 가지 못합니다.
+- `seed_admin.py`로 만든 처음 계정은 시연 편의를 위해 강제하지 않습니다.
 - **비밀번호 최소 길이**는 `.env`의 `PASSWORD_MIN_LENGTH`(기본 8)를 따릅니다. 로컬 시연 환경만 4로 낮춰 `1234`를 씁니다. 배포할 때는 8 이상으로 둡니다.
 
 ### GET /api/auth/me — 내 정보 (로그인)
 ```json
-{ "id": 2, "username": "agent1", "display_name": "김상담", "role": "agent" }
+{ "id": 2, "username": "agent1", "display_name": "김상담", "role": "agent", "must_change_password": false }
 ```
 
 ## 3. 고객 API (공개)
@@ -459,6 +466,7 @@
 - 비활성화·비밀번호 초기화 시 그 계정의 refresh_token을 모두 무효화합니다. access_token은 요청마다 `is_active`를 확인하므로 바로 막힙니다.
 - 자기 계정을 비활성화하거나 상담원으로 바꾸면 400 `INVALID_STATE` (관리자가 없어지는 것 방지)
 - 작업 기록: `user_create`, `user_update`(바뀌기 전·후 값), `user_password_reset`(비밀번호는 기록하지 않음)
+- 만들기·비밀번호 초기화로 정한 비밀번호는 **임시 비밀번호**입니다: 다음 로그인 때 본인이 바꿔야 다른 API를 쓸 수 있습니다 (위 "임시 비밀번호", 목록의 `must_change_password`).
 
 ## 10. 기획서 7장과 달라진 점
 

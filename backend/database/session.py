@@ -37,7 +37,31 @@ def get_db() -> Iterator[Session]:
 
 
 def init_db() -> None:
-    """테이블이 없으면 만듭니다 (있으면 그대로 둠)."""
+    """테이블이 없으면 만들고, 이미 있는 SQLite 테이블에 새로 추가된 칸이 있으면 붙입니다."""
     from backend.database import models  # noqa: F401  모델을 등록하려고 불러옴
 
     Base.metadata.create_all(engine)
+    if is_sqlite:
+        _add_missing_columns()
+
+
+def _add_missing_columns() -> None:
+    """create_all 은 이미 있는 테이블을 바꾸지 않으므로, 기본값이 있거나 비어도 되는 새 칸만 ALTER TABLE 로 추가.
+
+    시연·개발 DB를 다시 만들지 않고 모델에 칸을 더할 수 있게 하는 간단한 방법입니다 (운영에서는 Alembic 같은 마이그레이션 도구).
+    """
+    from sqlalchemy import inspect, text
+
+    insp = inspect(engine)
+    with engine.begin() as conn:
+        for table in Base.metadata.sorted_tables:
+            if not insp.has_table(table.name):
+                continue
+            existing = {c["name"] for c in insp.get_columns(table.name)}
+            for col in table.columns:
+                if col.name in existing or not (col.nullable or col.server_default is not None):
+                    continue
+                ddl = f'ALTER TABLE {table.name} ADD COLUMN {col.name} {col.type.compile(engine.dialect)}'
+                if col.server_default is not None:
+                    ddl += f" NOT NULL DEFAULT {col.server_default.arg}"
+                conn.execute(text(ddl))

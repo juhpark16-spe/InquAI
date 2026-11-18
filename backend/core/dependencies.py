@@ -19,6 +19,8 @@ from backend.database.models import AdminUser
 from backend.database.session import get_db
 
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+# 비밀번호 변경이 필요한 계정도 쓸 수 있는 API (내 정보, 비밀번호 변경, 로그아웃)
+PASSWORD_CHANGE_ALLOWED = {"/api/auth/me", "/api/auth/change-password", "/api/auth/logout"}
 
 DB = Annotated[Session, Depends(get_db)]
 
@@ -47,6 +49,9 @@ def get_current_user(request: Request, db: DB) -> AdminUser:
         raise AppError(401, "비밀번호가 바뀌어 다시 로그인해야 합니다.", "AUTH_REQUIRED")
     if request.method not in SAFE_METHODS:
         verify_csrf(request)
+    # 관리자가 정해 준 임시 비밀번호로 로그인했으면, 본인이 새 비밀번호를 정하기 전까지 다른 API를 막음
+    if user.must_change_password and request.url.path not in PASSWORD_CHANGE_ALLOWED:
+        raise AppError(403, "처음 로그인했거나 비밀번호가 초기화되어, 새 비밀번호를 정해야 합니다.", "PASSWORD_CHANGE_REQUIRED")
     return user
 
 

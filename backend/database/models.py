@@ -67,6 +67,8 @@ class AdminUser(TimestampMixin, Base):
     # 다른 기기의 로그인을 즉시 끊음 (시각 비교는 JWT 가 초 단위라 같은 초에 발급된 토큰을 구분하지 못함)
     token_version: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 기록용
+    # 관리자가 만들거나 초기화한 임시 비밀번호면 True: 본인이 새 비밀번호를 정하기 전까지 다른 API를 쓰지 못함
+    must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
 
 
 class RefreshToken(TimestampMixin, Base):

@@ -14,6 +14,7 @@ export interface User {
   username: string;
   display_name: string;
   role: Role;
+  must_change_password?: boolean; // 관리자가 정한 임시 비밀번호: 새 비밀번호를 정하기 전까지 다른 화면을 못 씀
 }
 
 export interface UserDetail extends User {

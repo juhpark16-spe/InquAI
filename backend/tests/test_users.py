@@ -115,3 +115,34 @@ def test_not_found(admin):
     assert admin.patch("/api/admin/users/999", json={"is_active": False}, headers=csrf(admin)).status_code == 404
     assert admin.post("/api/admin/users/999/reset-password", json={"password": "abcdefgh"},
                       headers=csrf(admin)).status_code == 404
+
+
+def test_new_account_must_change_password_before_using_anything(admin, client):
+    """관리자가 정한 처음 비밀번호로 로그인하면 새 비밀번호를 정하기 전까지 내 정보·비밀번호 변경·로그아웃만 됨."""
+    assert admin.post("/api/admin/users", json=NEW, headers=csrf(admin)).json()["must_change_password"] is True
+    client.cookies.clear()
+    r = login(client, "agent3", "new-pass-1234")
+    assert r.status_code == 200 and r.json()["user"]["must_change_password"] is True
+    assert client.get("/api/auth/me").json()["must_change_password"] is True
+
+    blocked = client.get("/api/inquiries")
+    assert blocked.status_code == 403 and blocked.json()["code"] == "PASSWORD_CHANGE_REQUIRED"
+    assert client.get("/api/admin/agent-logs").json()["code"] == "PASSWORD_CHANGE_REQUIRED"
+
+    r = client.post("/api/auth/change-password", json={"current_password": "new-pass-1234", "new_password": "my-own-pass-99"},
+                    headers=csrf(client))
+    assert r.status_code == 200 and r.json()["user"]["must_change_password"] is False
+    assert client.get("/api/inquiries").status_code == 200        # 새 쿠키로 바로 사용 가능
+
+
+def test_reset_password_requires_change_again(admin, client):
+    admin.post("/api/admin/users/2/reset-password", json={"password": "reset-pass-1234"}, headers=csrf(admin))
+    assert next(u for u in admin.get("/api/admin/users").json() if u["id"] == 2)["must_change_password"] is True
+    client.cookies.clear()
+    login(client, "agent1", "reset-pass-1234")
+    assert client.get("/api/inquiries").json()["code"] == "PASSWORD_CHANGE_REQUIRED"
+
+
+def test_seeded_and_existing_accounts_are_not_forced(admin):
+    assert admin.get("/api/inquiries").status_code == 200
+    assert all(u["must_change_password"] is False for u in admin.get("/api/admin/users").json())

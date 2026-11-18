@@ -51,7 +51,8 @@ def create_user(body: UserCreate, request: Request, admin: AdminOnly, db: DB):
     if db.scalar(select(AdminUser).where(AdminUser.username == body.username)):
         raise AppError(409, "이미 사용 중인 아이디입니다.", "USERNAME_TAKEN")
     user = AdminUser(username=body.username, display_name=body.display_name, role=body.role,
-                     categories=body.categories, password_hash=hash_password(body.password))
+                     categories=body.categories, password_hash=hash_password(body.password),
+                     must_change_password=True)  # 관리자가 정한 처음 비밀번호는 첫 로그인 때 본인이 바꿈
     db.add(user)
     db.flush()
     add_audit(db, request, "user_create", admin, "admin_user", user.id,
@@ -86,6 +87,7 @@ def reset_password(user_id: int, body: PasswordReset, request: Request, admin: A
     user.password_hash = hash_password(body.password)
     user.failed_login_count, user.locked_until = 0, None  # 잠긴 계정도 풀림
     user.password_changed_at = utcnow()
+    user.must_change_password = True  # 관리자가 정한 비밀번호라, 다음 로그인 때 본인이 바꾸게 함
     user.token_version = (user.token_version or 0) + 1  # 그 계정의 기존 로그인을 즉시 끊음
     _revoke_tokens(db, user.id)
     add_audit(db, request, "user_password_reset", admin, "admin_user", user.id)  # 비밀번호는 기록하지 않음
