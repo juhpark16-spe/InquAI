@@ -107,6 +107,22 @@ export interface InquiryFilters {
   size?: number;
 }
 
+/** 알림 (🔔): 나에게 배정 · 고객 추가 문의 · 답변 기한 1시간 이내 · 고객 👎 (backend/api/notifications.py) */
+export interface NotificationItem {
+  kind: "assigned" | "followup" | "due_soon" | "bad_rating";
+  at: string;
+  inquiry_id: number;
+  inquiry_number: string;
+  title: string;
+  text: string;
+  unread: boolean;
+}
+
+export const notificationApi = {
+  list: () => http.get<{ unread: number; items: NotificationItem[] }>("/notifications").then((r) => r.data),
+  seen: () => http.post("/notifications/seen").then((r) => r.data),
+};
+
 export const inquiryApi = {
   list: (filters: InquiryFilters) => {
     const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== "" && v !== undefined));

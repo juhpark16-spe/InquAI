@@ -499,6 +499,25 @@
 - `examples`: 많이 고친 순. `segments`는 띄어쓰기 단위 비교입니다 (`same`/`del`/`add`).
 - `unedited_rate`는 대시보드의 `approval_without_edit_rate`와 같은 기준입니다 (성공 지표 70% 이상).
 
+### GET /api/notifications — 내 알림 (로그인, 4주차)
+
+오른쪽 위 🔔. 알림을 따로 저장하지 않고 이미 있는 기록에서 '나에게 해당하는 새 일'을 골라 만듭니다 (최근 7일, 최신순 20건).
+
+| kind | 무엇 | 상담원 | 관리자 |
+| --- | --- | --- | --- |
+| `assigned` | 문의가 나에게 배정됨 (자동·수동, 내가 한 배정은 제외) | 나에게 배정 | 나에게 배정 + 미배정 긴급 문의 접수 |
+| `followup` | 고객 추가 문의 | 내 담당 문의 | 내 담당 + 미배정 문의 |
+| `due_soon` | 답변 기한 1시간 이내 (미처리, 알림 시각 = 기한 1시간 전) | 내 담당 문의 | 내 담당 + 미배정 문의 |
+| `bad_rating` | 고객 👎 '도움 안 됨' | 내가 보낸 답변 | 모든 답변 (AI 자동 답변 포함) |
+
+```json
+{"unread": 1, "items": [{"kind": "followup", "at": "…", "inquiry_id": 48, "inquiry_number": "INQ-…", "title": "…", "text": "오하린 고객의 추가 문의", "unread": true}]}
+```
+
+### POST /api/notifications/seen — 알림을 모두 읽음으로 (로그인, CSRF)
+
+계정의 `notifications_seen_at`을 지금으로 바꿈. 이후 알림만 `unread`. 화면은 30초마다 목록을 다시 불러옵니다.
+
 ### GET /api/stats/activity — 최근 처리 활동 (관리자)
 파라미터: `limit` (1~30, 기본 8). 최근에 움직인 문의들의 처리 이력(문의 상세의 `history`와 같은 형식)을 최신순으로 돌려줍니다.
 ```json

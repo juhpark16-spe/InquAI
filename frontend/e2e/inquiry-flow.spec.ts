@@ -62,6 +62,21 @@ test("고객 문의 → 상담원 답변 발송 → 고객 조회에서 답변 �
   await expect(page.getByText(answer)).toBeVisible();
 });
 
+test("배정받은 상담원의 알림 종에 새 문의가 뜨고, 누르면 상세로", async ({ page }) => {
+  // 시험용 분석기는 '배송' 단어를 배송 유형으로 봄 → 배송 담당 상담원(agent2)에게 자동 배정
+  const title = `택배 문의 ${Date.now()} (자동 테스트)`;
+  await createInquiry(page, `e2e-bell-${Date.now()}@example.com`, title, "택배가 아직 배송 출발을 안 했어요. 확인 부탁드려요.");
+
+  await staffLogin(page, "agent2");
+  const bell = page.getByRole("button", { name: /^알림 \d+건$/ });
+  await expect(bell).toBeVisible();
+  await bell.click();
+  await expect(page.getByRole("dialog", { name: "알림" }).getByText(title)).toBeVisible();
+  await expect(page.getByRole("button", { name: "알림" })).toBeVisible();   // 열면 새 알림 숫자가 사라짐
+  await page.getByRole("dialog", { name: "알림" }).getByText(title).click();
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+});
+
 test("조회 비밀번호가 틀리면 문의가 보이지 않음", async ({ page }) => {
   const email = `e2e-wrong-${Date.now()}@example.com`;
   await createInquiry(page, email, "적립금 문의 (자동 테스트)", "적립금은 언제 들어오나요? 확인 부탁드려요.");

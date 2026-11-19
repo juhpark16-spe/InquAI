@@ -69,6 +69,8 @@ class AdminUser(TimestampMixin, Base):
     password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 기록용
     # 관리자가 만들거나 초기화한 임시 비밀번호면 True: 본인이 새 비밀번호를 정하기 전까지 다른 API를 쓰지 못함
     must_change_password: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    # 알림(🔔)을 마지막으로 열어 본 시각: 이후 알림이 '새 알림' (api/notifications.py)
+    notifications_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class RefreshToken(TimestampMixin, Base):

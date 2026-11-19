@@ -1,4 +1,4 @@
-// 관리자 화면 틀: 왼쪽 사이드바(메뉴 + 미처리 건수) / 위쪽 문의 검색 · 로그인한 사람·로그아웃 / 본문
+// 관리자 화면 틀: 왼쪽 사이드바(메뉴 + 미처리 건수) / 위쪽 문의 검색 · 알림 · 로그인한 사람·로그아웃 / 본문
 // 세 영역(사이드바 / 위쪽 검색·내 정보 / 본문)을 각각 둥근 판으로 나눠 구역이 한눈에 보이게 (2026-11-19)
 // 좁은 화면(lg 미만)에서는 사이드바가 위쪽 가로 막대로 바뀜
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -6,6 +6,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 
 import { useAuth } from "../../auth/AuthProvider";
 import Icon, { type IconName } from "../../components/Icon";
+import NotificationBell from "../../components/NotificationBell";
 import { cx, initialOf } from "../../components/ui";
 import { inquiryApi } from "../../services/api";
 
@@ -114,6 +115,7 @@ export default function AdminLayout() {
       <header className="flex items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/60 p-2 shadow-sm shadow-primary/5 backdrop-blur lg:rounded-3xl lg:px-3">
         <GlobalSearch />
         <div className="flex shrink-0 items-center gap-1">
+          <span className="mr-2"><NotificationBell /></span>
           <NavLink to="/admin/account" title="내 계정 · 비밀번호 변경"
             className="flex items-center gap-2.5 rounded-xl py-1 pl-1 pr-3 hover:bg-white">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-white" aria-hidden>
