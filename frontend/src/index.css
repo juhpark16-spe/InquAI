@@ -64,11 +64,27 @@
   --color-indigo-900: #2d367c;
 }
 
-body {
-  @apply text-base text-body antialiased;
-  /* 위는 연한 페리윙클, 아래로 갈수록 푸른빛이 조금 더 짙게 (참고 이미지처럼 은은한 그라데이션) */
+/* 위는 연한 페리윙클, 아래로 갈수록 푸른빛이 조금 더 짙게 (참고 이미지처럼 은은한 그라데이션).
+   .page-bg: 위쪽에 고정된 판 뒤의 띠도 같은 바탕(화면에 고정된 그라데이션)으로 칠해 스크롤한 글이 비치지 않게 */
+body,
+.page-bg {
   background: linear-gradient(180deg, #e6eaf9 0%, #dde4f6 50%, #d2dbf3 100%) fixed;
   background-color: var(--color-canvas);
+}
+
+body {
+  @apply text-base text-body antialiased;
+}
+
+/* 관리 화면에서 위쪽 고정 띠(검색·알림·내 정보 판 + 아래 여백) 바로 밑에 붙는 고정 영역의 위치 (문의 상세의 제목 줄).
+   띠 = 위 여백 12px(lg 16px) + 판 68px + 아래 여백 12px(lg 16px) */
+:root {
+  --admin-header-bottom: 5.75rem;
+}
+@media (min-width: 64rem) {
+  :root {
+    --admin-header-bottom: 6.25rem;
+  }
 }
 
 /* 페이지 제목: 모든 관리 화면에서 같은 크기·굵기 */

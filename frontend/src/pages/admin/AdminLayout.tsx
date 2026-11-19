@@ -110,9 +110,11 @@ export default function AdminLayout() {
 
       </aside>
 
-      <div className="mx-auto max-w-[96rem] space-y-3 lg:space-y-4">
-      {/* 위쪽 판: 문의 검색 · 로그인한 사람 (누르면 내 계정) + 로그아웃 */}
-      <header className="flex items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/60 p-2 shadow-sm shadow-primary/5 backdrop-blur lg:rounded-3xl lg:px-3">
+      <div className="mx-auto max-w-[96rem]">
+      {/* 위쪽 판: 문의 검색 · 알림 · 로그인한 사람 (누르면 내 계정) + 로그아웃.
+          스크롤해도 화면 위에 고정 (판 위의 여백 띠도 바탕색으로 칠해 아래 글이 비치지 않게) */}
+      <div className="page-bg sticky top-0 z-20 -mt-3 py-3 lg:-mt-4 lg:py-4">
+      <header className="flex items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/80 p-2 shadow-sm shadow-primary/5 backdrop-blur lg:rounded-3xl lg:px-3">
         <GlobalSearch />
         <div className="flex shrink-0 items-center gap-1">
           <span className="mr-2"><NotificationBell /></span>
@@ -134,6 +136,7 @@ export default function AdminLayout() {
           </button>
         </div>
       </header>
+      </div>
 
       {/* 본문 판: 연한 흰 판 안에 흰 카드들 */}
       <main className="min-h-[calc(100vh-7.5rem)] rounded-2xl border border-white/70 bg-white/35 p-4 shadow-sm shadow-primary/5 lg:rounded-3xl lg:p-6">

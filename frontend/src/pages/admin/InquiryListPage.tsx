@@ -136,7 +136,8 @@ export default function InquiryListPage() {
                 <td className="max-w-xs truncate px-3 py-3">{i.title}</td>
                 <td className="whitespace-nowrap px-3 py-3">{i.customer_name}</td>
                 <td className="whitespace-nowrap px-3 py-3">{i.category ?? "-"}<LowConfidence value={i.confidence} /></td>
-                <td className="px-3 py-3"><Badge value={i.urgency} /></td>
+                {/* 끝난 문의(자동 처리·완료)의 긴급도는 더 이상 급하지 않으니 회색 글자로 */}
+                <td className="px-3 py-3">{i.status === "완료" || i.status === "자동 처리" ? <span className="text-xs text-muted">{i.urgency ?? "-"}</span> : <Badge value={i.urgency} />}</td>
                 <td className="whitespace-nowrap px-3 py-3">
                   <Badge value={i.status} />
                   {i.overdue && <span className="ml-1 text-xs font-semibold text-rose-700" title={`답변 기한 ${formatDate(i.due_at)}`}>⏰ 기한 초과</span>}

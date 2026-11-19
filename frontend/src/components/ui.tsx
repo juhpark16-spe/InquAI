@@ -62,16 +62,19 @@ export function Alert({ kind = "error", children }: { kind?: "error" | "info" | 
   return <div role={kind === "error" ? "alert" : "status"} className={cx("rounded-xl border px-4 py-3 text-sm", styles)}>{children}</div>;
 }
 
+// 색의 뜻을 하나로 (2026-11-19): 빨강 = 급함·문제 · 초록 = 좋음 · 파랑 = 아직 할 일 · 회색 = 끝남·참고
+// 색이 없는 값(보통·낮음·중립)은 배경 없이 글자만 → 목록에서 색 있는 배지가 곧 '봐야 할 것'
+const PLAIN = "px-0! text-body";
 const BADGE: Record<string, string> = {
-  // 긴급도
-  높음: "bg-rose-100 text-rose-700", 보통: "bg-amber-100 text-amber-800", 낮음: "bg-slate-100 text-slate-600",
-  // 상태
-  접수: "bg-slate-100 text-slate-600", "자동 처리": "bg-emerald-100 text-emerald-700",
-  "검토 대기": "bg-amber-100 text-amber-800", "담당자 처리": "bg-brand-lavender/40 text-ink", 완료: "bg-surface-strong text-body",
-  // 처리 방식
-  "자동 답변": "bg-emerald-100 text-emerald-700", "답변 초안": "bg-amber-100 text-amber-800", "담당자 연결": "bg-brand-lavender/40 text-ink",
-  // 감정
-  부정: "bg-rose-100 text-rose-700", 중립: "bg-slate-100 text-slate-600", 긍정: "bg-emerald-100 text-emerald-700",
+  // 긴급도: 높음만 빨간 배지
+  높음: "bg-rose-100 font-semibold text-rose-700", 보통: PLAIN, 낮음: "px-0! text-muted",
+  // 상태: 미처리 = 파랑 계열, 끝남 = 회색
+  접수: "bg-sky-100 text-sky-800", "검토 대기": "bg-primary-soft text-primary", "담당자 처리": "bg-indigo-100 text-indigo-800",
+  "자동 처리": "bg-slate-100 text-slate-600", 완료: "bg-slate-100 text-slate-600",
+  // 처리 방식: 좋고 나쁨이 없는 분류라 모두 회색
+  "자동 답변": "bg-slate-100 text-slate-700", "답변 초안": "bg-slate-100 text-slate-700", "담당자 연결": "bg-slate-100 text-slate-700",
+  // 감정: 부정만 빨강, 긍정은 초록
+  부정: "bg-rose-100 text-rose-700", 중립: PLAIN, 긍정: "bg-emerald-100 text-emerald-700",
   // 계정
   활성: "bg-emerald-100 text-emerald-700", 비활성: "bg-slate-200 text-slate-500", 잠김: "bg-rose-100 text-rose-700",
 };

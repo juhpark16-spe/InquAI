@@ -7,10 +7,11 @@ import { cx, formatDate } from "./ui";
 export type Tone = "customer" | "ai" | "agent" | "memo";
 
 const TONE: Record<Tone, { bubble: string; name: string; avatar: string; icon: string }> = {
-  // DESIGN.md 색: 고객 = 흰 카드, AI = 라벤더, 상담원 = 딥 틸, 내부 메모 = 오커 점선
+  // 색: 고객 = 흰 카드, AI = 라벤더, 상담원 = 연한 파랑, 내부 메모 = 오커 점선
   customer: { bubble: "bg-white border border-hairline text-ink", name: "text-body", avatar: "bg-surface-strong text-body", icon: "고" },
   ai: { bubble: "bg-brand-lavender/35 text-ink", name: "text-ink", avatar: "bg-brand-lavender text-ink", icon: "AI" },
-  agent: { bubble: "bg-brand-teal text-white", name: "text-brand-teal", avatar: "bg-brand-mint text-brand-teal", icon: "상" },
+  // 상담원 = 연한 파랑 (사이트 기본색 계열). 진한 청록은 고객 문의보다 더 튀어서 바꿈 (2026-11-19)
+  agent: { bubble: "bg-primary-soft border border-primary/15 text-ink", name: "text-primary", avatar: "bg-primary text-white", icon: "상" },
   memo: { bubble: "bg-brand-ochre/15 border border-dashed border-brand-ochre text-ink", name: "text-[#8a6a1a]", avatar: "bg-brand-ochre text-ink", icon: "메" },
 };
 

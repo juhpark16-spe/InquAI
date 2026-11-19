@@ -14,7 +14,10 @@ import { CATEGORIES } from "../../services/types";
 
 // 범주 색 8개 (색약 구분 검증된 순서, 유형 순서와 1:1로 고정)
 const SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];
-const CATEGORY_COLOR = Object.fromEntries(CATEGORIES.map((c, i) => [c, SERIES[i]]));
+// 유형 색: 빨강·초록은 '나쁨·좋음' 표시에만 쓰므로 유형에는 쓰지 않음 (배송 파랑, 주문 취소 주황, 교환 하늘,
+// 반품·환불 노랑, 결제 분홍, 상품 보라, 쿠폰·적립금·회원 갈색, 기타 회색)
+const CATEGORY_PALETTE = ["#2a78d6", "#eb6834", "#22a6c8", "#e5a000", "#d6589e", "#6a4fd6", "#9b6a3c", "#8b95a3"];
+const CATEGORY_COLOR = Object.fromEntries(CATEGORIES.map((c, i) => [c, CATEGORY_PALETTE[i]]));
 const INK = { muted: "#6a6a6a", grid: "#ebe6d6", axis: "#d9d2c0" };
 const CRITICAL = "#d03b3b";
 // 미처리는 새 색 대신 빗금으로 (처리됨과 색만으로 구분하지 않아도 됨, 색 구분이 어려운 사람도 알아봄)
