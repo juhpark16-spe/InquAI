@@ -38,7 +38,7 @@ function CustomerShell() {
           <ShopMenu />
         </div>
       </header>
-      <main className="mx-auto max-w-2xl px-4 py-10">
+      <main className="mx-auto max-w-3xl px-4 py-8">
         <Outlet />
       </main>
       <footer className="mt-16 border-t border-white/60 bg-white/40 py-10 text-center text-sm text-muted">

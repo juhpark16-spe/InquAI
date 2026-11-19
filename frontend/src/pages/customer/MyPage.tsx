@@ -75,7 +75,7 @@ export default function MyPage() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-ink">내 문의 {items && <span className="text-sm font-normal text-muted">{items.length}건 · {notice}</span>}</h2>
+          <h2 className="text-lg font-semibold text-ink">내 문의 {items && <span className="text-sm font-normal text-muted">{items.length}건</span>}</h2>
           <Link to="/inquiry" className="text-sm font-semibold text-primary hover:underline">새 문의</Link>
         </div>
         {items?.length === 0 && <Card><p className="text-sm text-muted">아직 남긴 문의가 없어요.</p></Card>}

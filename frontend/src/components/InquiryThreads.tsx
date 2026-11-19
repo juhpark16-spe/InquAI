@@ -1,10 +1,11 @@
 // 고객의 문의를 대화형으로 보여 주고(내 글 = 오른쪽, 고객센터 = 왼쪽) 답변 평가·추가 문의를 받음.
 // 비회원 조회(/inquiry/lookup, 이메일 + 조회 비밀번호)와 쇼핑몰 로그인 고객(/my)이 함께 씀: 서버 호출만 actions로 넘김
+// 여러 건이면 요약 카드로 접어 두고(제목·답변 상태·마지막 글 한 줄) 가장 최근 문의만 펼침. 상태는 고객 말로(답변 준비 중 / 답변 완료)
 import { useState } from "react";
 
 import { Bubble, Note, Thumbs } from "./Chat";
 import PhotoPicker, { type PickedPhoto } from "./PhotoPicker";
-import { Alert, Badge, Button, Card, Spinner, Textarea, cx, formatDate } from "./ui";
+import { Alert, Button, Spinner, Textarea, cx, formatDate } from "./ui";
 import { errorMessage } from "../services/api";
 import type { InquiryPublic } from "../services/types";
 
@@ -73,11 +74,25 @@ function FollowUp({ inquiry, actions, onDone }: { inquiry: InquiryPublic; action
   );
 }
 
+/** 고객에게 보이는 상태: 내부 상태 이름(담당자 처리·자동 처리 등) 대신, 마지막 글이 누구 것인지로 */
+function CustomerStatus({ waiting }: { waiting: boolean }) {
+  return waiting
+    ? <span className="whitespace-nowrap rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">답변 준비 중</span>
+    : <span className="whitespace-nowrap rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">답변 완료</span>;
+}
+
 export default function InquiryThreads({ items, notice, actions, reload }: {
   items: InquiryPublic[]; notice: string; actions: ThreadActions; reload: () => Promise<void>;
 }) {
   const [error, setError] = useState("");
   const [done, setDone] = useState("");
+  // 문의가 여러 건이면 길어지므로 접어 두고, 가장 최근 문의 하나만 펼침
+  const [open, setOpen] = useState<Set<string>>(() => new Set(items.slice(0, 1).map((i) => i.inquiry_number)));
+  const toggle = (n: string) => setOpen((prev) => {
+    const next = new Set(prev);
+    if (next.has(n)) next.delete(n); else next.add(n);
+    return next;
+  });
 
   async function rate(inquiryNumber: string, answerId: number, helpful: boolean) {
     setError("");
@@ -90,7 +105,7 @@ export default function InquiryThreads({ items, notice, actions, reload }: {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {error && <Alert>{error}</Alert>}
       {done && <Alert kind="success">{done}</Alert>}
       {items.map((found) => {
@@ -100,31 +115,48 @@ export default function InquiryThreads({ items, notice, actions, reload }: {
           ...found.messages.map((m) => ({ kind: "me" as const, at: m.at, text: m.text, messageId: m.id as number | null })),
           ...found.answers.map((a) => ({ kind: "answer" as const, at: a.answered_at, text: a.text, a })),
         ].sort((x, y) => new Date(x.at).getTime() - new Date(y.at).getTime());
-        const waiting = thread[thread.length - 1].kind === "me";
+        const last = thread[thread.length - 1];
+        const waiting = last.kind === "me";
+        const isOpen = open.has(found.inquiry_number);
         return (
-          <Card key={found.inquiry_number} title={found.title}>
-            <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-slate-500">
-              <Badge value={found.status} />
-              <span>{formatDate(found.created_at)}</span>
-              <span className="font-mono text-xs">{found.inquiry_number}</span>
-            </div>
-            <div className="space-y-4 rounded-xl bg-slate-50 p-4">
-              {thread.map((t, i) => t.kind === "me" ? (
-                <Bubble key={i} side="right" tone="customer" name="나" at={t.at}
-                  footer={<Thumbs photos={found.attachments.filter((p) => p.message_id === t.messageId)} />}>{t.text}</Bubble>
-              ) : (
-                <Bubble key={i} side="left" tone={t.a.by === "AI 상담원" ? "ai" : "agent"} name={t.a.by} at={t.at}
-                  footer={<RateButtons answerId={t.a.id} rating={t.a.rating} onRate={(id, h) => rate(found.inquiry_number, id, h)} />}>
-                  {t.text}
-                </Bubble>
-              ))}
-              {waiting && <Note>담당자가 확인하고 있어요. {notice}</Note>}
-            </div>
-            <div className="mt-3">
-              <FollowUp inquiry={found} actions={actions}
-                onDone={() => { setDone("추가 문의가 접수되었습니다. 담당자가 확인 후 답변드릴게요."); reload(); }} />
-            </div>
-          </Card>
+          <section key={found.inquiry_number} className="overflow-hidden rounded-2xl border border-hairline bg-white">
+            <button type="button" onClick={() => toggle(found.inquiry_number)} aria-expanded={isOpen}
+              className={cx("flex w-full items-start gap-3 px-5 py-4 text-left hover:bg-surface-soft", isOpen && "border-b border-hairline")}>
+              <span className="min-w-0 flex-1">
+                <span className="flex flex-wrap items-center gap-2">
+                  <span className="text-base font-semibold text-ink">{found.title}</span>
+                  <CustomerStatus waiting={waiting} />
+                </span>
+                <span className="mt-0.5 block text-xs text-muted">{formatDate(found.created_at)} · <span className="font-mono">{found.inquiry_number}</span></span>
+                {!isOpen && (
+                  <span className="mt-1.5 block truncate text-sm text-body">
+                    {last.kind === "answer" ? <b className="font-medium text-primary">{last.a.by}: </b> : "나: "}{last.text}
+                  </span>
+                )}
+              </span>
+              <span className="shrink-0 pt-0.5 text-sm text-muted">{isOpen ? "접기 ▴" : "펼치기 ▾"}</span>
+            </button>
+            {isOpen && (
+              <div className="px-5 py-4">
+                <div className="space-y-4 rounded-xl bg-surface-soft/70 p-4">
+                  {thread.map((t, i) => t.kind === "me" ? (
+                    <Bubble key={i} side="right" tone="customer" name="나" at={t.at}
+                      footer={<Thumbs photos={found.attachments.filter((p) => p.message_id === t.messageId)} />}>{t.text}</Bubble>
+                  ) : (
+                    <Bubble key={i} side="left" tone={t.a.by === "AI 상담원" ? "ai" : "agent"} name={t.a.by} at={t.at}
+                      footer={<RateButtons answerId={t.a.id} rating={t.a.rating} onRate={(id, h) => rate(found.inquiry_number, id, h)} />}>
+                      {t.text}
+                    </Bubble>
+                  ))}
+                  {waiting && <Note>담당자가 확인하고 있어요. {notice}</Note>}
+                </div>
+                <div className="mt-3">
+                  <FollowUp inquiry={found} actions={actions}
+                    onDone={() => { setDone("추가 문의가 접수되었습니다. 담당자가 확인 후 답변드릴게요."); reload(); }} />
+                </div>
+              </div>
+            )}
+          </section>
         );
       })}
     </div>

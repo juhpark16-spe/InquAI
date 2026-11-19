@@ -48,7 +48,11 @@ export default function InquiryLookupPage() {
           비밀번호 없이 내 문의를 볼 수 있습니다.
         </Alert>
       )}
-      <Card title="내 문의 조회 (비회원)">
+      <div>
+        <h1 className="page-title">내 문의 조회</h1>
+        <p className="mt-1 text-sm text-muted">문의할 때 쓴 이메일과 조회 비밀번호로 답변을 확인하세요. 쇼핑몰 회원은 로그인하면 '내 쇼핑'에서 바로 볼 수 있어요.</p>
+      </div>
+      <Card>
         <form onSubmit={submit} className="space-y-4">
           <Field label="문의할 때 쓴 이메일">
             <Input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
@@ -66,7 +70,7 @@ export default function InquiryLookupPage() {
         </p>
       </Card>
 
-      {items && <p className="text-sm text-slate-600">문의 {items.length}건 (최신순) · {notice}</p>}
+      {items && <p className="text-sm text-muted">문의 {items.length}건 · 최신순 (누르면 펼쳐져요)</p>}
       {items && (
         <InquiryThreads items={items} notice={notice} reload={load} actions={{
           rate: (n, id, helpful) => customerApi.rate(id, n, email.trim(), password, helpful),
