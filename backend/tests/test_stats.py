@@ -169,3 +169,29 @@ def test_products(client, db):
 def test_products_admin_only(client, db):
     login(client, "agent1")
     assert client.get("/api/stats/products").status_code == 403
+
+
+def test_priorities(client, db):
+    """대시보드 '지금 할 일': 가장 급한 문의(긴급도 → 오래된 순)와 기한이 남은 문의(기한 가까운 순)"""
+    now = datetime.now(timezone.utc)
+
+    def at(i, hours_ago):
+        i.created_at = now - timedelta(hours=hours_ago)
+
+    at(add(db, 1, "담당자 처리", "결제", "높음", "담당자 연결"), 1)    # 긴급, 기한 3시간 남음
+    at(add(db, 2, "검토 대기", "배송", "보통", "답변 초안"), 23)      # 기한 1시간 남음
+    at(add(db, 3, "접수", "상품", "낮음", "답변 초안"), 30)           # 기한 지남 → 임박 목록에서 빠짐
+    at(add(db, 4, "담당자 처리", "교환", "높음", "담당자 연결"), 5)    # 긴급이고 더 오래됨 → 가장 급한 문의 (기한은 지남)
+    at(add(db, 5, "완료", "배송", "높음", "담당자 연결"), 10)          # 처리 끝 → 빠짐
+    db.commit()
+
+    assert client.get("/api/stats/priorities").status_code == 401
+    login(client, "agent1")
+    assert client.get("/api/stats/priorities").status_code == 403
+
+    login(client)
+    r = client.get("/api/stats/priorities").json()
+    assert r["open"] == 4
+    assert r["next"]["inquiry_number"] == "INQ-T-0004" and r["next"]["overdue"] is True
+    assert [x["inquiry_number"] for x in r["due_soon"]] == ["INQ-T-0002", "INQ-T-0001"]
+    assert r["due_soon"][0]["preview"] == "c"

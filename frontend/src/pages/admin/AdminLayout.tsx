@@ -1,6 +1,7 @@
-// 관리자 화면 틀: 왼쪽 사이드바(메뉴 + 미처리 건수) / 오른쪽 위 로그인한 사람·로그아웃 / 본문
+// 관리자 화면 틀: 왼쪽 사이드바(메뉴 + 미처리 건수) / 위쪽 문의 검색 · 로그인한 사람·로그아웃 / 본문
+// 세 영역(사이드바 / 위쪽 검색·내 정보 / 본문)을 각각 둥근 판으로 나눠 구역이 한눈에 보이게 (2026-11-19)
 // 좁은 화면(lg 미만)에서는 사이드바가 위쪽 가로 막대로 바뀜
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 
 import { useAuth } from "../../auth/AuthProvider";
@@ -11,13 +12,61 @@ import { inquiryApi } from "../../services/api";
 function MenuLink({ to, icon, label, count, end }: { to: string; icon: IconName; label: string; count?: number | null; end?: boolean }) {
   return (
     <NavLink to={to} end={end}
-      className={({ isActive }) => cx("flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-xl px-3 py-2 text-sm transition",
-        isActive ? "bg-primary font-semibold text-white shadow-sm shadow-primary/25"
+      // 선택된 메뉴: 꽉 찬 파란 버튼 대신 흰 바탕 + 왼쪽 파란 막대 (오래 봐도 눈이 덜 피곤하게). 좁은 화면(가로 메뉴)은 막대 대신 바탕만
+      className={({ isActive }) => cx("relative flex shrink-0 items-center gap-2.5 whitespace-nowrap rounded-xl px-3 py-2 text-sm transition",
+        isActive ? "bg-white font-semibold text-primary shadow-sm shadow-primary/10 lg:before:absolute lg:before:inset-y-1.5 lg:before:-left-3 lg:before:w-1 lg:before:rounded-r-full lg:before:bg-primary"
           : "text-body hover:bg-white/60")}>
       <Icon name={icon} className="h-[18px] w-[18px]" />
       <span className="flex-1">{label}</span>
       {!!count && <span className="rounded-full bg-primary-soft px-2 py-px text-xs font-semibold tabular-nums text-primary">{count}</span>}
     </NavLink>
+  );
+}
+
+/** 어느 화면에서나 문의 찾기 (문의 번호·이메일·제목·내용). '/' 키로 바로 입력.
+ *  하나만 찾아지면 그 문의 상세로, 여러 건이면 문의 목록에서 결과를 보여 줌 */
+function GlobalSearch() {
+  const navigate = useNavigate();
+  const box = useRef<HTMLInputElement>(null);
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement;
+      if (e.key !== "/" || e.ctrlKey || e.metaKey || e.altKey || t.closest("input, textarea, select, [contenteditable=true]")) return;
+      e.preventDefault();
+      box.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    const word = q.trim();
+    if (!word) return;
+    setBusy(true);
+    try {
+      const r = await inquiryApi.list({ q: word, size: 2 });
+      navigate(r.total === 1 ? `/admin/inquiries/${r.items[0].id}` : `/admin/inquiries?q=${encodeURIComponent(word)}`);
+    } catch {
+      navigate(`/admin/inquiries?q=${encodeURIComponent(word)}`);
+    } finally {
+      setBusy(false);
+      setQ("");
+      box.current?.blur();
+    }
+  }
+
+  return (
+    <form onSubmit={submit} role="search" className="relative min-w-0 flex-1 sm:max-w-md">
+      <Icon name="search" className="pointer-events-none absolute left-4 top-1/2 z-10 h-[18px] w-[18px] -translate-y-1/2 text-muted" />
+      <input ref={box} value={q} onChange={(e) => setQ(e.target.value)} disabled={busy} maxLength={100}
+        placeholder="문의 번호·이메일·제목으로 찾기" aria-label="문의 검색"
+        className="h-12 w-full rounded-2xl border border-hairline bg-white pl-11 pr-12 text-sm text-ink outline-none placeholder:text-muted focus:border-primary" />
+      <kbd className="pointer-events-none absolute right-4 top-1/2 z-10 -translate-y-1/2 rounded-md border border-hairline bg-surface-soft px-1.5 font-sans text-xs text-muted">/</kbd>
+    </form>
   );
 }
 
@@ -36,8 +85,8 @@ export default function AdminLayout() {
   const initial = initialOf(user?.display_name ?? "");
 
   return (
-    <div className="min-h-screen lg:pl-64">
-      <aside className="border-b border-white/60 bg-white/45 backdrop-blur lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:w-64 lg:flex-col lg:border-b-0 lg:border-r lg:border-white/60">
+    <div className="min-h-screen p-3 lg:py-4 lg:pl-[18rem] lg:pr-4">
+      <aside className="mb-3 rounded-2xl border border-white/70 bg-white/60 shadow-sm shadow-primary/5 backdrop-blur lg:fixed lg:bottom-4 lg:left-4 lg:top-4 lg:mb-0 lg:flex lg:w-64 lg:flex-col lg:rounded-3xl">
         <div className="flex items-center justify-between gap-2 px-4 py-3 lg:px-5 lg:py-5">
           <span className="flex items-center gap-2 font-semibold text-ink">
             <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-pink text-sm font-bold text-white" aria-hidden>Q</span>
@@ -60,9 +109,11 @@ export default function AdminLayout() {
 
       </aside>
 
-      {/* 오른쪽 위: 로그인한 사람 (누르면 내 계정) + 로그아웃 */}
-      <div className="mx-auto flex max-w-7xl justify-end px-4 pt-4 lg:px-8 lg:pt-6">
-        <div className="flex items-center gap-1 rounded-2xl border border-white/70 bg-white/70 p-1 shadow-sm shadow-primary/5 backdrop-blur">
+      <div className="mx-auto max-w-[96rem] space-y-3 lg:space-y-4">
+      {/* 위쪽 판: 문의 검색 · 로그인한 사람 (누르면 내 계정) + 로그아웃 */}
+      <header className="flex items-center justify-between gap-3 rounded-2xl border border-white/70 bg-white/60 p-2 shadow-sm shadow-primary/5 backdrop-blur lg:rounded-3xl lg:px-3">
+        <GlobalSearch />
+        <div className="flex shrink-0 items-center gap-1">
           <NavLink to="/admin/account" title="내 계정 · 비밀번호 변경"
             className="flex items-center gap-2.5 rounded-xl py-1 pl-1 pr-3 hover:bg-white">
             <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-white" aria-hidden>
@@ -80,11 +131,13 @@ export default function AdminLayout() {
             <span className="hidden sm:inline">로그아웃</span>
           </button>
         </div>
-      </div>
+      </header>
 
-      <main className="mx-auto max-w-7xl px-4 pb-6 pt-2 lg:px-8 lg:pb-8">
+      {/* 본문 판: 연한 흰 판 안에 흰 카드들 */}
+      <main className="min-h-[calc(100vh-7.5rem)] rounded-2xl border border-white/70 bg-white/35 p-4 shadow-sm shadow-primary/5 lg:rounded-3xl lg:p-6">
         <Outlet />
       </main>
+      </div>
     </div>
   );
 }

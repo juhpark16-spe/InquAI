@@ -181,12 +181,35 @@ export interface ActivityItem {
 export const statsApi = {
   summary: (days: number) =>
     http.get<StatsSummary>("/stats/summary", { params: { from: kstDate(days - 1), to: kstDate(0) } }).then((r) => r.data),
+  priorities: (limit = 5) => http.get<Priorities>("/stats/priorities", { params: { limit } }).then((r) => r.data),
   activity: (limit = 8) => http.get<ActivityItem[]>("/stats/activity", { params: { limit } }).then((r) => r.data),
   products: (days: number, limit = 5) =>
     http.get<ProductStats>("/stats/products", { params: { from: kstDate(days - 1), to: kstDate(0), limit } }).then((r) => r.data),
   drafts: (days: number, examples = 6) =>
     http.get<DraftStats>("/stats/drafts", { params: { from: kstDate(days - 1), to: kstDate(0), examples } }).then((r) => r.data),
 };
+
+/** 대시보드 '지금 할 일': 가장 급한 문의(처리 대기열 첫 문의) + 기한이 남은 미처리 문의 (기한 가까운 순) */
+export interface PriorityItem {
+  id: number;
+  inquiry_number: string;
+  title: string;
+  customer_name: string;
+  preview: string;
+  status: string;
+  category: string | null;
+  urgency: string | null;
+  assigned_to: string | null;
+  created_at: string;
+  due_at: string;
+  overdue: boolean;
+}
+
+export interface Priorities {
+  open: number;
+  next: PriorityItem | null;
+  due_soon: PriorityItem[];
+}
 
 /** 상품별 문의 (주문에 연결된 문의만, 옵션이 달라도 같은 상품으로 묶음) */
 export interface ProductStats {

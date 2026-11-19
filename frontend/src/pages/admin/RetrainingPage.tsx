@@ -43,7 +43,7 @@ export default function RetrainingPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900">재학습 현황</h1>
+        <h1 className="page-title">재학습 현황</h1>
         <p className="text-sm text-slate-500">
           상담원이 문의 상세에서 [분류 고치기]로 바로잡은 분류는 다음 모델의 학습 데이터가 됩니다.
           자주 고치는 패턴이 곧 모델의 약점입니다 (docs/retraining.md).
@@ -106,22 +106,22 @@ export default function RetrainingPage() {
       <Card title="모델 버전 기록">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[50rem] text-left text-sm">
-            <thead className="text-xs text-muted">
+            <thead className="text-sm text-muted">
               <tr>{["버전", "베이스", "학습 데이터", "외부 테스트", "직접 쓴 평가용", "새 평가용 (2차)", "실전 100", "메모"].map((h) => <th key={h} className="px-2 py-2 font-medium">{h}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-hairline">
               {history.map((v) => (
                 <tr key={v.version} className={cx("align-top", v.current && "bg-primary-soft/50")}>
-                  <td className="whitespace-nowrap px-2 py-2 font-mono text-xs">
+                  <td className="whitespace-nowrap px-2 py-2 font-mono text-sm">
                     {v.version}{v.current && <span className="ml-1 rounded-full bg-primary px-2 py-0.5 font-sans text-white">사용 중</span>}
                   </td>
                   <td className="px-2 py-2">{v.base_model ?? "-"}</td>
-                  <td className="px-2 py-2 text-xs text-body">{v.data ?? "-"}</td>
+                  <td className="px-2 py-2 text-sm text-body">{v.data ?? "-"}</td>
                   <td className="px-2 py-2 tabular-nums">{pct(v.scores.external)}</td>
                   <td className="px-2 py-2 tabular-nums">{pct(v.scores.written_eval)}</td>
                   <td className="px-2 py-2 tabular-nums">{pct(v.scores.written_eval2)}</td>
                   <td className="px-2 py-2 tabular-nums">{pct(v.scores.real)}</td>
-                  <td className="px-2 py-2 text-xs text-slate-500">{v.note}</td>
+                  <td className="px-2 py-2 text-sm text-slate-500">{v.note}</td>
                 </tr>
               ))}
             </tbody>

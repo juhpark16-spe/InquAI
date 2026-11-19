@@ -1,6 +1,6 @@
-// 대화 + 답변 작성 영역 (문의 상세)
-// - 대화: 고객(왼쪽: 처음 문의·추가 문의·사진) / AI·상담원 답변(오른쪽, 고객 평가 표시) / 내부 메모(노란색, 고객에게 안 보임)
-//         사이사이 처리 안내(AI 판단, 배정, 상태 변경, 답변 알림)
+// 문의와 답변 + 답변 작성 영역 (문의 상세)
+// - 문의와 답변: 고객(왼쪽: 처음 문의·추가 문의·사진) / AI·상담원 답변(오른쪽, 고객 평가 표시) / 내부 메모(노란색, 고객에게 안 보임)
+//         사이사이 티켓 처리·AI 오류 안내 (배정·상태 변경·알림은 '전체 처리 이력'에서)
 // - 입력: [답변] 탭 = 초안 저장·발송 (AI 초안이 있으면 채워 둠, [AI 초안 만들기], 참고 FAQ 넣기) / [내부 메모] 탭 = 상담원끼리 메모
 // - AI 초안의 [확인 필요: …] 표시와 확인할 것 목록을 보여 주고, 표시가 남은 채로 보내려 하면 한 번 더 물음
 import { useEffect, useRef, useState } from "react";
@@ -65,6 +65,7 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
   const [notice, setNotice] = useState("");
   const [faqs, setFaqs] = useState<Record<string, FaqPublic>>({});
   const [ask, setAsk] = useState("");
+  const [tools, setTools] = useState(false); // 문구·주문 정보·초안 요청 버튼은 필요할 때만 펼침
   const box = useRef<HTMLTextAreaElement>(null);
 
   // 다른 문의로 이동하거나 저장 후 다시 불러오면 입력칸을 최신 초안으로 맞춤
@@ -118,7 +119,8 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
 
   const saveMemo = () => run("memo", async () => { await inquiryApi.addNote(data.id, memo); setMemo(""); }, "내부 메모를 남겼습니다.");
 
-  // 대화 순서: 고객 글·답변·메모·안내를 모두 시간순으로
+  // 문의와 답변: 고객 글·보낸 답변·내부 메모·티켓 처리를 시간순으로.
+  // 배정·상태 변경·알림 기록·AI 판단 같은 시스템 기록은 '전체 처리 이력'에서만 봄 (AI 오류만 여기에도 표시)
   type Item =
     | { type: "customer"; at: string; text: string; messageId: number | null; followUp: boolean }
     | { type: "note"; at: string; text: string; warn: boolean }
@@ -128,10 +130,9 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
   const thread: Item[] = [
     { type: "customer" as const, at: data.created_at, text: data.content, messageId: null, followUp: false },
     ...data.messages.map((m) => ({ type: "customer" as const, at: m.created_at, text: m.text, messageId: m.id, followUp: true })),
-    ...data.history.filter((e) => e.kind === "ai" || e.kind === "assign" || e.kind === "status" || e.kind === "correct" || e.kind === "ticket").map((e) => ({
-      type: "note" as const, at: e.at, warn: e.kind === "ai" && e.text.includes("오류"), text: `${e.actor} · ${e.text}`,
+    ...data.history.filter((e) => e.kind === "ticket" || (e.kind === "ai" && e.text.includes("오류"))).map((e) => ({
+      type: "note" as const, at: e.at, warn: e.kind === "ai", text: `${e.actor} · ${e.text}`,
     })),
-    ...data.notifications.map((n) => ({ type: "note" as const, at: n.created_at, warn: false, text: `고객에게 답변 알림 (${n.channel === "email" ? "이메일" : n.channel}, 시연용 ${n.status})` })),
     ...data.notes.map((n) => ({ type: "memo" as const, at: n.created_at, text: n.text, author: n.author })),
     ...sent.map((r, i) => ({ type: "sent" as const, at: r.approved_at ?? r.created_at, r, who: sentEvents[i]?.actor ?? "상담원" })),
   ].sort((x, y) => new Date(x.at).getTime() - new Date(y.at).getTime());
@@ -167,7 +168,7 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
 
   const tab = (m: "answer" | "memo", label: string) => (
     <button type="button" onClick={() => setMode(m)}
-      className={cx("rounded-md px-3 py-1 text-[15px]", mode === m ? (m === "memo" ? "bg-amber-100 font-medium text-amber-900" : "bg-indigo-50 font-medium text-indigo-700") : "text-slate-600 hover:text-slate-800")}>
+      className={cx("rounded-md px-3 py-1 text-base", mode === m ? (m === "memo" ? "bg-amber-100 font-medium text-amber-900" : "bg-indigo-50 font-medium text-indigo-700") : "text-slate-600 hover:text-slate-800")}>
       {label}
     </button>
   );
@@ -216,7 +217,7 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
           {mode === "answer" && (
             <button type="button" onClick={aiDraft} disabled={!!busy}
               title="FAQ·주문 정보·대화를 근거로 AI가 초안을 씁니다. 모르는 내용은 [확인 필요]로 남깁니다."
-              className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-[15px] font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60">
+              className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-base font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60">
               {busy === "draft" ? <><Spinner /> AI가 초안을 쓰는 중… (10초 안팎)</> : <>✨ {draft?.generated_by === "llm" ? "AI 초안 다시 만들기" : "AI 초안 만들기"}</>}
             </button>
           )}
@@ -252,41 +253,50 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
             {draft?.generated_by === "llm" && checks.length === 0 && draft.grounded === false && (
               <p className="text-sm text-amber-700">FAQ만으로는 답이 부족해 AI가 초안으로 둔 답변입니다. 내용을 확인해 주세요.</p>
             )}
-            <div className="flex flex-wrap items-center gap-1.5 text-sm">
-              <span className="text-slate-600">문구 넣기:</span>
-              {TEMPLATES.map(([label, piece]) => (
-                <button key={label} type="button" onClick={() => insertAt(piece, true)} title={piece} disabled={!!busy}
-                  className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-slate-700 hover:border-indigo-400 hover:text-indigo-700">
-                  {label}
-                </button>
-              ))}
-            </div>
-            {orderChips.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                <span className="text-slate-600">주문 정보 넣기:</span>
-                {orderChips.map(([label, value]) => (
-                  <button key={label} type="button" onClick={() => insertAt(value)} title={value} disabled={!!busy}
-                    className="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-emerald-800 hover:border-emerald-500">
-                    {label} <span className="font-mono">{value.length > 14 ? `${value.slice(0, 14)}…` : value}</span>
-                  </button>
-                ))}
+            <button type="button" onClick={() => setTools(!tools)} aria-expanded={tools}
+              className="text-sm font-medium text-slate-600 hover:text-primary">
+              {tools ? "▾" : "▸"} 문구·주문 정보{draft?.generated_by === "llm" ? "·초안 요청" : ""} 넣기
+              {!tools && ask.trim() && <span className="ml-1 text-indigo-700">(초안 요청: {ask.trim()})</span>}
+            </button>
+            {tools && (
+              <div className="space-y-2 rounded-lg bg-slate-50 p-2.5">
+                <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                  <span className="text-slate-600">문구 넣기:</span>
+                  {TEMPLATES.map(([label, piece]) => (
+                    <button key={label} type="button" onClick={() => insertAt(piece, true)} title={piece} disabled={!!busy}
+                      className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-slate-700 hover:border-indigo-400 hover:text-indigo-700">
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                {orderChips.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                    <span className="text-slate-600">주문 정보 넣기:</span>
+                    {orderChips.map(([label, value]) => (
+                      <button key={label} type="button" onClick={() => insertAt(value)} title={value} disabled={!!busy}
+                        className="rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-emerald-800 hover:border-emerald-500">
+                        {label} <span className="font-mono">{value.length > 14 ? `${value.slice(0, 14)}…` : value}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {draft?.generated_by === "llm" && (
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                    <span className="text-slate-600">초안 요청:</span>
+                    {DRAFT_ASKS.map((a) => (
+                      <button key={a} type="button" onClick={() => setAsk(a)} disabled={!!busy}
+                        className={cx("rounded-full border px-2 py-0.5", ask === a ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-slate-300 bg-white text-slate-700 hover:border-indigo-400")}>
+                        {a}
+                      </button>
+                    ))}
+                    <input value={ask} onChange={(e) => setAsk(e.target.value)} maxLength={200} placeholder="직접 적기 (선택)" disabled={!!busy}
+                      className="min-w-32 flex-1 rounded-full border border-slate-300 bg-white px-3 py-0.5 outline-none focus:border-indigo-400" />
+                    {ask.trim() && <span className="text-indigo-700">→ 위의 [✨ AI 초안 다시 만들기]를 누르면 반영됩니다</span>}
+                  </div>
+                )}
               </div>
             )}
-            {draft?.generated_by === "llm" && (
-              <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                <span className="text-slate-600">초안 요청:</span>
-                {DRAFT_ASKS.map((a) => (
-                  <button key={a} type="button" onClick={() => setAsk(a)} disabled={!!busy}
-                    className={cx("rounded-full border px-2 py-0.5", ask === a ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "border-slate-300 bg-white text-slate-700 hover:border-indigo-400")}>
-                    {a}
-                  </button>
-                ))}
-                <input value={ask} onChange={(e) => setAsk(e.target.value)} maxLength={200} placeholder="직접 적기 (선택)" disabled={!!busy}
-                  className="min-w-32 flex-1 rounded-full border border-slate-300 bg-white px-3 py-0.5 outline-none focus:border-indigo-400" />
-                {ask.trim() && <span className="text-indigo-700">→ 위의 [✨ AI 초안 다시 만들기]를 누르면 반영됩니다</span>}
-              </div>
-            )}
-            <Textarea ref={box} value={text} maxLength={MAX} onChange={(e) => setText(e.target.value)} className="min-h-40 text-[15px] leading-relaxed"
+            <Textarea ref={box} value={text} maxLength={MAX} onChange={(e) => setText(e.target.value)} className="min-h-40 text-base leading-relaxed"
               onKeyDown={(e) => {
                 // 단축키: Ctrl(⌘)+Enter 발송, Ctrl(⌘)+S 초안 저장
                 if (!(e.ctrlKey || e.metaKey) || busy) return;
@@ -297,14 +307,14 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm text-slate-500">
                 {marks > 0 && <b className="mr-1 font-semibold text-amber-700">[확인 필요] {marks}곳 남음 ·</b>}
-                {text.length.toLocaleString()} / {MAX.toLocaleString()}자 · 발송하면 고객 조회 화면에 보이고 이메일 알림이 기록되며 문의가 완료됩니다
-                <span className="ml-1 hidden text-slate-500 lg:inline">· 단축키 Ctrl+Enter 발송 · Ctrl+S 초안 저장 · Alt+←/→ 이전·다음 문의</span>
+                {text.length.toLocaleString()} / {MAX.toLocaleString()}자
               </span>
               <div className="flex gap-2">
                 <Button variant="ghost" disabled={!!busy || !text.trim() || (!!draft && !dirty)} onClick={() => save(false)}>
                   {busy === "save" ? <Spinner /> : "초안 저장"}
                 </Button>
-                <Button disabled={!!busy || !text.trim()} onClick={() => save(true)}>
+                <Button disabled={!!busy || !text.trim()} onClick={() => save(true)}
+                  title="고객 조회 화면에 보이고 이메일 알림이 기록되며 문의가 완료됩니다 (단축키 Ctrl+Enter · 초안 저장 Ctrl+S · 이전·다음 문의 Alt+←/→)">
                   {busy === "send" ? <Spinner /> : "발송"}
                 </Button>
               </div>

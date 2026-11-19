@@ -1,4 +1,4 @@
-"""대시보드 통계: GET /api/stats/summary·activity·products·drafts (관리자, docs/api_spec.md 9장).
+"""대시보드 통계: GET /api/stats/summary·priorities·activity·products·drafts (관리자, docs/api_spec.md 9장).
 
 기간은 한국 날짜(KST) 기준 from~to (기본: 최근 7일). 문의가 많지 않은 시연 규모라
 기간 안의 문의를 한 번에 읽어 파이썬에서 집계합니다 (SQLite·PostgreSQL 어디서나 같은 결과).
@@ -17,7 +17,7 @@ from backend.core.errors import AppError
 from backend.services import draft_quality, sla
 from backend.services.inquiry_context import history
 from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminAuditLog, AdminUser, Inquiry,
-                                     LabelCorrection, Order, Response, as_utc)
+                                     LabelCorrection, Order, Response, as_utc, utcnow)
 from backend.training.labels import CATEGORY_LABELS
 
 router = APIRouter(prefix="/stats", tags=["통계"])
@@ -182,6 +182,38 @@ def summary(
         },
         "staff": list(per_staff.values()),
     }
+
+
+URGENCY_RANK = {"높음": 0, "보통": 1, "낮음": 2}
+
+
+def _priority_item(i: Inquiry) -> dict:
+    a = i.analysis
+    urgency = a.urgency if a else None
+    return {"id": i.id, "inquiry_number": i.inquiry_number, "title": i.title, "customer_name": i.customer_name,
+            "preview": re.sub(r"\s+", " ", i.content).strip()[:90], "status": i.status,
+            "category": a.category if a else None, "urgency": urgency,
+            "assigned_to": i.assignee.display_name if i.assignee else None,
+            "created_at": i.created_at, "due_at": sla.due_at(i.created_at, urgency),
+            "overdue": sla.is_overdue(i.status, i.created_at, urgency)}
+
+
+@router.get("/priorities", summary="지금 가장 급한 문의 + 기한 임박 문의 (관리자)")
+def priorities(_: AdminOnly, db: DB, limit: int = Query(5, ge=1, le=20)):
+    """대시보드 '지금 할 일' 카드.
+
+    - next: 처리 대기열의 첫 문의 (긴급도 높은 순 → 오래된 순, 문의 상세의 이전·다음과 같은 순서)
+    - due_soon: 아직 기한이 남은 미처리 문의를 기한이 가까운 순으로 (기한을 넘긴 문의는 '답변 기한 초과' 카드에서 봄)
+    """
+    rows = db.scalars(select(Inquiry).where(Inquiry.status.in_(OPEN_STATUSES))
+                      .options(selectinload(Inquiry.analysis), selectinload(Inquiry.assignee))).all()
+    rank = lambda i: URGENCY_RANK.get(i.analysis.urgency if i.analysis else "", 3)  # noqa: E731
+    queue = sorted(rows, key=lambda i: (rank(i), as_utc(i.created_at), i.id))
+    now = utcnow()
+    upcoming = sorted((i for i in rows if sla.due_at(i.created_at, i.analysis.urgency if i.analysis else None) > now),
+                      key=lambda i: (sla.due_at(i.created_at, i.analysis.urgency if i.analysis else None), i.id))
+    return {"open": len(rows), "next": _priority_item(queue[0]) if queue else None,
+            "due_soon": [_priority_item(i) for i in upcoming[:limit]]}
 
 
 @router.get("/activity", summary="최근 처리 활동 (관리자)")

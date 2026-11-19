@@ -7,6 +7,26 @@
 @theme {
   --font-sans: "Pretendard Variable", "Pretendard", Inter, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
 
+  /* 글씨 크기 5단계 (화면 전체 공통, 2026-11-19). 오래 읽어도 편하도록 가장 작은 글씨도 13px, 본문 15px, 한글은 줄 간격을 넉넉히
+     - text-2xl 24px : 페이지 제목 (.page-title)
+     - text-lg   17px : 구역(카드) 제목
+     - text-base 15px : 본문 (문의 내용, 답변, 표의 중요한 값)
+     - text-sm   14px : 보조 설명, 표, 버튼
+     - text-xs   13px : 시각·건수 같은 작은 정보
+     대시보드의 큰 숫자(text-3xl 이상)만 강조용으로 예외 */
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.25rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.375rem;
+  --text-base: 0.9375rem;
+  --text-base--line-height: 1.6;
+  --text-lg: 1.0625rem;
+  --text-lg--line-height: 1.5;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.45;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 1.35;
+
   /* 색 토큰 (bg-canvas, text-ink, bg-brand-pink 처럼 씀) */
   --color-canvas: #dde4f6;          /* 페이지 바탕: 푸른 라벤더 */
   --color-surface-soft: #eef1fb;    /* 하단 등 연한 면 */
@@ -45,13 +65,18 @@
 }
 
 body {
-  @apply text-body antialiased;
+  @apply text-base text-body antialiased;
   /* 위는 연한 페리윙클, 아래로 갈수록 푸른빛이 조금 더 짙게 (참고 이미지처럼 은은한 그라데이션) */
   background: linear-gradient(180deg, #e6eaf9 0%, #dde4f6 50%, #d2dbf3 100%) fixed;
   background-color: var(--color-canvas);
 }
 
-/* 큰 제목 (display): 굵기 500, 좁은 자간 */
+/* 페이지 제목: 모든 관리 화면에서 같은 크기·굵기 */
+.page-title {
+  @apply text-2xl font-bold tracking-tight text-ink;
+}
+
+/* 큰 제목 (display): 굵기 500, 좁은 자간. 로그인 화면의 서비스 이름처럼 화면에 하나뿐인 큰 글씨에만 씀 */
 .display {
   @apply font-medium tracking-tight text-ink;
   letter-spacing: -0.03em;

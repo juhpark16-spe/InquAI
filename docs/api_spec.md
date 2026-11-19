@@ -451,6 +451,19 @@
 - 대시보드 카드에서 목록으로 이동할 수 있도록 문의 목록 API에 `open=true`(미처리만) 필터를 추가했습니다.
 기획서 7장은 권한이 "필요"이지만, 6장 권한표에 맞춰 관리자만으로 정했습니다.
 
+### GET /api/stats/priorities — 지금 가장 급한 문의 + 기한 임박 문의 (관리자, 4주차)
+
+대시보드 '지금 처리할 일' 아래 두 카드. 쿼리: `limit` (1~20, 기본 5)
+
+- `next`: 처리 대기열의 첫 문의 (긴급도 높은 순 → 오래된 순, 문의 상세의 이전·다음과 같은 순서). 미처리가 없으면 null
+- `due_soon`: 아직 답변 기한이 남은 미처리 문의를 기한이 가까운 순으로 (기한을 넘긴 문의는 '답변 기한 초과'에서 봄)
+- 항목: `id, inquiry_number, title, customer_name, preview(내용 앞 90자), status, category, urgency, assigned_to(이름), created_at, due_at, overdue`
+- 답변 기한은 계산값(긴급 4시간, 그 외 24시간)이라 DB에서 정렬할 수 없어, 미처리 문의를 읽어 파이썬에서 정렬합니다 (미처리는 많지 않음)
+
+```json
+{"open": 6, "next": {"id": 48, "title": "상품이 파손되어 왔어요", "urgency": "높음", "overdue": true, "...": "..."}, "due_soon": []}
+```
+
 ### GET /api/stats/products — 상품별 문의 (관리자, 4주차)
 파라미터: `from`, `to` (KST, 기본 최근 30일, 최대 92일), `limit` (1~20, 기본 5). 대시보드 "문의가 많은 상품" 패널.
 ```json

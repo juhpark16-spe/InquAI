@@ -38,7 +38,7 @@ export default function AccountPage() {
 
   return (
     <div className="mx-auto max-w-md space-y-4">
-      <h1 className="text-lg font-semibold text-slate-900">내 계정</h1>
+      <h1 className="page-title">내 계정</h1>
       <Card>
         <dl className="grid grid-cols-[5rem_1fr] gap-y-1 text-sm">
           <dt className="text-slate-500">이름</dt><dd>{user?.display_name}</dd>

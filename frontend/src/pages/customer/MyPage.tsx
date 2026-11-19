@@ -61,13 +61,13 @@ export default function MyPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-lg font-semibold text-ink">{customer.name}님의 쇼핑</h1>
+        <h1 className="page-title">{customer.name}님의 쇼핑</h1>
         <p className="text-sm text-muted">주문에서 바로 문의하면 주문번호가 자동으로 들어가 더 빨리 확인해 드려요.</p>
       </div>
       {error && <Alert>{error}</Alert>}
 
       <section className="space-y-3">
-        <h2 className="font-semibold text-ink">내 주문</h2>
+        <h2 className="text-lg font-semibold text-ink">내 주문</h2>
         {!orders && !error && <p className="text-center text-slate-500"><Spinner /></p>}
         {orders?.length === 0 && <p className="text-sm text-muted">주문 내역이 없습니다.</p>}
         <ul className="space-y-2">{orders?.map((o) => <OrderCard key={o.order_number} o={o} />)}</ul>
@@ -75,7 +75,7 @@ export default function MyPage() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-ink">내 문의 {items && <span className="text-sm font-normal text-muted">{items.length}건 · {notice}</span>}</h2>
+          <h2 className="text-lg font-semibold text-ink">내 문의 {items && <span className="text-sm font-normal text-muted">{items.length}건 · {notice}</span>}</h2>
           <Link to="/inquiry" className="text-sm font-semibold text-primary hover:underline">새 문의</Link>
         </div>
         {items?.length === 0 && <Card><p className="text-sm text-muted">아직 남긴 문의가 없어요.</p></Card>}

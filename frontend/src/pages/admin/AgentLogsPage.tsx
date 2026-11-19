@@ -74,7 +74,7 @@ function Detail({ log, titles }: { log: AgentLogRow; titles: Record<string, stri
           ))}
         </ul>
       ) : "-")}
-      {log.response_text && row(log.decision === "자동 답변" ? "고객에게 보낸 답" : "AI가 쓴 답 (상담원 검토용)", <p className="whitespace-pre-line rounded-lg bg-slate-50 p-2 text-xs">{log.response_text}</p>)}
+      {log.response_text && row(log.decision === "자동 답변" ? "고객에게 보낸 답" : "AI가 쓴 답 (상담원 검토용)", <p className="whitespace-pre-line rounded-lg bg-slate-50 p-2 text-sm">{log.response_text}</p>)}
       {row("LLM", log.llm_model ?? "사용 안 함 (규칙 판단)")}
       {row("토큰", log.tokens?.calls ? `입력 ${log.tokens.input} · 출력 ${log.tokens.output} (${log.tokens.calls}회)` : "-")}
       {log.error && row("오류", <span className="break-all text-rose-700">{log.error}</span>)}
@@ -131,7 +131,7 @@ export default function AgentLogsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900">AI 실행 로그</h1>
+        <h1 className="page-title">AI 실행 로그</h1>
         <p className="text-sm text-slate-500">
           문의마다 AI가 고른 처리 방식, 사용한 도구와 성공 여부, 근거 FAQ, 처리 시간을 봅니다. 줄을 누르면 자세한 기록이 펼쳐집니다.
           {user?.role !== "admin" && " 상담원은 자신에게 배정된 문의만 보입니다."}
@@ -169,7 +169,7 @@ export default function AgentLogsPage() {
 
       <div className="overflow-x-auto rounded-2xl border border-hairline bg-white">
         <table className="w-full min-w-[56rem] text-left text-sm">
-          <thead className="border-b border-hairline bg-surface-card text-xs text-muted">
+          <thead className="border-b border-hairline bg-surface-card text-sm text-muted">
             <tr>{["시각", "문의", "유형 · 확신도", "처리 방식", "도구", "처리 시간"].map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr>
           </thead>
           <tbody className="divide-y divide-hairline">
@@ -180,7 +180,7 @@ export default function AgentLogsPage() {
                   <td className="whitespace-nowrap px-3 py-3 text-slate-500">{formatDate(log.created_at)}</td>
                   <td className="px-3 py-3">
                     <Link to={`/admin/inquiries/${log.inquiry_id}`} onClick={(e) => e.stopPropagation()}
-                      className="font-mono text-xs text-primary hover:underline">{log.inquiry_number}</Link>
+                      className="font-mono text-sm text-primary hover:underline">{log.inquiry_number}</Link>
                     <div className="max-w-64 truncate text-ink" title={log.inquiry_title}>{log.inquiry_title}</div>
                   </td>
                   <td className="whitespace-nowrap px-3 py-3">

@@ -37,12 +37,12 @@ test("고객 문의 → 상담원 답변 발송 → 고객 조회에서 답변 �
   const number = await createInquiry(page, email, title, "어제 주문한 상품이 아직 배송 출발을 안 했어요. 언제 보내 주시나요?");
   await expect(page.getByText(/담당자가 확인 후/)).toBeVisible();
 
-  // 2. 관리자: 로그인 → 문의 목록에서 검색 → 상세 화면
+  // 2. 관리자: 로그인 → 위쪽 검색창에 문의 번호 ('/' 키로 바로 입력) → 하나만 찾아져 상세 화면으로 바로
   await staffLogin(page, "admin");
-  await page.goto("/admin/inquiries");
-  await page.getByPlaceholder("제목·내용·문의 번호·이메일").fill(number);
-  await page.getByRole("button", { name: "검색" }).click();
-  await page.getByRole("link", { name: number }).click();
+  await page.keyboard.press("/");
+  await page.keyboard.type(number);
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/admin\/inquiries\/\d+$/);
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
   await expect(page.getByText("배송").first()).toBeVisible(); // 분석 결과 유형
 
@@ -77,6 +77,16 @@ test("상담원은 관리자 전용 화면에 들어갈 수 없음", async ({ pa
   await staffLogin(page, "agent1");
   await page.goto("/admin/users");
   await expect(page).not.toHaveURL(/\/admin\/users/);
+});
+
+test("여러 건이 찾아지면 문의 목록에 검색어와 함께 보여 줌", async ({ page }) => {
+  await staffLogin(page, "admin");
+  await page.getByLabel("문의 검색").fill("자동 테스트");
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/admin\/inquiries\?q=/);
+  await expect(page.getByText("검색어:")).toBeVisible();
+  await page.getByRole("button", { name: "검색어 지우기" }).click();
+  await expect(page).not.toHaveURL(/q=/);
 });
 
 test("로그인하지 않으면 관리 화면 대신 로그인 화면", async ({ page }) => {

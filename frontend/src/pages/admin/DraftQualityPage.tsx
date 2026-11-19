@@ -67,8 +67,8 @@ export default function DraftQualityPage() {
     <div className="space-y-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">AI 초안 수정 분석</h1>
-          <p className="mt-1 text-[15px] text-slate-600">
+          <h1 className="page-title">AI 초안 수정 분석</h1>
+          <p className="mt-1 text-base text-slate-600">
             상담원이 승인해 보낸 AI 초안을 실제로 보낸 답변과 비교합니다. 고치지 않고 보낼수록 AI가 상담원 일을 덜어 준 것이고,
             많이 고친 유형은 FAQ·프롬프트를 손볼 곳입니다 · {data.range.from} ~ {data.range.to} (보낸 날짜, 한국 시간)
           </p>
@@ -107,7 +107,7 @@ export default function DraftQualityPage() {
               </div>
               <ul className="mt-4 space-y-2">
                 {(Object.keys(LEVEL_STYLE) as DraftLevel[]).map((lv) => (
-                  <li key={lv} className="flex items-start gap-3 text-[15px]">
+                  <li key={lv} className="flex items-start gap-3 text-base">
                     <span className={cx("mt-1.5 h-3 w-3 shrink-0 rounded-sm", LEVEL_STYLE[lv].bar)} aria-hidden />
                     <div>
                       <b className="text-ink">{lv}</b>
@@ -154,7 +154,7 @@ export default function DraftQualityPage() {
                   아래 비교를 보고 FAQ 답변이나 초안 프롬프트에 빠진 내용을 채우면 좋습니다.
                 </p>
               )}
-              <table className="w-full text-left text-[15px]">
+              <table className="w-full text-left text-base">
                 <thead className="text-sm text-slate-600">
                   <tr><th className="py-1.5 font-medium">유형</th><th className="py-1.5 font-medium">건수</th>
                     <th className="w-2/5 py-1.5 font-medium">그대로 보낸 비율</th><th className="py-1.5 text-right font-medium">평균 바뀐 정도</th></tr>
@@ -180,7 +180,7 @@ export default function DraftQualityPage() {
               <Card title="상담원별">
                 <ul className="divide-y divide-slate-200">
                   {data.by_staff.map((g) => (
-                    <li key={g.id} className="flex items-center gap-3 py-2 text-[15px]">
+                    <li key={g.id} className="flex items-center gap-3 py-2 text-base">
                       <b className="w-24 shrink-0 truncate text-ink">{g.display_name}</b>
                       <span className="w-12 shrink-0 tabular-nums text-slate-700">{g.count}건</span>
                       <RateBar value={g.unedited_rate} target={s.target} />
@@ -190,7 +190,7 @@ export default function DraftQualityPage() {
                 </ul>
               </Card>
               <Card title="초안 다시 만들기">
-                <p className="text-[15px] text-slate-700">
+                <p className="text-base text-slate-700">
                   [AI 초안 만들기]를 다시 누른 횟수 <b className="tabular-nums text-ink">{data.regenerate.count}번</b>
                   {" "}· 요청을 적은 것 <b className="tabular-nums text-ink">{data.regenerate.with_instruction}번</b>
                 </p>
@@ -218,13 +218,13 @@ export default function DraftQualityPage() {
                       className="rounded-md border border-slate-300 px-2 py-0.5 font-mono font-semibold text-primary hover:bg-primary-soft">
                       {e.inquiry_number}
                     </Link>
-                    <b className="text-[15px] text-ink">{e.title}</b>
+                    <b className="text-base text-ink">{e.title}</b>
                     <span className="text-slate-600">{e.category} · {e.staff} · {formatDate(e.sent_at)}</span>
                     <span className={cx("ml-auto rounded-full border px-2.5 py-0.5 font-semibold", LEVEL_STYLE[e.level].chip)}>
                       {e.level} {pct(e.change)}{e.kind && ` · ${e.kind}`}
                     </span>
                   </div>
-                  <p className="mt-3 whitespace-pre-wrap text-[15px] leading-7 text-slate-800">
+                  <p className="mt-3 whitespace-pre-wrap text-base leading-7 text-slate-800">
                     {e.segments.map((g, k) => g.op === "same" ? <span key={k}>{g.text}</span>
                       : g.op === "del" ? <del key={k} className="bg-rose-100 text-rose-800 decoration-rose-500" title="AI 초안에서 지운 부분">{g.text}</del>
                         : <ins key={k} className="bg-emerald-100 text-emerald-900 no-underline" title="상담원이 더한 부분">{g.text}</ins>)}

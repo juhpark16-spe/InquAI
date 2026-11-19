@@ -1,4 +1,5 @@
-// 관리자 대시보드 (/admin): 지금 처리할 일 → 기간 지표(지난 기간 대비) → 날짜별 유형 + 최근 활동
+// 관리자 대시보드 (/admin): 지금 처리할 일 → 기간 지표(지난 기간 대비) → 날짜별 유형 → 처리 현황·만족도·담당자·상품
+// (최근 활동·LLM 호출·토큰은 뺌: 문의 상세의 처리 이력과 AI 실행 로그에서 봄)
 // → 처리·미처리, 처리 방식·긴급도 → AI 현황, 담당자별 미처리 → 문의가 많은 상품 (상세페이지 개선 신호)
 // 색: 카드는 흰 바탕, 위험한 값(기한 초과·긴급)만 빨강. 유형 8개는 고정 순서의 범주 색(유형마다 항상 같은 색)
 import { useEffect, useState, type ReactNode } from "react";
@@ -7,8 +8,8 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 
 import { useAuth } from "../../auth/AuthProvider";
 import Icon, { type IconName } from "../../components/Icon";
-import { Alert, Spinner, cx, initialOf } from "../../components/ui";
-import { errorMessage, statsApi, type ActivityItem, type ProductStats, type StatsSummary } from "../../services/api";
+import { Alert, Badge, Spinner, cx, initialOf } from "../../components/ui";
+import { errorMessage, statsApi, type Priorities, type PriorityItem, type ProductStats, type StatsSummary } from "../../services/api";
 import { CATEGORIES } from "../../services/types";
 
 // 범주 색 8개 (색약 구분 검증된 순서, 유형 순서와 1:1로 고정)
@@ -16,17 +17,13 @@ const SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"
 const CATEGORY_COLOR = Object.fromEntries(CATEGORIES.map((c, i) => [c, SERIES[i]]));
 const INK = { muted: "#6a6a6a", grid: "#ebe6d6", axis: "#d9d2c0" };
 const CRITICAL = "#d03b3b";
+// 미처리는 새 색 대신 빗금으로 (처리됨과 색만으로 구분하지 않아도 됨, 색 구분이 어려운 사람도 알아봄)
+const HATCH = "url(#hatch-open)";
+const HATCH_CSS = `repeating-linear-gradient(45deg, ${SERIES[1]} 0 2px, #fff 2px 5px)`;
+const swatch = (color: string) => (color === HATCH ? HATCH_CSS : color);
 
 const pct = (v: number | null | undefined) => (v === null || v === undefined ? "-" : `${Math.round(v * 100)}%`);
 const shortDate = (iso: string) => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8, 10))}`;
-
-function ago(iso: string) {
-  const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
-  if (min < 1) return "방금";
-  if (min < 60) return `${min}분 전`;
-  if (min < 60 * 24) return `${Math.floor(min / 60)}시간 전`;
-  return `${Math.floor(min / 60 / 24)}일 전`;
-}
 
 /** 흰 카드 + 머리글(아이콘 상자, 제목, 설명, 오른쪽 버튼) */
 function Panel({ icon, title, sub, action, children, className }: {
@@ -42,7 +39,7 @@ function Panel({ icon, title, sub, action, children, className }: {
             </span>
           )}
           <div>
-            <h2 className="text-[15px] font-semibold text-ink">{title}</h2>
+            <h2 className="text-lg font-semibold text-ink">{title}</h2>
             {sub && <p className="text-xs text-muted">{sub}</p>}
           </div>
         </div>
@@ -53,27 +50,117 @@ function Panel({ icon, title, sub, action, children, className }: {
   );
 }
 
-/** 지금 처리할 일 카드: 값이 있고 위험하면 빨강 */
-function WorkCard({ icon, label, value, sub, to, critical }: {
-  icon: IconName; label: string; value: number; sub: string; to: string; critical?: boolean;
+/** 지금 처리할 일 카드: 누르면 해당 목록으로 (오른쪽 위 ↗).
+ *  highlight: 가장 중요한 카드(답변 기한 초과)는 값이 있으면 진한 빨강으로 채워 먼저 눈에 들어오게 */
+function WorkCard({ label, value, sub, to, critical, highlight }: {
+  label: string; value: number; sub: string; to: string; critical?: boolean; highlight?: boolean;
 }) {
   const alarm = critical && value > 0;
+  const filled = highlight && value > 0;
   return (
-    <Link to={to} className={cx("group block rounded-2xl border bg-white p-4 transition hover:-translate-y-0.5",
-      alarm ? "border-rose-200" : "border-hairline")}>
-      <div className="flex items-start justify-between">
-        <p className={cx("text-sm", alarm ? "font-semibold text-rose-700" : "text-muted")}>{label}</p>
-        <span className={cx("flex h-8 w-8 items-center justify-center rounded-lg",
-          alarm ? "bg-rose-50 text-rose-600" : "bg-surface-card text-ink")}>
-          <Icon name={icon} />
+    <Link to={to} className={cx("group block rounded-2xl border p-4 transition hover:-translate-y-0.5",
+      filled ? "border-rose-700 bg-rose-600 text-white shadow-md shadow-rose-600/25"
+        : alarm ? "border-rose-200 bg-white" : "border-hairline bg-white")}>
+      <div className="flex items-start justify-between gap-2">
+        <p className={cx("text-base", filled ? "font-semibold text-white" : alarm ? "font-semibold text-rose-700" : "text-body")}>{label}</p>
+        <span className={cx("flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition",
+          filled ? "border-white/60 bg-white text-rose-600" : "border-hairline text-ink group-hover:border-primary group-hover:text-primary")}
+          aria-hidden>
+          <Icon name="arrow" className="h-4 w-4 -rotate-45" />
         </span>
       </div>
-      <p className={cx("display mt-1 text-4xl tabular-nums", alarm && "!text-rose-700")}>{value}</p>
-      <p className="mt-1 flex items-center justify-between gap-2 text-xs text-muted">
-        <span>{sub}</span>
-        <Icon name="arrow" className="h-3.5 w-3.5 shrink-0 opacity-0 transition group-hover:opacity-100" />
-      </p>
+      <p className={cx("display mt-1 text-4xl tabular-nums", filled ? "!text-white" : alarm && "!text-rose-700")}>{value}</p>
+      <p className={cx("mt-1 text-xs", filled ? "text-white/85" : "text-muted")}>{sub}</p>
     </Link>
+  );
+}
+
+/** 답변 기한까지 남은 시간 ("1시간 20분 남음" / "3시간 지남") */
+function dueLabel(due: string) {
+  const mins = Math.round((new Date(due).getTime() - Date.now()) / 60_000);
+  const abs = Math.abs(mins);
+  const h = Math.floor(abs / 60);
+  const text = abs < 60 ? `${abs}분` : h < 24 ? `${h}시간${abs % 60 ? ` ${abs % 60}분` : ""}` : `${Math.floor(h / 24)}일${h % 24 ? ` ${h % 24}시간` : ""}`;
+  return { text: mins < 0 ? `${text} 지남` : `${text} 남음`, mins };
+}
+
+function DuePill({ due, overdue }: { due: string; overdue: boolean }) {
+  const { text, mins } = dueLabel(due);
+  return (
+    <span className={cx("shrink-0 rounded-full px-2.5 py-0.5 text-sm font-semibold tabular-nums",
+      overdue ? "bg-rose-600 text-white" : mins <= 120 ? "bg-amber-100 text-amber-800" : "bg-surface-card text-body")}>
+      {overdue ? "⏰ " : ""}{text}
+    </span>
+  );
+}
+
+/** 지금 가장 급한 문의: 처리 대기열의 첫 문의 (긴급도 → 오래된 순) + [바로 처리] */
+function NextUp({ item, open, failed }: { item: PriorityItem | null | undefined; open: number; failed: boolean }) {
+  return (
+    <section className="flex flex-col rounded-2xl border border-hairline bg-white p-5">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold text-ink">지금 가장 급한 문의</h2>
+        {item && <DuePill due={item.due_at} overdue={item.overdue} />}
+      </div>
+      {failed ? <p className="flex-1 py-8 text-center text-base text-muted">불러오지 못했어요. 새로고침해 주세요.</p>
+        : item === undefined ? <p className="py-8 text-center text-muted"><Spinner /></p> : !item ? (
+        <p className="flex-1 py-8 text-center text-base text-muted">미처리 문의가 없어요. 모두 처리했습니다 🎉</p>
+      ) : (
+        <>
+          <div className="mt-3 flex-1">
+            <p className="text-xl font-semibold leading-snug text-ink">{item.title}</p>
+            <p className="mt-1 line-clamp-2 text-sm text-muted">{item.preview}</p>
+            <p className="mt-3 flex flex-wrap items-center gap-1.5 text-sm text-body">
+              {item.urgency && <Badge value={item.urgency} />}
+              <span>{item.category ?? "분석 전"}</span>
+              <span className="text-muted">·</span>
+              <span>{item.customer_name}</span>
+              <span className="text-muted">·</span>
+              <span>{item.assigned_to ?? "미배정"}</span>
+            </p>
+          </div>
+          <Link to={`/admin/inquiries/${item.id}`}
+            className="mt-4 flex min-h-12 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-base font-semibold text-white shadow-sm shadow-primary/25 hover:bg-primary-hover">
+            바로 처리 <Icon name="arrow" className="h-4 w-4" />
+          </Link>
+          <p className="mt-2 text-center text-xs text-muted">처리하면 상세 화면에서 다음 미처리 문의로 이어집니다 · 미처리 {open}건</p>
+        </>
+      )}
+    </section>
+  );
+}
+
+/** 기한 임박 문의: 아직 기한이 남은 미처리 문의를 기한이 가까운 순으로 */
+function DueSoon({ items, overdue, failed }: { items: PriorityItem[] | undefined; overdue: number; failed: boolean }) {
+  return (
+    <section className="rounded-2xl border border-hairline bg-white p-5">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold text-ink">기한 임박 문의</h2>
+        {overdue > 0 && (
+          <Link to="/admin/inquiries?overdue=true" className="text-sm font-semibold text-rose-700 hover:underline">기한 초과 {overdue}건 보기 →</Link>
+        )}
+      </div>
+      {failed ? <p className="py-8 text-center text-base text-muted">불러오지 못했어요. 새로고침해 주세요.</p>
+        : items === undefined ? <p className="py-8 text-center text-muted"><Spinner /></p> : items.length === 0 ? (
+        <p className="py-8 text-center text-base text-muted">기한이 남은 미처리 문의가 없어요.</p>
+      ) : (
+        <ul className="mt-2 divide-y divide-hairline">
+          {items.map((i) => (
+            <li key={i.id}>
+              <Link to={`/admin/inquiries/${i.id}`} className="flex items-center gap-3 rounded-lg py-2.5 hover:bg-surface-soft">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-base font-medium text-ink">{i.title}</span>
+                  <span className="block truncate text-sm text-muted">
+                    {i.category ?? "분석 전"} · {i.customer_name} · {i.assigned_to ?? "미배정"}
+                  </span>
+                </span>
+                <DuePill due={i.due_at} overdue={i.overdue} />
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -188,7 +275,7 @@ function LegendRow({ items }: { items: [string, string][] }) {
     <ul className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1 text-xs text-body">
       {items.map(([name, color]) => (
         <li key={name} className="flex items-center gap-1.5">
-          <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: color }} />{name}
+          <span className="inline-block h-3 w-3 rounded-sm" style={{ background: swatch(color) }} />{name}
         </li>
       ))}
     </ul>
@@ -205,7 +292,7 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
       {rows.length === 0 && <p className="text-muted">문의 없음</p>}
       {rows.map((p) => (
         <p key={p.name} className="flex items-center gap-2 text-body">
-          <span className="inline-block h-2 w-2 rounded-sm" style={{ background: p.color }} />{p.name}
+          <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: swatch(p.color) }} />{p.name}
           <span className="ml-auto pl-3 tabular-nums">{p.value}</span>
         </p>
       ))}
@@ -213,51 +300,23 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
   );
 }
 
-const ACTIVITY_ICON: Record<ActivityItem["kind"], IconName> = {
-  received: "inbox", followup: "message", ai: "bot", assign: "swap", status: "check", draft: "message", sent: "send",
-  correct: "eye",
-};
-
-function Activity({ items }: { items: ActivityItem[] | null }) {
-  if (!items) return <p className="py-6 text-center text-muted"><Spinner /></p>;
-  if (!items.length) return <p className="py-6 text-center text-sm text-muted">아직 활동이 없습니다.</p>;
-  return (
-    <ol className="relative space-y-4 before:absolute before:bottom-2 before:left-[13px] before:top-2 before:w-px before:bg-hairline">
-      {items.map((e, i) => (
-        <li key={i} className="relative flex gap-3">
-          <span className={cx("z-10 flex h-7 w-7 shrink-0 items-center justify-center rounded-full border bg-white",
-            e.kind === "ai" ? "border-brand-lavender text-[#5b45b0]" : e.kind === "sent" ? "border-brand-mint text-brand-teal" : "border-hairline text-body")}>
-            <Icon name={ACTIVITY_ICON[e.kind]} className="h-3.5 w-3.5" />
-          </span>
-          <div className="min-w-0 text-sm">
-            <p className="text-ink"><b className="font-semibold">{e.actor}</b> · {e.text}</p>
-            <p className="truncate text-xs text-muted">
-              <Link to={`/admin/inquiries/${e.inquiry_id}`} className="hover:text-ink hover:underline">{e.title}</Link>
-              {" · "}{ago(e.at)}
-            </p>
-          </div>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
 export default function DashboardPage() {
   const { user } = useAuth();
   const [days, setDays] = useState(7);
   const [data, setData] = useState<StatsSummary | null>(null);
-  const [activity, setActivity] = useState<ActivityItem[] | null>(null);
   const [error, setError] = useState("");
   const [showTable, setShowTable] = useState(false);
   const [products, setProducts] = useState<ProductStats | null>(null);
+  const [prio, setPrio] = useState<Priorities | null | undefined>(undefined);
 
   useEffect(() => {
     setError("");
     statsApi.summary(days).then(setData).catch((err) => setError(errorMessage(err)));
     statsApi.products(Math.max(days, 30)).then(setProducts).catch(() => setProducts(null));  // 상품별은 최소 30일 (건수가 적어서)
   }, [days]);
+
   useEffect(() => {
-    statsApi.activity(8).then(setActivity).catch(() => setActivity([]));
+    statsApi.priorities(5).then(setPrio).catch(() => setPrio(null));
   }, []);
 
   if (error) return <Alert>{error}</Alert>;
@@ -265,7 +324,7 @@ export default function DashboardPage() {
 
   const daily = data.daily.map((d) => ({ date: shortDate(d.date), ...d.by_category, 처리됨: d.done, 미처리: d.open }));
   const analyzed = Object.values(data.by_category).reduce((a, b) => a + b, 0);
-  const axis = { stroke: INK.axis, tick: { fill: INK.muted, fontSize: 12 }, tickLine: false };
+  const axis = { stroke: INK.axis, tick: { fill: INK.muted, fontSize: 13 }, tickLine: false };
   const prev = data.previous;
   const change = (cur: number | null, before: number | null) =>
     cur === null || before === null || before === 0 ? null : ((cur - before) / before) * 100;
@@ -278,7 +337,7 @@ export default function DashboardPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="display text-3xl sm:text-4xl">{hello}, {user?.display_name}님</h1>
+          <h1 className="page-title">{hello}, {user?.display_name}님</h1>
           <p className="mt-1 text-sm text-muted">지금 쌓인 문의와 최근 {days}일 현황입니다 · {data.range.from} ~ {data.range.to} (한국 시간)</p>
         </div>
         <div className="flex gap-1 rounded-xl border border-hairline bg-white p-1" role="group" aria-label="기간">
@@ -292,15 +351,19 @@ export default function DashboardPage() {
       </div>
 
       <section>
-        <h2 className="mb-3 text-[15px] font-semibold text-ink">지금 처리할 일 <span className="font-normal text-muted">· 기간과 관계없이 현재</span></h2>
+        <h2 className="mb-3 text-lg font-semibold text-ink">지금 처리할 일 <span className="font-normal text-muted">· 기간과 관계없이 현재</span></h2>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-          <WorkCard icon="clock" label="답변 기한 초과" value={data.now.overdue_open} sub="긴급 4시간 · 그 외 24시간"
-            to="/admin/inquiries?overdue=true" critical />
-          <WorkCard icon="alert" label="긴급 미처리" value={data.now.urgent_open} sub="긴급도 높음"
+          <WorkCard label="답변 기한 초과" value={data.now.overdue_open} sub="긴급 4시간 · 그 외 24시간"
+            to="/admin/inquiries?overdue=true" critical highlight />
+          <WorkCard label="긴급 미처리" value={data.now.urgent_open} sub="긴급도 높음"
             to="/admin/inquiries?open=true&urgency=높음" critical />
-          <WorkCard icon="inbox" label="미처리 전체" value={data.now.open} sub="접수·검토 대기·담당자 처리" to="/admin/inquiries?open=true" />
-          <WorkCard icon="eye" label="검토 대기" value={data.now.review_waiting} sub="AI 초안 확인 필요" to="/admin/inquiries?status=검토 대기" />
-          <WorkCard icon="userX" label="미배정" value={data.now.unassigned_open} sub="담당자 없음" to="/admin/inquiries?open=true&assigned_to=none" />
+          <WorkCard label="미처리 전체" value={data.now.open} sub="접수·검토 대기·담당자 처리" to="/admin/inquiries?open=true" />
+          <WorkCard label="검토 대기" value={data.now.review_waiting} sub="AI 초안 확인 필요" to="/admin/inquiries?status=검토 대기" />
+          <WorkCard label="미배정" value={data.now.unassigned_open} sub="담당자 없음" to="/admin/inquiries?open=true&assigned_to=none" />
+        </div>
+        <div className="mt-3 grid gap-3 lg:grid-cols-[2fr_3fr]">
+          <NextUp item={prio?.next} open={prio?.open ?? data.now.open} failed={prio === null} />
+          <DueSoon items={prio?.due_soon} overdue={data.now.overdue_open} failed={prio === null} />
         </div>
       </section>
 
@@ -321,8 +384,8 @@ export default function DashboardPage() {
           compare={`지난 ${days}일 ${sec(prev.avg_latency_ms)} · 목표 10초 이내`} />
       </section>
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Panel className="xl:col-span-2" icon="dashboard" title="날짜별 문의 유형" sub="유형마다 같은 색으로 쌓아 보여 줍니다"
+      <div>
+        <Panel icon="dashboard" title="날짜별 문의 유형" sub="유형마다 같은 색으로 쌓아 보여 줍니다"
           action={
             <button className="rounded-lg border border-hairline px-3 py-1.5 text-xs font-medium text-ink hover:bg-surface-card"
               onClick={() => setShowTable(!showTable)}>
@@ -330,7 +393,7 @@ export default function DashboardPage() {
             </button>}>
           {showTable ? (
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs tabular-nums">
+              <table className="w-full text-right text-sm tabular-nums">
                 <thead className="text-muted">
                   <tr><th className="py-1 text-left">날짜</th>{CATEGORIES.map((c) => <th key={c} className="px-2 py-1 font-medium">{c}</th>)}<th className="px-2">합계</th></tr>
                 </thead>
@@ -362,10 +425,6 @@ export default function DashboardPage() {
             </>
           )}
         </Panel>
-
-        <Panel icon="clock" title="최근 활동" sub="AI 판단 · 배정 · 답변 발송">
-          <Activity items={activity} />
-        </Panel>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -378,14 +437,20 @@ export default function DashboardPage() {
                 <YAxis allowDecimals={false} {...axis} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} cursor={{ fill: "rgba(11,11,11,0.04)" }} />
                 <Bar dataKey="처리됨" stackId="s" fill={SERIES[0]} stroke="#fff" strokeWidth={1} maxBarSize={40} />
-                <Bar dataKey="미처리" stackId="s" fill={SERIES[1]} stroke="#fff" strokeWidth={1} maxBarSize={40} />
+                <defs>
+                  <pattern id="hatch-open" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                    <rect width="6" height="6" fill="#fff" />
+                    <line x1="0" y1="0" x2="0" y2="6" stroke={SERIES[1]} strokeWidth="3" />
+                  </pattern>
+                </defs>
+                <Bar dataKey="미처리" stackId="s" fill={HATCH} stroke={SERIES[1]} strokeWidth={1} maxBarSize={40} />
               </BarChart>
             </ResponsiveContainer>
           </div>
-          <LegendRow items={[["처리됨", SERIES[0]], ["미처리", SERIES[1]]]} />
+          <LegendRow items={[["처리됨", SERIES[0]], ["미처리", HATCH]]} />
         </Panel>
 
-        <Panel icon="zap" title="처리 방식 · 긴급도" sub={`분석된 ${analyzed}건 · 판단 주체 규칙 ${data.by_decided_by["규칙"]}건 · LLM ${data.by_decided_by["LLM"]}건`}>
+        <Panel icon="zap" title="처리 방식 · 긴급도" sub={`분석된 ${analyzed}건`}>
           <p className="mb-3 text-xs font-semibold tracking-wider text-muted">처리 방식</p>
           <ShareBars items={Object.entries(data.by_decision)} total={analyzed} color={() => SERIES[0]} />
           <p className="mb-3 mt-6 text-xs font-semibold tracking-wider text-muted">긴급도</p>
@@ -415,9 +480,6 @@ export default function DashboardPage() {
             </dd>
             <dt className="text-muted">답변 초안 작성 실패</dt>
             <dd className={cx("text-right tabular-nums", data.ai.draft_failures ? "font-semibold text-amber-700" : "text-ink")}>{data.ai.draft_failures}건</dd>
-            <dt className="text-muted">LLM 호출</dt><dd className="text-right tabular-nums text-ink">{data.ai.llm_calls}회</dd>
-            <dt className="text-muted">토큰 (입력 / 출력)</dt>
-            <dd className="text-right tabular-nums text-ink">{data.ai.tokens.input.toLocaleString()} / {data.ai.tokens.output.toLocaleString()}</dd>
           </dl>
         </Panel>
 

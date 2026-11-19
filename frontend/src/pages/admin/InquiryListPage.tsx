@@ -1,39 +1,35 @@
 // 문의 목록 (/admin/inquiries): 필터·검색·정렬·페이지. 조건은 주소(?status=...)에 남겨 새로고침해도 유지됩니다.
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 
 import { useAuth } from "../../auth/AuthProvider";
-import { Alert, Badge, Button, Input, Select, Spinner, cx, formatDate } from "../../components/ui";
+import { Alert, Badge, Button, Select, Spinner, formatDate } from "../../components/ui";
 import { errorMessage, inquiryApi } from "../../services/api";
 import { CATEGORIES, DECISIONS, STATUSES, URGENCIES, type InquiryListItem, type Page } from "../../services/types";
 
 const SIZE = 20;
 
 /** AI 유형 분류 확신도: 막대 10칸 + 숫자. 0.8 미만은 주황(사람이 확인할 문의) */
-function Confidence({ value }: { value: number | null }) {
-  if (value === null) return <span className="text-xs text-slate-400">-</span>;
-  const filled = Math.round(value * 10);
-  const low = value < 0.8;
+/** 유형 옆 표시: AI 확신도가 낮을 때만 (0.8 미만이면 담당자 확인). 확신도 숫자는 상세 화면 'AI 분석'에서 봄 */
+function LowConfidence({ value }: { value: number | null }) {
+  if (value === null || value >= 0.8) return null;
   return (
-    <span className="flex items-center gap-2" title={`AI 유형 분류 확신도 ${Math.round(value * 100)}%${low ? " · 0.8 미만이라 담당자 확인" : ""}`}>
-      <span className="flex gap-[2px]" aria-hidden>
-        {Array.from({ length: 10 }, (_, k) => (
-          <span key={k} className={cx("h-3 w-[3px] rounded-sm", k < filled ? (low ? "bg-amber-500" : "bg-emerald-600") : "bg-surface-strong")} />
-        ))}
-      </span>
-      <span className={cx("text-xs tabular-nums", low ? "font-semibold text-amber-700" : "text-body")}>{Math.round(value * 100)}</span>
+    <span className="ml-1.5 rounded bg-amber-100 px-1.5 py-0.5 text-xs font-semibold text-amber-800" title={`AI 유형 분류 확신도 ${Math.round(value * 100)}% (0.8 미만)`}>
+      확인 필요
     </span>
   );
 }
 
 export default function InquiryListPage() {
   const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [data, setData] = useState<Page<InquiryListItem> | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [q, setQ] = useState(params.get("q") ?? "");
+  // 검색은 화면 위쪽 검색창(AdminLayout)에서 함 → 주소의 q 로 들어옴. 여기서는 검색어 표시·지우기만
+  const q = params.get("q") ?? "";
 
   const page = Number(params.get("page") ?? 1);
   const key = params.toString();
@@ -62,11 +58,6 @@ export default function InquiryListPage() {
     setParams(next);
   }
 
-  function search(e: FormEvent) {
-    e.preventDefault();
-    update("q", q.trim());
-  }
-
   const filter = (name: string, label: string, options: readonly string[]) => (
     <Select value={params.get(name) ?? ""} onChange={(e) => update(name, e.target.value)} aria-label={label}>
       <option value="">{label} 전체</option>
@@ -80,15 +71,18 @@ export default function InquiryListPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="display text-4xl">문의 관리</h1>
+          <h1 className="page-title">문의 관리</h1>
           <p className="text-sm text-slate-500">
             {user?.role === "agent" ? "나에게 배정된 문의만 보입니다." : "긴급도 높은 문의가 위에 옵니다."}
           </p>
         </div>
-        <form onSubmit={search} className="flex gap-2">
-          <Input className="w-64" placeholder="제목·내용·문의 번호·이메일" value={q} onChange={(e) => setQ(e.target.value)} />
-          <Button type="submit">검색</Button>
-        </form>
+        {q && (
+          <span className="inline-flex items-center gap-2 rounded-xl border border-primary/30 bg-primary-soft py-1.5 pl-3 pr-1.5 text-sm text-primary">
+            검색어: <b className="font-semibold">{q}</b>
+            <button type="button" onClick={() => update("q", "")} aria-label="검색어 지우기"
+              className="rounded-lg px-2 py-0.5 hover:bg-white">✕</button>
+          </span>
+        )}
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -115,16 +109,18 @@ export default function InquiryListPage() {
           <option value="urgency">긴급도순</option>
           <option value="-created_at">최신순</option>
         </Select>
-        {key && <Button variant="ghost" onClick={() => { setQ(""); setParams(new URLSearchParams()); }}>조건 초기화</Button>}
+        {key && <Button variant="ghost" onClick={() => setParams(new URLSearchParams())}>조건 초기화</Button>}
       </div>
 
       {error && <Alert>{error}</Alert>}
 
       <div className="overflow-x-auto rounded-2xl border border-hairline bg-white">
         <table className="w-full text-left text-sm">
-          <thead className="border-b border-hairline text-xs text-muted">
+          <thead className="border-b border-hairline text-sm text-muted">
             <tr>
-              {["문의 번호", "제목", "고객", "유형", "AI 확신도", "긴급도", "감정", "처리 방식", "상태", "담당", "접수 시각"].map((h) => (
+              {/* AI 확신도·감정·처리 방식 열은 뺌 (확신도가 낮으면 유형 옆에 '확인 필요', 감정은 긴급도에 반영,
+                  처리 방식은 상태와 거의 같음 → 필터로만). 상담원은 자기 문의만 보여 '담당' 열 없음 */}
+              {["문의 번호", "제목", "고객", "유형", "긴급도", "상태", ...(isAdmin ? ["담당"] : []), "접수 시각"].map((h) => (
                 <th key={h} className="whitespace-nowrap px-3 py-3 font-medium">{h}</th>
               ))}
             </tr>
@@ -132,23 +128,20 @@ export default function InquiryListPage() {
           <tbody className="divide-y divide-hairline">
             {data?.items.map((i) => (
               <tr key={i.id} className="cursor-pointer hover:bg-surface-soft" onClick={() => navigate(`/admin/inquiries/${i.id}`)}>
-                <td className="whitespace-nowrap px-3 py-3 font-mono text-xs">
+                <td className="whitespace-nowrap px-3 py-3 font-mono text-sm">
                   <Link to={`/admin/inquiries/${i.id}`} onClick={(e) => e.stopPropagation()} className="text-indigo-600 hover:underline">
                     {i.inquiry_number}
                   </Link>
                 </td>
                 <td className="max-w-xs truncate px-3 py-3">{i.title}</td>
                 <td className="whitespace-nowrap px-3 py-3">{i.customer_name}</td>
-                <td className="whitespace-nowrap px-3 py-3">{i.category ?? "-"}</td>
-                <td className="px-3 py-3"><Confidence value={i.confidence} /></td>
+                <td className="whitespace-nowrap px-3 py-3">{i.category ?? "-"}<LowConfidence value={i.confidence} /></td>
                 <td className="px-3 py-3"><Badge value={i.urgency} /></td>
-                <td className="px-3 py-3"><Badge value={i.sentiment} /></td>
-                <td className="px-3 py-3"><Badge value={i.decision} /></td>
                 <td className="whitespace-nowrap px-3 py-3">
                   <Badge value={i.status} />
                   {i.overdue && <span className="ml-1 text-xs font-semibold text-rose-700" title={`답변 기한 ${formatDate(i.due_at)}`}>⏰ 기한 초과</span>}
                 </td>
-                <td className="whitespace-nowrap px-3 py-3 text-slate-600">{i.assigned_to?.display_name ?? "-"}</td>
+                {isAdmin && <td className="whitespace-nowrap px-3 py-3 text-slate-600">{i.assigned_to?.display_name ?? "-"}</td>}
                 <td className="whitespace-nowrap px-3 py-3 text-slate-500">{formatDate(i.created_at)}</td>
               </tr>
             ))}

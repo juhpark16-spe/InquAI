@@ -201,7 +201,7 @@ export default function UsersPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900">계정 관리</h1>
+        <h1 className="page-title">계정 관리</h1>
         <p className="text-sm text-slate-500">관리자·상담원 계정은 이 화면에서만 만듭니다. 비활성화한 계정은 즉시 로그아웃되고 배정 목록에서 빠집니다.</p>
         <p className="mt-1 text-sm text-slate-500">
           AI가 사람에게 넘긴 문의는 <b className="font-medium text-slate-700">담당 유형이 맞는 상담원 중 미처리가 가장 적은 사람</b>에게 자동 배정됩니다.
@@ -214,7 +214,7 @@ export default function UsersPage() {
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
           <table className="w-full text-left text-sm">
-            <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500">
+            <thead className="border-b border-slate-200 bg-slate-50 text-sm text-slate-500">
               <tr>{["이름·아이디", "역할", "담당 유형 (자동 배정)", "상태", "마지막 로그인", "관리"].map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr>
             </thead>
             <tbody className="divide-y divide-slate-100">

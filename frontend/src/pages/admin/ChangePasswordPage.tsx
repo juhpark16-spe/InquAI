@@ -43,7 +43,7 @@ export default function ChangePasswordPage() {
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 px-4 py-8">
       <div className="text-center">
         <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-pink text-xl font-bold text-white" aria-hidden>Q</span>
-        <h1 className="display text-3xl">새 비밀번호 정하기</h1>
+        <h1 className="page-title">새 비밀번호 정하기</h1>
         <p className="mt-2 text-sm text-muted">{user?.display_name} ({user?.username})</p>
       </div>
       <Card className="w-full max-w-sm">

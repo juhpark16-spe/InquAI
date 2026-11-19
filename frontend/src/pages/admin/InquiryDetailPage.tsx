@@ -58,7 +58,7 @@ function DueTime({ due, overdue, open }: { due: string; overdue: boolean; open: 
 function Card({ title, children, accent = "bg-primary" }: { title: ReactNode; children: ReactNode; accent?: string }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
-      <h2 className="flex items-center gap-2.5 border-b border-slate-200 bg-slate-50 px-5 py-3 text-[17px] font-bold text-ink">
+      <h2 className="flex items-center gap-2.5 border-b border-slate-200 bg-slate-50 px-5 py-3 text-lg font-bold text-ink">
         <span className={cx("h-5 w-1.5 shrink-0 rounded-full", accent)} aria-hidden />
         {title}
       </h2>
@@ -88,7 +88,7 @@ function Fold({ id, title, summary, children, defaultOpen = true, accent = "bg-p
     <section className="overflow-hidden rounded-2xl border border-slate-300 bg-white shadow-sm">
       <button type="button" onClick={toggle} aria-expanded={open}
         className={cx("flex w-full items-center justify-between gap-3 bg-slate-50 px-5 py-3 text-left hover:bg-slate-100", open && "border-b border-slate-200")}>
-        <span className="flex items-center gap-2.5 text-[17px] font-bold text-ink">
+        <span className="flex items-center gap-2.5 text-lg font-bold text-ink">
           <span className={cx("h-5 w-1.5 shrink-0 rounded-full", accent)} aria-hidden />
           {title}
         </span>
@@ -131,14 +131,13 @@ function DecisionBanner({ d }: { d: InquiryDetail }) {
     : a.urgency === "높음" ? "border-rose-200 bg-rose-50" : "border-amber-200 bg-amber-50";
   const title = a.decision === "자동 답변" ? "AI가 FAQ를 근거로 자동 답변을 보냈습니다"
     : a.decision === "담당자 연결" ? "AI가 담당자에게 넘긴 문의입니다" : "AI가 상담원 검토가 필요하다고 판단했습니다";
+  // 긴급 표시는 제목 옆에 이미 있고, 판단 방식·처리 경로는 'AI 처리 상세'(관리자)에서 봄 → 여기서는 이유 한 줄만
+  const reason = a.decision_reason?.replace(/\s*\((규칙|LLM)\)\s*$/, "");
   return (
-    <div className={cx("rounded-xl border px-4 py-3", style)}>
-      <p className="text-[15px] font-semibold text-slate-900">
-        {a.urgency === "높음" && <span className="text-rose-700">⚠ 긴급 · </span>}{title}
-        <span className="ml-2 text-sm font-normal text-slate-600">({a.decided_by} 판단 · 처리 경로 {a.route})</span>
-      </p>
-      {a.decision_reason && <p className="mt-1 text-[15px] text-slate-700">{a.decision_reason}</p>}
-      {log?.error && <p className="mt-1 text-[15px] text-rose-700">AI 처리 중 오류가 있어 상담원에게 넘어왔습니다.</p>}
+    <div className={cx("rounded-xl border px-4 py-2.5 text-base", style)}>
+      <span className="font-semibold text-slate-900">{title}</span>
+      {reason && <span className="text-slate-700"> · {reason}</span>}
+      {log?.error && <span className="text-rose-700"> · AI 처리 중 오류가 있어 상담원에게 넘어왔습니다</span>}
     </div>
   );
 }
@@ -146,7 +145,7 @@ function DecisionBanner({ d }: { d: InquiryDetail }) {
 /** 주문 한 건의 상세: 상태·배송·취소·반품 가능 기한 */
 function OrderRows({ o }: { o: OrderCard }) {
   return (
-    <dl className="grid grid-cols-[6.5rem_1fr] items-center gap-x-3 gap-y-2 text-[15px]">
+    <dl className="grid grid-cols-[6.5rem_1fr] items-center gap-x-3 gap-y-2 text-base">
       <Row label="주문 상태"><Badge value={o.order_status} /></Row>
       <Row label="배송">{o.shipping_status ?? "-"}</Row>
       {o.tracking_number && <Row label="송장번호"><span className="font-mono font-semibold">{o.tracking_number}</span></Row>}
@@ -157,6 +156,7 @@ function OrderRows({ o }: { o: OrderCard }) {
           : <YesNo ok={o.cancellable} yes="가능 (출고 전)" no="불가 (출고됨)" />}
       </Row>
       <Row label="반품·교환">
+        {/* 기한은 쇼핑몰 정책 기준 (단순 변심 7일, 불량·오배송 30일) */}
         {o.return_until ? (
           <span>
             <YesNo ok={o.returnable} yes={`가능 ${daysLeft(o.return_until)}`} no="단순 변심 기한 지남" />
@@ -175,7 +175,7 @@ function OrderHead({ o, big }: { o: OrderCard; big?: boolean }) {
   return (
     <div className="min-w-0">
       <p className={cx("font-bold text-ink", big ? "text-lg" : "text-base")}>{o.product_name}</p>
-      <p className="mt-0.5 text-[15px] text-slate-700">
+      <p className="mt-0.5 text-base text-slate-700">
         <span className="font-mono font-semibold text-slate-900">{o.order_number}</span> · {won(o.amount)}
       </p>
     </div>
@@ -186,7 +186,7 @@ function OrderHead({ o, big }: { o: OrderCard; big?: boolean }) {
 function OrderInfo({ o, others }: { o: OrderCard | null; others: OrderCard[] }) {
   return (
     <Card title="주문 정보" accent="bg-emerald-500">
-      {!o && <p className="text-[15px] font-medium text-slate-700">고객이 주문번호를 적지 않았습니다.</p>}
+      {!o && <p className="text-base font-medium text-slate-700">고객이 주문번호를 적지 않았습니다.</p>}
       {o && !o.found && (
         <Alert>주문번호 <b className="font-mono">{o.order_number}</b>를 찾을 수 없습니다. 고객에게 주문번호를 다시 확인해 주세요.</Alert>
       )}
@@ -205,7 +205,7 @@ function OrderInfo({ o, others }: { o: OrderCard | null; others: OrderCard[] }) 
 
       {others.length > 0 ? (
         <div className={cx(o?.found && "mt-5 border-t border-slate-200 pt-4")}>
-          <p className="text-[15px] font-bold text-slate-800">{o?.found ? `이 고객의 다른 주문 (${others.length})` : `문의 이메일로 찾은 주문 (${others.length})`}</p>
+          <p className="text-base font-bold text-slate-800">{o?.found ? `이 고객의 다른 주문 (${others.length})` : `문의 이메일로 찾은 주문 (${others.length})`}</p>
           {!o?.found && (
             <p className="mt-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
               주문번호 없이 이메일로 찾은 주문입니다. 어떤 주문인지, 본인이 맞는지 고객에게 확인한 뒤 안내하세요.
@@ -238,7 +238,6 @@ function OrderInfo({ o, others }: { o: OrderCard | null; others: OrderCard[] }) 
       ) : !o?.found && (
         <p className="mt-1 text-sm text-slate-600">이 이메일로 된 주문도 없습니다.</p>
       )}
-      <p className="mt-4 text-sm text-slate-600">기한은 쇼핑몰 정책 기준 (단순 변심 7일, 불량·오배송 30일)</p>
     </Card>
   );
 }
@@ -272,7 +271,7 @@ function Tickets({ data, onChanged }: { data: InquiryDetail; onChanged: (msg: st
   const o = data.order;
   return (
     <Card title="접수된 티켓" accent="bg-amber-500">
-      <ul className="space-y-3 text-[15px]">
+      <ul className="space-y-3 text-base">
         {data.tickets.map((t) => {
           const actionable = TICKET_ACTIONABLE.includes(t.ticket_type) && t.status === "접수";
           const cancelBlocked = t.ticket_type === "취소" && o?.found && o.cancellable === false;
@@ -325,10 +324,10 @@ function AiDetails({ log, faqTitles }: { log: AgentLog | undefined; faqTitles: R
   if (!log) return null;
   return (
     <details className="group rounded-2xl border border-slate-300 bg-white shadow-sm">
-      <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-3 text-[15px] font-semibold text-slate-900">
+      <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-3 text-base font-semibold text-slate-900">
         AI 처리 상세 <span className="text-sm font-normal text-slate-500">점검용 · 펼치기 <span className="inline-block transition group-open:rotate-180">⌄</span></span>
       </summary>
-      <dl className="grid grid-cols-[6rem_1fr] gap-y-1.5 border-t border-slate-200 px-5 py-3 text-[15px]">
+      <dl className="grid grid-cols-[6rem_1fr] gap-y-1.5 border-t border-slate-200 px-5 py-3 text-base">
         {log.steps && log.steps.length > 0 && <Row label="처리 경로">{log.steps.join(" → ")}</Row>}
         {log.trace_url && (
           <Row label="추적">
@@ -425,7 +424,8 @@ export default function InquiryDetailPage() {
   return (
     <div className="space-y-4">
       {/* 상단 고정: 무엇을, 얼마나 급하게 + 바로 할 수 있는 처리 */}
-      <div className="sticky top-0 z-10 -mx-4 border-b border-slate-200 bg-canvas/95 px-4 py-3 backdrop-blur">
+      {/* 본문 판 위쪽에 딱 맞게 (판의 안쪽 여백만큼 바깥으로 넓혀 판 모서리와 맞춤) */}
+      <div className="sticky top-0 z-10 -mx-4 -mt-4 rounded-t-2xl border-b border-slate-200 bg-surface-soft/95 px-4 py-3 backdrop-blur lg:-mx-6 lg:-mt-6 lg:rounded-t-3xl lg:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="min-w-0">
             <Link to="/admin/inquiries"
@@ -433,16 +433,16 @@ export default function InquiryDetailPage() {
               ← 문의 목록
             </Link>
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="truncate text-2xl font-bold text-ink">{data.title}</h1>
+              <h1 className="page-title truncate">{data.title}</h1>
               {a?.urgency === "높음" && <span className="rounded-full bg-rose-600 px-2 py-0.5 text-sm font-semibold text-white">⚠ 긴급</span>}
               <Badge value={data.status} />
             </div>
-            <p className="mt-1 text-[15px] text-slate-700">
+            <p className="mt-1 text-base text-slate-700">
               <span className="rounded-md bg-white px-2 py-0.5 font-mono text-base font-semibold text-ink ring-1 ring-slate-300">{data.inquiry_number}</span> · 접수 {timeAgo(data.created_at)} ({formatDate(data.created_at)})
               <DueTime due={data.due_at} overdue={data.overdue} open={isOpen} />
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-[15px]">
+          <div className="flex flex-wrap items-center gap-2 text-base">
             {queue && queue.total > 0 && (
               <span className="flex items-center gap-1" aria-label="처리 대기열">
                 <Button variant="ghost" className="min-h-9 px-2.5 py-1" disabled={!queue.prev_id} title="이전 미처리 문의"
@@ -475,7 +475,7 @@ export default function InquiryDetailPage() {
         {notice && <div className="mt-2"><Alert kind="success">{notice}</Alert></div>}
         {/* 처리가 끝난 문의: 다음 미처리 문의로 바로 (목록으로 돌아갔다 오지 않게) */}
         {!isOpen && queue?.next_id && (
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[15px] text-emerald-800">
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-base text-emerald-800">
             <span>이 문의는 처리됐어요. 미처리 {queue.total}건이 남아 있습니다.</span>
             <Button className="min-h-9 px-4 py-1" onClick={() => navigate(`/admin/inquiries/${queue.next_id}`)}>다음 미처리 문의 →</Button>
           </div>
@@ -487,18 +487,18 @@ export default function InquiryDetailPage() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,11fr)_minmax(24rem,9fr)]">
         {/* 왼쪽: 일하는 곳 */}
         <div className="space-y-4">
-          <Card title="대화" accent="bg-slate-500">
+          <Card title="문의와 답변" accent="bg-slate-500">
             <AnswerComposer data={data} refFaqCodes={refFaqs.map(([code]) => code)} onChanged={load} />
           </Card>
 
           <details className="group rounded-2xl border border-slate-300 bg-white shadow-sm">
-            <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-3 text-[15px] font-semibold text-slate-900">
-              전체 처리 이력 <span className="text-sm font-normal text-slate-500">초안 작성·수정까지 · 펼치기 <span className="inline-block transition group-open:rotate-180">⌄</span></span>
+            <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-3 text-base font-semibold text-slate-900">
+              전체 처리 이력 <span className="text-sm font-normal text-slate-500">배정·상태 변경·알림 포함 · 펼치기 <span className="inline-block transition group-open:rotate-180">⌄</span></span>
             </summary>
             <div className="border-t border-slate-200 px-5 py-4">
             <ol className="relative space-y-3 border-l border-slate-200 pl-4">
               {data.history.map((e, i) => (
-                <li key={i} className="text-[15px]">
+                <li key={i} className="text-base">
                   <span className="absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full bg-slate-300" />
                   <span className="text-sm text-slate-600">{formatDate(e.at)} · {e.actor}</span>
                   <p className="text-slate-800">{e.text}</p>
@@ -514,7 +514,7 @@ export default function InquiryDetailPage() {
           {/* 처리할 티켓이 있으면 맨 위에 (상담원이 가장 먼저 할 일) */}
           {pendingTickets && <Tickets data={data} onChanged={(m) => { setNotice(m); load(); }} />}
           <Fold id="customer" accent="bg-sky-500" title="고객" summary={`${data.customer.name}${p ? ` · 문의 ${p.inquiries}건` : ""}${warn ? " · ⚠ 불만 신호" : ""}`}>
-            <dl className="grid grid-cols-[4.5rem_1fr] items-center gap-x-3 gap-y-2 text-[15px]">
+            <dl className="grid grid-cols-[4.5rem_1fr] items-center gap-x-3 gap-y-2 text-base">
               <Row label="이름">
                 <span className="text-lg font-bold text-ink">{data.customer.name}</span>{" "}
                 <span className={cx("rounded-full px-2 py-0.5 text-sm", p?.member ? "bg-primary-soft text-primary" : "bg-slate-100 text-slate-600")}>
@@ -533,9 +533,9 @@ export default function InquiryDetailPage() {
                 {p!.negative_inquiries >= 2 && <> 불만 문의 {p!.negative_inquiries}건</>}
               </div>
             )}
-            <p className="mb-1.5 mt-4 border-t border-slate-200 pt-3 text-[15px] font-bold text-slate-800">이 고객의 다른 문의 {data.customer_history.length ? `(${data.customer_history.length})` : ""}</p>
-            {data.customer_history.length === 0 ? <p className="text-[15px] text-slate-500">없음</p> : (
-              <ul className="space-y-1 text-[15px]">
+            <p className="mb-1.5 mt-4 border-t border-slate-200 pt-3 text-base font-bold text-slate-800">이 고객의 다른 문의 {data.customer_history.length ? `(${data.customer_history.length})` : ""}</p>
+            {data.customer_history.length === 0 ? <p className="text-base text-slate-500">없음</p> : (
+              <ul className="space-y-1 text-base">
                 {data.customer_history.map((h) => (
                   <li key={h.id} className="flex items-center justify-between gap-2">
                     <Link to={`/admin/inquiries/${h.id}`} className="truncate text-indigo-600 hover:underline">{h.title}</Link>
@@ -549,9 +549,9 @@ export default function InquiryDetailPage() {
           <OrderInfo o={data.order} others={data.email_orders} />
 
           <Fold id="analysis" accent="bg-violet-500" title="AI 분석" summary={a ? `${a.category} ${(a.confidence * 100).toFixed(0)}% · ${a.sentiment} · 긴급도 ${a.urgency}` : "분석 전"}>
-            {!a ? <p className="text-[15px] text-slate-600">분석 전</p> : (
+            {!a ? <p className="text-base text-slate-600">분석 전</p> : (
               <>
-                <dl className="grid grid-cols-[4.5rem_1fr] items-center gap-x-3 gap-y-2 text-[15px]">
+                <dl className="grid grid-cols-[4.5rem_1fr] items-center gap-x-3 gap-y-2 text-base">
                   <Row label="유형">
                     {a.category} <span className={cx("text-sm", lowConf ? "font-semibold text-rose-700" : "text-slate-600")}>
                       확신도 {(a.confidence * 100).toFixed(0)}%{lowConf && " · 낮음, 유형 확인 필요"}
@@ -580,7 +580,8 @@ export default function InquiryDetailPage() {
 
           {!pendingTickets && data.tickets.length > 0 && <Tickets data={data} onChanged={(m) => { setNotice(m); load(); }} />}
 
-          <AiDetails log={log} faqTitles={data.faq_titles} />
+          {/* 도구·토큰·처리 시간 등 점검용 정보는 관리자에게만 */}
+          {user?.role === "admin" && <AiDetails log={log} faqTitles={data.faq_titles} />}
         </div>
       </div>
     </div>

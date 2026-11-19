@@ -47,7 +47,7 @@ export function Button({ variant = "primary", ...props }: ButtonHTMLAttributes<H
 export function Card({ title, children, className }: { title?: ReactNode; children: ReactNode; className?: string }) {
   return (
     <section className={cx("rounded-2xl border border-hairline bg-white p-6", className)}>
-      {title && <h2 className="mb-4 text-base font-semibold text-ink">{title}</h2>}
+      {title && <h2 className="mb-4 text-lg font-semibold text-ink">{title}</h2>}
       {children}
     </section>
   );

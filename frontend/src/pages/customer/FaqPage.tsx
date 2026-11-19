@@ -50,7 +50,7 @@ export default function FaqPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="display text-4xl">자주 묻는 질문</h1>
+        <h1 className="page-title">자주 묻는 질문</h1>
         <p className="text-sm text-slate-500">문의하시기 전에 먼저 확인해 보세요.</p>
       </div>
 

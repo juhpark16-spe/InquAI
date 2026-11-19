@@ -33,7 +33,7 @@ export function Bubble({ side, tone, name, at, children, footer }: {
         <span className={cx("mb-1 text-xs font-medium", t.name)}>
           {name} <span className="font-normal text-muted">{formatDate(at)}</span>
         </span>
-        <div className={cx("whitespace-pre-line rounded-2xl px-4 py-3 text-[15px] leading-relaxed",
+        <div className={cx("whitespace-pre-line rounded-2xl px-4 py-3 text-base leading-relaxed",
           t.bubble, right ? "rounded-br-md" : "rounded-bl-md")}>
           {children}
         </div>

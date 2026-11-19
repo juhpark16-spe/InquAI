@@ -334,7 +334,7 @@ export default function FaqsPage() {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-lg font-semibold text-slate-900">FAQ 관리</h1>
+        <h1 className="page-title">FAQ 관리</h1>
         <p className="text-sm text-slate-500">
           FAQ는 고객 FAQ 화면, 문의 작성 중 추천, <b className="font-medium text-slate-700">AI 자동 답변의 근거</b>로 쓰입니다.
           저장하면 바로 검색에 반영됩니다. 지우지 않고 비활성화하므로 지난 답변의 근거 기록은 남습니다.
