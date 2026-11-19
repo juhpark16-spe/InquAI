@@ -38,3 +38,7 @@ data/chroma/
 # CI가 만드는 설치 목록 (requirements.txt에서 자동 생성)
 requirements-ci.txt
 requirements-audit.txt
+
+# 화면 자동 테스트 결과 (Playwright)
+frontend/test-results/
+frontend/playwright-report/

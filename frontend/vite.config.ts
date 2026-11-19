@@ -2,6 +2,8 @@ import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
+declare const process: { env: Record<string, string | undefined> }; // @types/node 없이 환경 변수 하나만 읽음
+
 // 개발 중에는 /api 요청을 FastAPI(8000)로 넘깁니다.
 // 브라우저 입장에서는 같은 주소(localhost:5173)라 로그인 쿠키가 그대로 오갑니다.
 // 127.0.0.1 로 적는 이유: Windows에서 localhost 는 IPv6를 먼저 시도해 요청마다 약 2초가 늦어짐
@@ -9,7 +11,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
-    proxy: { "/api": "http://127.0.0.1:8000" },
+    // 화면 자동 테스트(e2e)는 따로 켠 시험용 백엔드(8001)로 보냄 (playwright.config.ts)
+    proxy: { "/api": process.env.API_PROXY ?? "http://127.0.0.1:8000" },
     // 화면도 다른 사이트의 iframe 안에 뜨지 않게 (클릭재킹 방지). 배포에서는 웹 서버가 같은 헤더를 붙임
     headers: {
       "X-Frame-Options": "DENY",
