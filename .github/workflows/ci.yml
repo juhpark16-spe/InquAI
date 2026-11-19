@@ -2,6 +2,7 @@
 #   backend  — pytest (모델·LLM·LangSmith 없이: 테스트는 가짜 모델과 임시 SQLite DB를 씀, backend/tests/conftest.py)
 #   frontend — 타입 검사 + 화면 빌드 (npm run build), 알려진 취약점 검사 (npm audit)
 #   security — 파이썬 패키지 취약점 검사 (pip-audit, docs/security_audit.md)
+#   docker   — Docker 이미지 2개를 만들고 docker compose 로 실제로 켜서 화면·API가 응답하는지 확인 (docs/docker.md)
 # AI Hub 데이터·학습된 모델·.env 는 저장소에 없으므로 CI에서도 쓰지 않습니다.
 name: CI
 
@@ -81,3 +82,69 @@ jobs:
           pip-audit -r requirements-audit.txt --no-deps --disable-pip --progress-spinner off \
             --ignore-vuln PYSEC-2026-311 --ignore-vuln PYSEC-2026-3813 \
             --ignore-vuln PYSEC-2026-3814 --ignore-vuln PYSEC-2026-3815
+
+  docker:
+    name: Docker 빌드
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      # 패키지 설치 층은 GitHub 캐시에 저장 → requirements.txt·package-lock.json 이 그대로면 다음부터 빨라짐
+      - name: 백엔드 이미지 만들기
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/backend.Dockerfile
+          tags: inquai-backend:latest
+          load: true
+          push: false
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+      - name: 화면 이미지 만들기
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/web.Dockerfile
+          tags: inquai-web:latest
+          load: true
+          push: false
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+      - name: 이미지에 비밀값·모델·AI Hub 데이터가 없는지 확인
+        run: |
+          files=$(docker run --rm --entrypoint sh inquai-backend:latest -c \
+            'ls -a /app; find /app -name ".env" -o -name "*.safetensors" -o -path "*/data/raw*" -o -name "external_test*"')
+          echo "$files"
+          if echo "$files" | grep -E '\.env$|safetensors|data/raw|external_test'; then
+            echo "이미지에 들어가면 안 되는 파일이 있습니다 (.dockerignore 확인)"; exit 1
+          fi
+      - name: 시험용 .env 만들기 (실행할 때마다 새 무작위 값, 어디에도 저장 안 함)
+        # 학습 모델은 저장소에 없어 LOAD_MODELS=false: 분류 모델 없이, FAQ 검색은 TF-IDF 로 켜짐
+        run: |
+          {
+            echo "JWT_SECRET_KEY=$(openssl rand -hex 32)"
+            echo "SEED_ADMIN_PASSWORD=$(openssl rand -hex 12)"
+            echo "SEED_AGENT_PASSWORD=$(openssl rand -hex 12)"
+            echo "LOAD_MODELS=false"
+            echo "OPENAI_API_KEY="
+            echo "LANGSMITH_TRACING=false"
+          } > .env
+          mkdir -p models/category_classifier models/sentiment_classifier
+      - name: docker compose 로 켜서 확인
+        run: |
+          docker compose up -d --no-build
+          for i in $(seq 1 60); do
+            curl -fsS http://localhost:8080/api/health > health.json 2>/dev/null && break
+            sleep 5
+          done
+          echo "== /api/health (화면 nginx 를 거쳐 백엔드까지)"; cat health.json; echo
+          jq -e '.status == "ok" and .seed.admin_users > 0 and .seed.faqs > 0 and .seed.orders > 0' health.json
+          echo "== 화면"; curl -fsS http://localhost:8080/ | grep -q '<div id="root">' && echo "화면 OK"
+          echo "== 새로고침해도 화면이 나오는지 (SPA 경로)"; curl -fsS http://localhost:8080/admin/drafts | grep -q '<div id="root">' && echo "OK"
+      - name: 실패하면 컨테이너 로그 보기
+        if: failure()
+        run: docker compose logs --tail 200
+      - name: 정리
+        if: always()
+        run: docker compose down -v

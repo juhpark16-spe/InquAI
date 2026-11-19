@@ -62,3 +62,16 @@ docker compose up -d --build
 - PyTorch는 CPU 버전입니다 (GPU 없이 어디서나 실행. 문의 1건 분류는 CPU로도 짧음). 학습은 개발 환경(GPU)에서 합니다.
 - 백엔드 8000 포트는 밖으로 열지 않고 nginx를 거쳐서만 접속합니다. nginx가 넘겨 준 실제 접속 IP(`X-Forwarded-For`)로 로그인 잠금·요청 제한·감사 로그를 기록합니다.
 - `COOKIE_SECURE=false`는 http://localhost 시연용입니다. 실제로 배포할 때는 https 뒤에 두고 `true`, `API_DOCS=false`, `PASSWORD_MIN_LENGTH=8` 이상으로 바꿉니다.
+
+## 5. CI 자동 확인 (`.github/workflows/ci.yml`의 "Docker 빌드")
+
+main에 푸시할 때마다 GitHub에서 아래를 자동으로 확인합니다.
+
+1. 이미지 2개(백엔드·화면)를 만듭니다. 패키지 설치 단계는 캐시에 저장해 두 번째부터 빨라집니다.
+2. 백엔드 이미지에 `.env`, 학습 모델(`*.safetensors`), AI Hub 데이터(`data/raw`, 외부 테스트)가 없는지 확인합니다.
+3. 실행할 때마다 새로 만든 무작위 비밀값으로 시험용 `.env`를 만들고, `docker compose up`으로 실제로 켭니다.
+   학습 모델은 저장소에 없어서 `LOAD_MODELS=false`로 켭니다 (분류 모델 없이, FAQ 검색은 TF-IDF).
+4. 화면(nginx)을 거쳐 `/api/health`가 응답하고 시연 DB(계정·FAQ·주문)가 만들어졌는지, 화면과 `/admin/drafts` 같은 하위 주소가 열리는지 확인합니다.
+5. 실패하면 컨테이너 기록을 남기고, 끝나면 컨테이너와 볼륨을 지웁니다.
+
+분류 모델·KURE·OpenAI까지 켜는 확인은 모델과 API 키가 있는 개발 PC에서 합니다.
