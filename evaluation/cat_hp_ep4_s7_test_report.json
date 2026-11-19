@@ -1,0 +1,191 @@
+{
+  "label_column": "category",
+  "model_name": "monologg/koelectra-base-v3-discriminator",
+  "revision": null,
+  "num_samples": {
+    "train": 21495,
+    "valid": 2648,
+    "test": 2649
+  },
+  "accuracy": 0.9679124197810495,
+  "macro_f1": 0.9677143654742851,
+  "classification_report": {
+    "배송": {
+      "precision": 0.9663865546218487,
+      "recall": 0.9745762711864406,
+      "f1-score": 0.9704641350210971,
+      "support": 354.0
+    },
+    "주문 취소": {
+      "precision": 0.9765258215962441,
+      "recall": 0.985781990521327,
+      "f1-score": 0.9811320754716981,
+      "support": 211.0
+    },
+    "교환": {
+      "precision": 0.9887323943661972,
+      "recall": 0.9943342776203966,
+      "f1-score": 0.9915254237288136,
+      "support": 353.0
+    },
+    "반품·환불": {
+      "precision": 0.9857954545454546,
+      "recall": 0.9830028328611898,
+      "f1-score": 0.9843971631205674,
+      "support": 353.0
+    },
+    "결제": {
+      "precision": 0.9461756373937678,
+      "recall": 0.9461756373937678,
+      "f1-score": 0.9461756373937678,
+      "support": 353.0
+    },
+    "상품": {
+      "precision": 0.968299711815562,
+      "recall": 0.9307479224376731,
+      "f1-score": 0.9491525423728814,
+      "support": 361.0
+    },
+    "쿠폰·적립금·회원": {
+      "precision": 0.9681372549019608,
+      "recall": 0.9801488833746899,
+      "f1-score": 0.9741060419235512,
+      "support": 403.0
+    },
+    "기타": {
+      "precision": 0.9393939393939394,
+      "recall": 0.9501915708812261,
+      "f1-score": 0.9447619047619048,
+      "support": 261.0
+    },
+    "accuracy": 0.9679124197810495,
+    "macro avg": {
+      "precision": 0.9674308460793719,
+      "recall": 0.968119923284589,
+      "f1-score": 0.9677143654742851,
+      "support": 2649.0
+    },
+    "weighted avg": {
+      "precision": 0.9679325961613745,
+      "recall": 0.9679124197810495,
+      "f1-score": 0.9678578726744003,
+      "support": 2649.0
+    }
+  },
+  "confusion_matrix": {
+    "labels": [
+      "배송",
+      "주문 취소",
+      "교환",
+      "반품·환불",
+      "결제",
+      "상품",
+      "쿠폰·적립금·회원",
+      "기타"
+    ],
+    "matrix": [
+      [
+        345,
+        0,
+        1,
+        1,
+        6,
+        0,
+        0,
+        1
+      ],
+      [
+        0,
+        208,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        351,
+        0,
+        0,
+        1,
+        1,
+        0
+      ],
+      [
+        0,
+        2,
+        2,
+        347,
+        0,
+        2,
+        0,
+        0
+      ],
+      [
+        4,
+        1,
+        0,
+        0,
+        334,
+        2,
+        8,
+        4
+      ],
+      [
+        7,
+        0,
+        1,
+        2,
+        4,
+        336,
+        0,
+        11
+      ],
+      [
+        0,
+        1,
+        0,
+        1,
+        6,
+        0,
+        395,
+        0
+      ],
+      [
+        1,
+        1,
+        0,
+        0,
+        2,
+        5,
+        4,
+        248
+      ]
+    ]
+  },
+  "hyperparameters": {
+    "epochs": 4.0,
+    "lr": 3e-05,
+    "batch_size": 32,
+    "max_length": 256,
+    "class_weight": false,
+    "class_weight_power": 0.5,
+    "label_smoothing": 0.1,
+    "seed": 7,
+    "extra_train": [
+      {
+        "file": "data/corrections/category_corrections.csv",
+        "rows": 11,
+        "repeat": 1
+      },
+      {
+        "file": "data/supplement/generated_weak.csv",
+        "rows": 298,
+        "repeat": 1
+      }
+    ]
+  }
+}

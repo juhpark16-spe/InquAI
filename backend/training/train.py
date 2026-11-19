@@ -81,6 +81,8 @@ def parse_args():
                    help="학습 분할에만 더할 CSV (text, <라벨> 컬럼). 상담원 분류 수정·약점 보강 문장 등 (docs/retraining.md)")
     p.add_argument("--extra-repeat", type=int, nargs="*", default=[],
                    help="--extra-train 파일마다 반복 횟수 (가중치 대신 여러 번 넣기, 기본 1)")
+    p.add_argument("--label-fixes", default=None,
+                   help="기본 데이터 라벨 수정 CSV (text, <라벨> 컬럼). 분할 후 적용해 분할은 그대로 유지 (docs/retraining.md)")
     p.add_argument("--group-column", default="dialog_id",
                    help="같은 대화의 문장을 한쪽에만 넣기 위한 컬럼. 빈 문자열이면 문장 단위로 분할")
     return p.parse_args()
@@ -235,6 +237,20 @@ def main():
     # 1. 데이터 로드·분할
     df = load_data(resolve(args.data), label_column, labels, args.group_column)
     train_df, valid_df, test_df = split_data(df, label_column, args.seed, args.group_column)
+    if args.label_fixes:
+        # 분할한 뒤에 고쳐야 분할이 지금 모델과 똑같아 공정하게 비교할 수 있음
+        fixes = pd.read_csv(resolve(args.label_fixes), encoding="utf-8-sig")
+        fix_map = dict(zip(fixes["text"], fixes[label_column].astype(str).str.strip()))
+        bad = sorted(set(fix_map.values()) - set(labels))
+        if bad:
+            raise ValueError(f"라벨 수정 파일에 정의되지 않은 라벨: {bad}")
+        changed = 0
+        train_df, valid_df, test_df = train_df.copy(), valid_df.copy(), test_df.copy()
+        for part in (train_df, valid_df, test_df):
+            hit = part["text"].isin(fix_map)
+            part.loc[hit, label_column] = part.loc[hit, "text"].map(fix_map)
+            changed += int(hit.sum())
+        print(f"[라벨 수정] {Path(args.label_fixes).name}: {len(fix_map)}개 문장, {changed}건 고침")
     train_df, extra_info = add_extra_train(train_df, df, args, label_column, labels)
     for name, part in (("train", train_df), ("valid", valid_df), ("test", test_df)):
         part.to_csv(processed_dir / f"{label_column}_{name}.csv", index=False, encoding="utf-8-sig")

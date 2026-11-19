@@ -7,7 +7,11 @@
       "base_model": "KoELECTRA",
       "data": "콜센터·소상공인 Q&A·직접 쓴 보충 26,483건",
       "corrections_used": 0,
-      "scores": {"external": 0.984, "written_eval": 0.942, "real": 0.98},
+      "scores": {
+        "external": 0.984,
+        "written_eval": 0.942,
+        "real": 0.98
+      },
       "note": "첫 모델 (1주차)",
       "current": false
     },
@@ -17,7 +21,12 @@
       "base_model": "KoELECTRA",
       "data": "같은 데이터 + 상담원 분류 수정 11건 + 약점 보강 생성 298건",
       "corrections_used": 11,
-      "scores": {"external": 0.981, "written_eval": 0.95, "real": 0.98},
+      "scores": {
+        "external": 0.981,
+        "written_eval": 0.95,
+        "real": 0.98,
+        "written_eval2": 0.875
+      },
       "note": "재학습 (seed 3개 평균 평가용 93.3% → 95.8%, 외부 98.0% → 97.9%)",
       "current": true
     },
@@ -27,8 +36,57 @@
       "base_model": "KcELECTRA",
       "data": "현재 모델과 같은 데이터",
       "corrections_used": 11,
-      "scores": {"external": 0.979, "written_eval": 0.953, "real": 0.97},
+      "scores": {
+        "external": 0.979,
+        "written_eval": 0.953,
+        "real": 0.97
+      },
       "note": "비교 실험 (seed 3개 평균). 정확도는 같지만 틀릴 때도 확신도가 높아 채택 안 함",
+      "current": false
+    },
+    {
+      "version": "category_aug2b (비교)",
+      "trained_at": "2026-11-19T02:40:00+00:00",
+      "base_model": "KoELECTRA",
+      "data": "현재 모델 데이터 + 2차 약점 보강 생성 221건",
+      "corrections_used": 11,
+      "scores": {
+        "external": 0.975,
+        "written_eval": 0.969,
+        "written_eval2": 0.897,
+        "real": 0.977
+      },
+      "note": "2차 약점 보강 (seed 3개 평균). 새 평가 세트 86.9% → 89.7%지만 외부 테스트 97.9% → 97.5%로 내려가 채택 안 함",
+      "current": false
+    },
+    {
+      "version": "category_aug3 (비교)",
+      "trained_at": "2026-11-19T03:40:00+00:00",
+      "base_model": "KoELECTRA",
+      "data": "2차 보강 + 대조 문장 181건",
+      "corrections_used": 11,
+      "scores": {
+        "external": 0.9752,
+        "written_eval": 0.9722,
+        "written_eval2": 0.9194,
+        "real": 0.9733
+      },
+      "note": "대조 문장 보강 (seed 3개 평균). 평가 세트는 올랐지만 외부 테스트 97.5%, 실전 97.3%로 채택 안 함",
+      "current": false
+    },
+    {
+      "version": "category_fix (비교)",
+      "trained_at": "2026-11-19T05:50:00+00:00",
+      "base_model": "KoELECTRA",
+      "data": "현재 모델 데이터 + 기본 데이터 라벨 55건 수정",
+      "corrections_used": 11,
+      "scores": {
+        "external": 0.9788,
+        "written_eval": 0.9611,
+        "written_eval2": 0.8389,
+        "real": 0.9733
+      },
+      "note": "라벨 검토 (seed 3개 평균). 외부 테스트 97.9%로 같은 수준, 실전 97.3%라 채택 안 함",
       "current": false
     }
   ]

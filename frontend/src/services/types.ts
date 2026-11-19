@@ -299,7 +299,7 @@ export interface ModelVersion {
   base_model?: string;
   data?: string;
   corrections_used?: number;
-  scores: { external?: number; written_eval?: number; real?: number };
+  scores: { external?: number; written_eval?: number; written_eval2?: number; real?: number };
   note?: string;
   current?: boolean;
 }

@@ -24,9 +24,18 @@
     → train.py --extra-train 으로 학습 데이터에만 더합니다 (prepare_data 기본 보충에는 넣지 않음).
     생성 문장은 꼭 일부를 사람이 읽어 보고, 이상한 문장은 지운 뒤 --refilter로 다시 정리하세요.
 
+2차 보강 (--round 2, 2026-11-19)
+    1차 모델(category_aug_s42)이 수정용·1차 평가 세트에서 여전히 틀린 유형: 회원 등급, 배송 요청사항, 누락,
+    부가 서비스(선물 포장)·페이지 표기 오류·새 주문 방법(기타 경계), 결제 이상, 단순 변심 반품 구어체.
+    1차 평가 세트의 오답도 목표에 넣었으므로, 공정한 비교를 위해 **생성 전에** 새 평가 세트
+    data/test/written_eval2.csv(직접 작성 120문장)를 먼저 만들고 그 점수로 판단합니다 (docs/retraining.md).
+    대조용으로 헷갈리기 쉬운 상품 질문(구성·사양·"~오나요")도 함께 생성해 한쪽으로 쏠리지 않게 합니다.
+    결과: data/supplement/generated_weak2.csv
+
 실행 예시 (프로젝트 루트에서)
     python backend/training/generate_weak.py --per-request 10
     python backend/training/generate_weak.py --refilter        # API 없이 걸러내기·분류만 다시
+    python backend/training/generate_weak.py --round 2         # 2차 보강
 """
 
 import argparse
@@ -48,10 +57,11 @@ from prepare_data import MIN_TEXT_LENGTH
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SEED_FILE = "data/supplement/seed_inquiries.csv"
-EVAL_FILE = "data/test/written_eval.csv"
+EVAL_FILES = ["data/test/written_eval.csv", "data/test/written_eval2.csv"]   # 평가 문장 (LLM에 보내지 않음)
 EXISTING_FILES = ["data/raw/inquiries_with_qa.csv", "data/supplement/web_inquiries.csv",
-                  "data/supplement/generated_other.csv", "data/test/real_inquiries_100.csv",
-                  "data/test/external_test.csv", "data/test/written_pool.csv", EVAL_FILE]
+                  "data/supplement/generated_other.csv", "data/supplement/generated_weak.csv", "data/supplement/generated_weak2.csv",
+                  "data/test/real_inquiries_100.csv", "data/test/external_test.csv", "data/test/written_pool.csv",
+                  *EVAL_FILES]
 EVAL_SIMILAR = 0.5     # 평가 문장과 글자 3개 묶음이 이만큼 겹치면 버림
 SELF_SIMILAR = 0.7     # 생성 문장끼리
 
@@ -94,6 +104,76 @@ SUBTYPES = [
      "사진이 보정된 건지 실제로 보면 더 노란가요", r"교환|반품|환불|틀렸|잘못|다르게 (나와|적혀)", None),
 ]
 
+# 2차 (2026-11-19): 1차 뒤에도 남은 약점 + 대조용 상품 질문
+SUBTYPES2 = [
+    ("회원 등급", "쿠폰·적립금·회원",
+     "쇼핑몰 회원 등급의 기준·산정 시기·등급별 혜택·등급 유지·등급 하락을 물음 (원칙 4: 쇼핑몰이 주는 혜택). 특정 상품 질문이 아님",
+     "실버에서 골드 되려면 몇 번 더 사야 해요", r"교환|반품|환불|취소|카드사", r"등급|VIP|vip|멤버십|회원|레벨"),
+    ("배송 요청사항", "배송",
+     "이번 배송을 어떻게 받을지 요청함: 문 앞·경비실·택배함·관리실에 맡기기, 부재 시 처리, 공동현관 비밀번호, 배송 메모, 도착 전 연락, 받는 시간",
+     "벨 누르지 말고 문고리에 걸어 두고 가 주세요", r"교환|반품|환불|취소|회원|계정", None),
+    ("구성품 누락", "배송",
+     "세트·묶음 상품을 받았는데 구성품·부속품·사은품·여러 개 중 일부가 상자에 들어 있지 않음. 교환·반품·환불 요청 없이 알리거나 보내 달라고만 함 (원칙 5)",
+     "믹서기 왔는데 칼날 부품이 안 들어 있어요", NO_REQUEST, r"없|빠|안 ?(들어|왔|와)|누락|모자"),
+    ("부가 서비스", "기타",
+     "선물 포장, 포장지·리본 선택, 쇼핑백 추가, 메시지 카드, 가격표·영수증 빼고 보내기 같은 부가 서비스를 묻거나 요청함 (원칙 7). 배송지·받는 사람 변경이 아님",
+     "선물이라 예쁘게 포장해 주실 수 있나요", r"교환|반품|환불|취소|배송지|주소|등급", None),
+    ("페이지 표기 오류", "기타",
+     "상품 페이지의 표기가 서로 다르거나 틀렸다고 알림: 상세 설명과 옵션, 사진과 상품명, 페이지마다 가격·용량·개수가 다름. 받은 상품 이야기가 아니라 구매 전에 페이지를 보고 하는 말 (원칙 7 상품 페이지 표기 문제)",
+     "상세 설명엔 500ml인데 옵션 선택하는 곳엔 300ml로 나와요", r"교환|반품|환불|받았|왔어|도착",
+     r"다르|달라|틀|맞아|맞나|어느|뭐가|헷갈|잘못|안 ?맞"),
+    ("새 주문 방법", "기타",
+     "아직 사지 않은 고객이 주문하는 방법 자체를 물음: 방송·라이브에서 본 상품 주문, 전화 주문, 단체·대량 구매, 매장 주문 (원칙 7). 해외 배송은 배송 유형이라 넣지 않음. 결제 수단·쿠폰 문제가 아님",
+     "라이브에서 본 원피스 주문 링크가 어디 있어요", r"결제|카드|쿠폰|적립|취소|교환|반품|배송비", None),
+    ("결제 이상", "결제",
+     "결제 과정 오류: 결제 실패라고 떴는데 돈이 빠져나감, 승인 문자가 두 번 옴, 입금했는데 입금 대기, 결제 후 주문 내역이 안 보임 (원칙 3)",
+     # '취소'가 든 문장은 뺌: 1차 학습에서 "취소하면 카드 결제도 취소되나요"(주문 취소, 원칙 2)까지 결제로 보는 부작용이 생김
+     "결제창이 멈춰서 다시 했더니 카드 승인이 두 번 났어요", r"교환|반품|쿠폰|적립|실수로|취소",
+     r"결제|승인|출금|빠져|빠졌|카드|이체|입금|돈|계좌"),
+    ("단순 변심 반품", "반품·환불",
+     "받은 상품이 마음에 안 들거나 필요 없어져서 돌려보내고 돈을 돌려받고 싶음. 절반 이상은 '반품·환불'이라는 단어 없이 다른 말로 함 (물리다, 돌려보내다, 다시 보내 드리다, 반송, 돈으로 돌려받다)",
+     "써 보니 생각보다 별로라 그냥 돌려보내고 싶어요", r"교환|바꿔|바꾸|다른 (사이즈|색)|취소|불량|파손", None),
+    ("구성·사양 질문", "상품",
+     "사기 전에 상품의 구성품·사양·용량·인원·유통기한·AS를 물음. '같이 와요?', '얼마나 남은 게 오나요', '어디로 보내요'처럼 배송 말투가 섞여도 상품 자체에 대한 질문 (원칙 6, 대조용)",
+     "이 도시락통 뚜껑이랑 수저도 같이 와요?", r"교환|반품|환불|취소|안 ?(왔|와|들어)|빠져|없어요", None),
+]
+# 3차 (2026-11-19): 2차 보강의 부작용을 막는 대조 문장. 2차 보강 뒤 외부 테스트에서 늘어난 오답 유형(개수만 확인, 문장은 보지 않음)이
+# 상품 → 배송(+4)·결제(+3)였고, 실전·평가 세트에서는 "취소 + 카드"를 결제로 봄. 같은 단어를 쓰지만 유형이 다른 문장을 넣어 균형을 맞춤.
+SUBTYPES3 = [
+    ("배송 말이 섞인 상품 질문", "상품",
+     "사기 전에 상품 자체를 묻는데 '받으면, 와요, 오나요, 배송될 때, 택배로' 같은 말이 섞임: 받으면 바로 쓸 수 있는지, 조립된 채로 오는지, 냉동 상태로 오는지, 몇 개 들어 있는지 (원칙 6)",
+     "이 선반 받으면 조립 따로 해야 해요 아니면 완제품으로 와요?",
+     r"교환|반품|환불|취소|안 ?(왔|와|들어)|빠져|없어요|언제 (와|오|도착|출발)|배송비|운송장|송장",
+     r"받|와요|오나요|와서|오는|배송|택배|도착"),
+    ("가격·결제 말이 섞인 상품 질문", "상품",
+     "사기 전에 상품 자체를 묻는데 '가격, 이 돈이면, 결제 전에, 구매 전에' 같은 말이 섞임: 이 가격에 몇 개 들었는지, 세트 구성, 정품 여부, 사양·사이즈 확인 (원칙 6). 결제 수단·할인·결제 오류 질문이 아님",
+     "결제하기 전에 확인하려는데 이 가격이 한 개 값이에요 두 개 값이에요?",
+     r"교환|반품|환불|취소|카드|할부|쿠폰|적립|할인|오류|영수증|입금",
+     r"가격|원|결제|구매|사기 전|사려|주문하기 전"),
+    ("취소 후 카드 승인 취소", "주문 취소",
+     "출고 전 주문을 취소했거나 취소하려는데, 카드 결제·승인 취소가 언제 어떻게 되는지 물음 (원칙 2: 처음 신청한 처리 = 주문 취소)",
+     "주문 취소했는데 카드 승인 취소 문자가 아직 안 와요",
+     r"교환|반품|중복|두 ?번|이중|오류|실패", r"취소"),
+    ("중복 주문 취소", "주문 취소",
+     "고객이 실수로 같은 상품을 두 번 주문했거나 주문을 두 건 넣어서 그중 하나를 없애 달라고 함. 결제 오류가 아니라 주문을 잘못 넣은 것 (원칙 3 대조)",
+     "실수로 같은 걸 두 번 주문해 버렸어요 하나는 취소해 주세요",
+     r"교환|반품|오류|실패|승인|이중", r"주문"),
+    ("중복 결제", "결제",
+     "주문은 한 건인데 결제·카드 승인이 두 번 됨. 하나 취소해 달라고 해도 원인이 결제 오류 (원칙 3)",
+     "주문은 하나만 했는데 카드 결제가 두 번 됐어요",
+     r"교환|반품|실수로|두 ?(개|건) ?주문|주문을 두", r"결제|승인|카드|출금|빠져|청구"),
+    ("교환 신청 철회", "교환",
+     "이미 신청한 교환을 취소하거나 없던 걸로 하고 싶음 (원칙 2: 처음 신청한 처리 = 교환)",
+     "교환 신청했는데 그냥 이대로 쓸게요 접수 취소해 주세요",
+     r"반품|환불|주문 취소", r"교환"),
+    ("반품 신청 철회", "반품·환불",
+     "이미 신청한 반품·환불을 취소하거나 없던 걸로 하고 싶음 (원칙 2: 처음 신청한 처리 = 반품·환불)",
+     "반품 접수한 거 취소할게요 그냥 쓰려고요",
+     r"교환|주문 취소", r"반품|환불"),
+]
+ROUNDS = {1: (SUBTYPES, "data/supplement/generated_weak.csv"), 2: (SUBTYPES2, "data/supplement/generated_weak2.csv"),
+          3: (SUBTYPES3, "data/supplement/generated_weak3.csv")}
+
 # 생성 문장을 사람이 읽고 뺀 문장 (2026-11-17 검토). --refilter 때도 다시 빠집니다.
 REVIEWED_OUT = [
     ("방금 결제직전인데 안 살게요 주문 넣은거 빼 주세요", "결제 전인지 주문 후인지 모호"),
@@ -109,6 +189,39 @@ REVIEWED_OUT = [
     ("상품취소했고 결제는 적립금+카드로 이중결제된거같아요 환불은 각각 어떻게,언제들어오나요", "적립금·카드 섞임"),
     ("결제 취소했는데 계좌로 며칠 내 입금되나요", "주문 취소인지 결제 취소인지 모호"),
     ("마이페이지에서 이름 수정 시 계속 오류가 발생합니다. 빨리 변경할 수 있는 방법 알려주세요.", "화면 오류 = 기타일 수 있음"),
+    # 2차 (2026-11-19 검토)
+    ("결제 실패 떴는데 돈은 환불돼서 다행이에요", "문의할 내용이 없음"),
+    ("취소 요청했더니 결제 오류라 못해준대요 답답함", "취소가 안 되는 문의 = 주문 취소일 수 있음"),
+    ("이전 주문에서 구성품이 누락된 적이 있는데요, 이번 제품은 구성물이 빠짐없이 들어있나요? 답답합니다", "누락 이야기 섞임"),
+    ("표기랑 달라요, 실제 중량이 얼마예요?", "표기가 다르다고 알림 = 기타 (원칙 7)"),
+    ("구성품중 나사 하나가 빠졌는데 안내문도 친절히 있어 감사해요 바로 확인했어요 나사만 부탁드려요", "문장이 어색함"),
+    ("화장품 기프트세트에서 샘플 하나가 비어있어요 상자열자마자 확인했는데 분명 누락입니다 샘플만 보내주세요", "빈 용기 = 불량일 수 있음"),
+    ("생각 바뀌어 반송했는데 처리 빨라서 만족스러워요", "칭찬 = 기타일 수 있음"),
+    ("한개만 다시보내고싶은데 마이페이지 어디서신청하나요", "교환인지 반품인지 모호"),
+    ("가능하면 첫 배송 시도로 전달해 주세요, 재배송이 어려워 불편합니다.", "설명의 '첫 배송'을 잘못 따라 씀"),
+    ("첫 배송 때만 받아야 해서 그때 꼭 배송해 주세요", "설명의 '첫 배송'을 잘못 따라 씀"),
+    ("첫배송만 해주세요 재배송하면 힘들어서요", "설명의 '첫 배송'을 잘못 따라 씀"),
+    ("지난번 포장 완전 구겨져서 왔어요 이번엔 제발 신경써서 포장해 주세요", "배송 불만 섞임"),
+    ("포장 시 상자 크기를 소형으로 해주실 수 있나요? 부피가 커서 걱정되어 문의드립니다.", "부가 서비스인지 모호"),
+    ("해외에 거주 중이라 해외배송 가능한지, 해외 주문 방법 안내가 전혀 없어 불편합니다.", "해외 배송 = 배송 (FAQ F21)"),
+    ("해외에서 주문하려면 통관 절차는 어떻게 되나요", "해외 배송 = 배송 (FAQ F21)"),
+    ("해외(외국)에서 주문 가능한가요 통관이 문제면 어떻게 해야하는지 먼저 알고싶어요", "해외 배송 = 배송 (FAQ F21)"),
+    ("해외에서도 주문 가능하면 좋겠는데 방법 알려줘요", "해외 배송 = 배송 (FAQ F21)"),
+    ("해외에서 주문하려는데 절차랑 배송은 어떻게 되는지 알려줘요", "해외 배송 = 배송 (FAQ F21)"),
+    ("평소 자주 이용하는데 이번에 옵션명이 달라 보여 구매 전 확인 요청드립니다", "무엇이 다른지 모호"),
+    # 3차 (2026-11-19 검토)
+    ("가격 보고 결제 전에 퀄리티 괜찮으면 바로 살게요", "질문이 아님"),
+    ("결제하기전에 확인할게요 이 돈이면 용량이 500ml인지 1L인지 표기좀 정확히 해주세요", "표기 문제 = 기타일 수 있음"),
+    ("결제전에 문의드려요 배송비 포함한가격인가요? 가격대가 착하네여ㅋ", "배송비 = 배송 (FAQ F15)"),
+    ("도자기 찻잔 주문하려는데 택배로 올 때 포장이 불충분하면 깨질까 걱정됩니다, 포장 상태가 어떻게 되나요?", "배송 포장 = 배송일 수 있음"),
+    ("상품설명엔2개라고돼있는데 받아보면1개만 와요? 이거 오류 아닌가요", "표기 오류 = 기타"),
+    ("냉동 디저트인데 배송될 때 완전히 얼어 있는 상태로 오나요, 해동된 채로 오지 않으면 좋겠습니다", "냉동 배송 = 배송일 수 있음"),
+    ("치즈케이크 배송올때 아이스팩 넣어서 와요 선물이라 걱정돼서요", "냉동 배송 = 배송일 수 있음"),
+    ("아이스크림 냉동상태로 배송되서 오나요 녹아있진 않겠죠", "냉동 배송 = 배송일 수 있음"),
+    ("이 냉동식품 받으면 냉동 상태로 오나요?", "냉동 배송 = 배송일 수 있음"),
+    ("샐러드용 손질 채소 세트는 배송될 때 신선도가 어느 정도 유지되나요, 받자마자 바로 먹어도 괜찮을지 궁금합니다", "신선 배송 = 배송일 수 있음"),
+    ("노트북 가방 받으면 내부에 15인치 수납 가능한지 실측 치수가 배송 안내에 같이 오나요?", "문장이 어색함"),
+    ("삭제해달라고 했는데 카드승인취소가 안돼서 불편해요 빨리 처리좀", "무엇을 삭제했는지 모호"),
 ]
 # LLM이 실제 값 대신 넣은 자리 표시 → 보충 데이터 관례('ㅇㅇ')로
 PLACEHOLDERS = {"[새이름]": "ㅇㅇㅇ", "[새번호]": "010-ㅇㅇㅇㅇ-ㅇㅇㅇㅇ", "[새주소]": "ㅇㅇ동 ㅇㅇ아파트"}
@@ -179,13 +292,13 @@ def generate(client, model, subtype, style, n, seeds, rng, retries=3):
     return []
 
 
-def filter_rows(df: pd.DataFrame) -> pd.DataFrame:
-    """reason 칸이 비어 있으면 사용."""
+def filter_rows(df: pd.DataFrame, out: Path | None = None) -> pd.DataFrame:
+    """reason 칸이 비어 있으면 사용. out(지금 만드는 파일)은 겹침 검사에서 뺌."""
     df = df.copy()
     for k, v in PLACEHOLDERS.items():
         df["text"] = df["text"].str.replace(k, v, regex=False)
     df["text"] = df["text"].map(clean_tail)
-    rules = {s[0]: (s[4], s[5]) for s in SUBTYPES}
+    rules = {s[0]: (s[4], s[5]) for s in SUBTYPES + SUBTYPES2 + SUBTYPES3}
     reviewed = {key(t): f"사람 검토: {w}" for t, w in REVIEWED_OUT}
 
     def reason(row):
@@ -206,11 +319,12 @@ def filter_rows(df: pd.DataFrame) -> pd.DataFrame:
 
     existing = set()
     for f in EXISTING_FILES:
-        if resolve(f).exists():
+        if resolve(f).exists() and resolve(f) != out:
             existing |= {key(t) for t in pd.read_csv(resolve(f), encoding="utf-8-sig")["text"]}
     df.loc[df["reason"].isna() & df["text"].map(key).isin(existing), "reason"] = "기존 데이터와 겹침"
 
-    eval_grams = [grams(t) for t in pd.read_csv(resolve(EVAL_FILE), encoding="utf-8")["text"]]
+    eval_grams = [grams(t) for f in EVAL_FILES if resolve(f).exists()
+                  for t in pd.read_csv(resolve(f), encoding="utf-8")["text"]]
     kept = []
     for i, row in df[df["reason"].isna()].iterrows():
         g = grams(row.text)
@@ -257,7 +371,8 @@ def save(kept: pd.DataFrame, out: Path, seed: int):
 
 def parse_args():
     p = argparse.ArgumentParser(description="약점 유형 문의 생성 (재학습 보강)")
-    p.add_argument("--output", default="data/supplement/generated_weak.csv")
+    p.add_argument("--round", type=int, default=1, choices=sorted(ROUNDS), help="1차·2차 약점 보강, 3차 대조 문장")
+    p.add_argument("--output", default=None, help="기본값: 1차 generated_weak.csv, 2차 generated_weak2.csv")
     p.add_argument("--model", default=None, help="기본값: .env의 OPENAI_MODEL, 없으면 gpt-5-mini")
     p.add_argument("--per-request", type=int, default=10, help="하위 유형·말투 조합마다 생성할 문장 수")
     p.add_argument("--workers", type=int, default=4)
@@ -271,12 +386,13 @@ def main():
     sys.stdout.reconfigure(encoding="utf-8")
     sys.stderr.reconfigure(encoding="utf-8")
     args = parse_args()
-    out = resolve(args.output)
-    assert {s[1] for s in SUBTYPES} <= set(CATEGORY_LABELS)
+    subtypes, default_out = ROUNDS[args.round]
+    out = resolve(args.output or default_out)
+    assert {s[1] for s in subtypes} <= set(CATEGORY_LABELS)
     if args.refilter:
         df = pd.read_csv(out, encoding="utf-8-sig")
         print(f"[다시 걸러내기] {out.name} {len(df)}건")
-        df = filter_rows(df.drop(columns=["model_pred", "model_conf"], errors="ignore"))
+        df = filter_rows(df.drop(columns=["model_pred", "model_conf"], errors="ignore"), out)
         save(df[df["reason"].isna()], out, args.seed)
         return
 
@@ -288,7 +404,7 @@ def main():
     seeds = pd.read_csv(resolve(SEED_FILE), encoding="utf-8-sig")
     rng = random.Random(args.seed)
 
-    jobs = [(s, st, random.Random(rng.random())) for s in SUBTYPES for st in STYLES]
+    jobs = [(s, st, random.Random(rng.random())) for s in subtypes for st in STYLES]
     print(f"[생성] 모델 {model} / 요청 {len(jobs)}회 × {args.per_request}문장")
     with ThreadPoolExecutor(max_workers=args.workers) as pool:
         results = pool.map(lambda j: generate(client, model, j[0], j[1], args.per_request, seeds, j[2]), jobs)
@@ -297,7 +413,7 @@ def main():
     raw = out.with_name(out.stem + "_raw.csv")      # 걸러내기 전 원본 (다시 생성하지 않고 기준을 바꿔 볼 때)
     df.to_csv(raw, index=False, encoding="utf-8-sig")
 
-    df = filter_rows(df)
+    df = filter_rows(df, out)
     save(df[df["reason"].isna()], out, args.seed)
 
 
