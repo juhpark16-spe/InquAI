@@ -1,4 +1,4 @@
-"""대시보드 통계: GET /api/stats/summary (관리자, docs/api_spec.md 9장).
+"""대시보드 통계: GET /api/stats/summary·activity·products·drafts (관리자, docs/api_spec.md 9장).
 
 기간은 한국 날짜(KST) 기준 from~to (기본: 최근 7일). 문의가 많지 않은 시연 규모라
 기간 안의 문의를 한 번에 읽어 파이썬에서 집계합니다 (SQLite·PostgreSQL 어디서나 같은 결과).
@@ -9,15 +9,15 @@ from collections import Counter
 from datetime import date, datetime, time, timedelta, timezone
 
 from fastapi import APIRouter, Query
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from backend.core.dependencies import DB, AdminOnly
 from backend.core.errors import AppError
-from backend.services import sla
+from backend.services import draft_quality, sla
 from backend.services.inquiry_context import history
-from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminUser, Inquiry, LabelCorrection,
-                                     Order, as_utc)
+from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminAuditLog, AdminUser, Inquiry,
+                                     LabelCorrection, Order, Response, as_utc)
 from backend.training.labels import CATEGORY_LABELS
 
 router = APIRouter(prefix="/stats", tags=["통계"])
@@ -261,3 +261,89 @@ def products(
     return {"range": {"from": date_from.isoformat(), "to": date_to.isoformat()},
             "total": len(rows), "linked": sum(len(v) for v in groups.values()), "products": len(groups),
             "items": items[:limit]}
+
+
+# ---- AI 초안 수정 분석 (services/draft_quality.py) ----------------------------------------------
+@router.get("/drafts", summary="AI 초안 수정 분석 (관리자)")
+def drafts(
+    _: AdminOnly,
+    db: DB,
+    date_from: date | None = Query(None, alias="from", description="시작일 (KST, 보낸 날짜 기준, 기본: 29일 전)"),
+    date_to: date | None = Query(None, alias="to", description="종료일 (KST, 기본: 오늘)"),
+    examples: int = Query(5, ge=0, le=20, description="많이 고친 예시 수"),
+):
+    """상담원이 승인해 보낸 AI 초안을 보낸 답변과 비교: 그대로 보낸 비율, 고친 정도·방식, 유형별·상담원별, 다시 만든 요청"""
+    date_to = date_to or _kst_today()
+    date_from = date_from or date_to - timedelta(days=29)
+    if date_from > date_to or (date_to - date_from).days >= MAX_DAYS:
+        raise AppError(422, f"기간은 시작일 이후, 최대 {MAX_DAYS}일입니다.", "INVALID_PARAM")
+    start = datetime.combine(date_from, time.min, KST).astimezone(timezone.utc)
+    end = datetime.combine(date_to + timedelta(days=1), time.min, KST).astimezone(timezone.utc)
+
+    rows = db.scalars(select(Response).where(
+        Response.generated_by == "llm", Response.status == "발송", Response.approved_by.is_not(None),
+        Response.approved_at >= start, Response.approved_at < end)
+        .options(selectinload(Response.inquiry).selectinload(Inquiry.analysis))).all()
+    names = {u.id: u.display_name for u in db.scalars(select(AdminUser))}
+
+    items = []
+    for r in rows:
+        c = draft_quality.compare(r.draft_text, r.final_text or r.draft_text)
+        made, sent = as_utc(r.created_at), as_utc(r.approved_at)
+        items.append({**c, "r": r, "category": r.inquiry.analysis.category if r.inquiry.analysis else "미분류",
+                      "staff": r.approved_by, "day": sent.astimezone(KST).date(),
+                      "wait_min": max(0.0, (sent - made).total_seconds() / 60) if made and sent else None})
+
+    def group(rows_: list[dict]) -> dict:
+        n = len(rows_)
+        return {"count": n,
+                "unedited": sum(x["level"] == "그대로" for x in rows_),
+                "unedited_rate": _rate(sum(x["level"] == "그대로" for x in rows_), n),
+                "avg_change": round(sum(x["change"] for x in rows_) / n, 4) if n else None}
+
+    by_cat: dict[str, list[dict]] = {}
+    by_staff: dict[int, list[dict]] = {}
+    by_day: dict[date, list[dict]] = {date_from + timedelta(days=k): [] for k in range((date_to - date_from).days + 1)}
+    for x in items:
+        by_cat.setdefault(x["category"], []).append(x)
+        by_staff.setdefault(x["staff"], []).append(x)
+        by_day[x["day"]].append(x)
+
+    final_chars = sum(len((x["r"].final_text or x["r"].draft_text).strip()) for x in items)
+    ai_chars = sum(x["ai_share"] * len((x["r"].final_text or x["r"].draft_text).strip()) for x in items)
+    waits = sorted(x["wait_min"] for x in items if x["wait_min"] is not None)
+
+    # 상담원이 [AI 초안 만들기]로 다시 만든 기록 (요청 문구가 있으면 어떤 점을 고치게 했는지)
+    regen = db.scalars(select(AdminAuditLog).where(AdminAuditLog.action == "draft_generate",
+                                                   AdminAuditLog.created_at >= start, AdminAuditLog.created_at < end)).all()
+    asks = Counter((a.detail or {}).get("instruction") for a in regen if (a.detail or {}).get("instruction"))
+
+    edited = sorted((x for x in items if x["level"] != "그대로"), key=lambda x: -x["change"])
+    return {
+        "range": {"from": date_from.isoformat(), "to": date_to.isoformat()},
+        "summary": {
+            **group(items),
+            "target": 0.7,                                    # 성공 지표: 무수정 승인율 70% 이상
+            "levels": {lv: sum(x["level"] == lv for x in items) for lv in draft_quality.LEVELS},
+            "kinds": {k: sum(x["kind"] == k for x in items) for k in draft_quality.KINDS},
+            "ai_share": round(ai_chars / final_chars, 4) if final_chars else None,
+            "median_wait_min": round(waits[len(waits) // 2], 1) if waits else None,   # 초안이 만들어진 뒤 보낼 때까지 (중앙값, 분)
+            "waiting": db.scalar(select(func.count()).select_from(Response).where(
+                Response.generated_by == "llm", Response.status == "초안")),   # 지금 검토를 기다리는 초안
+        },
+        "by_category": sorted(({"category": k, **group(v)} for k, v in by_cat.items()),
+                              key=lambda g: (-g["count"], g["category"])),
+        "by_staff": sorted(({"id": k, "display_name": names.get(k, "-"), **group(v)} for k, v in by_staff.items()),
+                           key=lambda g: (-g["count"], g["id"])),
+        "daily": [{"date": d.isoformat(), "count": len(v), "unedited": sum(x["level"] == "그대로" for x in v)}
+                  for d, v in by_day.items()],
+        "regenerate": {"count": len(regen), "with_instruction": sum(asks.values()),
+                       "top_instructions": [{"text": t, "count": n} for t, n in asks.most_common(5)]},
+        "examples": [{
+            "inquiry_id": x["r"].inquiry_id, "inquiry_number": x["r"].inquiry.inquiry_number,
+            "title": x["r"].inquiry.title, "category": x["category"], "staff": names.get(x["staff"], "-"),
+            "level": x["level"], "kind": x["kind"], "change": x["change"], "added": x["added"], "removed": x["removed"],
+            "sent_at": as_utc(x["r"].approved_at).isoformat(),
+            "segments": draft_quality.segments(x["r"].draft_text, x["r"].final_text or x["r"].draft_text),
+        } for x in edited[:examples]],
+    }

@@ -462,6 +462,30 @@
 - 실제 주문에 연결된 문의만 셉니다 (`linked`). 상품 이름 끝의 옵션 괄호는 떼고 묶습니다 ("와이드 데님 팬츠 (연청, 28)" → "와이드 데님 팬츠").
 - `hint`: 가장 많은 유형에 맞춘 상세페이지 개선 힌트 (채널톡 '주문 연동 상담' 벤치마킹: 같은 상품에 단순 문의가 몰리면 상세페이지가 충분히 설명하지 못한다는 신호).
 
+### GET /api/stats/drafts — AI 초안 수정 분석 (관리자, 4주차)
+파라미터: `from`, `to` (KST, **보낸 날짜** 기준, 기본 최근 30일, 최대 92일), `examples` (0~20, 기본 5). 화면: /admin/drafts.
+대상은 상담원이 승인해 보낸 AI 초안입니다 (`generated_by="llm"`, `status="발송"`, `approved_by` 있음). 자동 발송과 상담원이 처음부터 쓴 답변은 비교할 초안이 없어 뺍니다.
+```json
+{ "range": {...},
+  "summary": { "count": 11, "unedited": 8, "unedited_rate": 0.7273, "avg_change": 0.1266, "target": 0.7,
+               "levels": { "그대로": 8, "조금 고침": 1, "많이 고침": 2 }, "kinds": { "덧붙임": 1, "줄임": 0, "고쳐 씀": 2 },
+               "ai_share": 0.8382, "median_wait_min": 628.7, "waiting": 3 },
+  "by_category": [ { "category": "교환", "count": 4, "unedited": 3, "unedited_rate": 0.75, "avg_change": 0.0885 } ],
+  "by_staff": [ { "id": 2, "display_name": "상담원1", "count": 11, ... } ],
+  "daily": [ { "date": "2026-11-18", "count": 2, "unedited": 1 } ],
+  "regenerate": { "count": 2, "with_instruction": 2, "top_instructions": [ { "text": "더 짧게", "count": 1 } ] },
+  "examples": [ { "inquiry_id": 12, "inquiry_number": "INQ-…", "title": "…", "category": "상품", "staff": "상담원1",
+                  "level": "많이 고침", "kind": "고쳐 씀", "change": 0.6488, "added": 80, "removed": 53, "sent_at": "…",
+                  "segments": [ { "op": "same", "text": "상품 페이지 " }, { "op": "del", "text": "…" }, { "op": "add", "text": "…" } ] } ] }
+```
+- `change` (바뀐 정도) = 1 − 글자 단위 유사도 (difflib). `level`: 그대로(0) / 조금 고침(0.2 미만) / 많이 고침.
+- `kind`: 덧붙임(지운 것 없이 더함) / 줄임(더한 것 없이 지움) / 고쳐 씀.
+- `ai_share`: 보낸 답변 글자 중 AI 초안에서 그대로 온 글자의 비율.
+- `median_wait_min`: 초안이 만들어진 뒤 보낼 때까지 걸린 시간의 중앙값(분). `waiting`: 지금 검토를 기다리는 초안 수.
+- `regenerate`: [AI 초안 만들기]를 다시 누른 기록(감사 로그 `draft_generate`)과 자주 적은 요청.
+- `examples`: 많이 고친 순. `segments`는 띄어쓰기 단위 비교입니다 (`same`/`del`/`add`).
+- `unedited_rate`는 대시보드의 `approval_without_edit_rate`와 같은 기준입니다 (성공 지표 70% 이상).
+
 ### GET /api/stats/activity — 최근 처리 활동 (관리자)
 파라미터: `limit` (1~30, 기본 8). 최근에 움직인 문의들의 처리 이력(문의 상세의 `history`와 같은 형식)을 최신순으로 돌려줍니다.
 ```json

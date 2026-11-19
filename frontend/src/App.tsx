@@ -9,6 +9,7 @@ import AgentLogsPage from "./pages/admin/AgentLogsPage";
 import ChangePasswordPage from "./pages/admin/ChangePasswordPage";
 import FaqsPage from "./pages/admin/FaqsPage";
 import RetrainingPage from "./pages/admin/RetrainingPage";
+import DraftQualityPage from "./pages/admin/DraftQualityPage";
 import InquiryDetailPage from "./pages/admin/InquiryDetailPage";
 import InquiryListPage from "./pages/admin/InquiryListPage";
 import LoginPage from "./pages/admin/LoginPage";
@@ -63,6 +64,7 @@ export default function App() {
                 <Route path="/admin/users" element={<UsersPage />} />
                 <Route path="/admin/faqs" element={<FaqsPage />} />
                 <Route path="/admin/retraining" element={<RetrainingPage />} />
+                <Route path="/admin/drafts" element={<DraftQualityPage />} />
               </Route>
             </Route>
           </Route>

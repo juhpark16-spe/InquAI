@@ -312,3 +312,28 @@ export interface RetrainingStatus {
     text: string; at: string; pending: boolean }[];
   history: ModelVersion[];
 }
+
+/** AI 초안 수정 분석 (GET /api/stats/drafts): 상담원이 승인해 보낸 AI 초안과 보낸 답변 비교 */
+export type DraftLevel = "그대로" | "조금 고침" | "많이 고침";
+export type DraftKind = "덧붙임" | "줄임" | "고쳐 씀";
+export interface DraftGroup { count: number; unedited: number; unedited_rate: number | null; avg_change: number | null }
+export interface DraftStats {
+  range: { from: string; to: string };
+  summary: DraftGroup & {
+    target: number;
+    levels: Record<DraftLevel, number>;
+    kinds: Record<DraftKind, number>;
+    ai_share: number | null;            // 보낸 답변 글자 중 AI 초안에서 온 비율
+    median_wait_min: number | null;     // 초안이 만들어진 뒤 보낼 때까지 (중앙값, 분)
+    waiting: number;                    // 지금 검토를 기다리는 초안
+  };
+  by_category: (DraftGroup & { category: string })[];
+  by_staff: (DraftGroup & { id: number; display_name: string })[];
+  daily: { date: string; count: number; unedited: number }[];
+  regenerate: { count: number; with_instruction: number; top_instructions: { text: string; count: number }[] };
+  examples: {
+    inquiry_id: number; inquiry_number: string; title: string; category: string; staff: string;
+    level: DraftLevel; kind: DraftKind | null; change: number; added: number; removed: number; sent_at: string;
+    segments: { op: "same" | "add" | "del"; text: string }[];
+  }[];
+}

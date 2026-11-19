@@ -315,7 +315,7 @@ export default function DashboardPage() {
           compare={`지난 ${days}일 ${pct(prev.auto_rate)} · 목표 30% 이상`}
           spark={data.daily.map((d) => (d.total ? d.auto / d.total : 0))} />
         <Kpi label="초안 무수정 승인율" value={pct(data.kpi.approval_without_edit_rate)}
-          delta={null} compare="AI 초안을 고치지 않고 보낸 비율 · 목표 70% 이상" />
+          delta={null} compare={<>AI 초안을 고치지 않고 보낸 비율 · 목표 70% 이상 · <Link to="/admin/drafts" className="font-semibold text-primary hover:underline">자세히</Link></>} />
         <Kpi label="AI 평균 처리 시간" value={sec(data.ai.avg_latency_ms)}
           delta={<Delta value={change(data.ai.avg_latency_ms, prev.avg_latency_ms)} unit="%" goodWhenUp={false} />}
           compare={`지난 ${days}일 ${sec(prev.avg_latency_ms)} · 목표 10초 이내`} />
