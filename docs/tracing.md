@@ -27,7 +27,7 @@ LANGSMITH_ENDPOINT=https://api.smith.langchain.com
 | 답변 초안 작성 | 고객 응답 뒤 / 상담원 [AI 초안 만들기] | 초안 LLM 호출, 결과(초안·확인할 것) |
 
 - 메타데이터 `inquiry_number`로 같은 문의의 기록을 묶어 찾습니다 (태그: 문의 처리 / 답변 초안 / 응답 뒤 / 상담원 요청).
-- 문의 상세 → AI 처리 상세 → **"LangSmith에서 단계별로 보기"** 링크 (`agent_logs.trace_url`).
+- 문의 상세 → AI 처리 상세 → **"LangSmith에서 단계별로 보기"** 링크 (`agent_logs.trace_url`). 링크는 `inquai` 프로젝트 화면에 그 실행을 띄우는 형식(`.../projects/p/{프로젝트}?peek={실행}`)이고, 옛 형식으로 저장된 링크도 응답할 때 바꿉니다 (`tracing.trace_link`).
 
 ## 개인정보 가리기
 

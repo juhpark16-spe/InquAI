@@ -10,6 +10,7 @@
 """
 
 import logging
+import re
 import uuid
 import warnings
 from contextlib import contextmanager
@@ -69,6 +70,21 @@ def new_run_id() -> uuid.UUID:
     return uuid.uuid4()
 
 
+_OLD_RUN_URL = re.compile(r"^(?P<project>https?://[^?#]+/projects/p/[0-9a-f-]+)/r/(?P<run>[0-9a-f-]+)(?:\?.*)?$")
+
+
+def trace_link(url: str | None) -> str | None:
+    """LangSmith 링크를 지금 화면이 여는 형식으로: .../projects/p/{프로젝트}?peek={실행}&peeked_trace={실행}
+
+    get_run_url 이 주는 옛 형식(.../projects/p/{프로젝트}/r/{실행})은 지금 LangSmith 화면이 알아보지 못해서
+    마지막으로 보던 다른 프로젝트로 가 버림. 이미 저장된 링크도 응답할 때 이 함수로 바꿈.
+    (최상위 실행이라 실행 ID = 추적 ID)"""
+    m = _OLD_RUN_URL.match(url or "")
+    if not m:
+        return url
+    return f"{m['project']}?peek={m['run']}&peeked_trace={m['run']}"
+
+
 def run_url(run_id) -> str | None:
     """LangSmith 화면 주소 (AI 실행 기록의 '추적 보기' 링크). 실패해도 처리에는 영향 없음"""
     if not enabled():
@@ -82,7 +98,7 @@ def run_url(run_id) -> str | None:
                 _state.project_id = c.create_project(_state.project).id
         with warnings.catch_warnings():  # get_run_url 은 2027-01 이후 바뀜 (그때 client.runs.get_url 로)
             warnings.simplefilter("ignore")
-            return c.get_run_url(run=SimpleNamespace(id=run_id), project_id=_state.project_id)
+            return trace_link(c.get_run_url(run=SimpleNamespace(id=run_id), project_id=_state.project_id))
     except Exception:  # noqa: BLE001
         logger.warning("LangSmith 링크를 만들지 못했습니다.", exc_info=True)
         return None

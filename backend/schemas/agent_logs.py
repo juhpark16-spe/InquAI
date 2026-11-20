@@ -1,7 +1,8 @@
 """AI 실행 로그 API 응답 형식."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
+from backend.core import tracing
 from backend.schemas.common import UTCDateTime
 
 
@@ -27,6 +28,12 @@ class AgentLogRow(BaseModel):
     tokens: dict | None
     latency_ms: int | None
     trace_url: str | None
+
+    @field_validator("trace_url")
+    @classmethod
+    def _trace_link(cls, v: str | None) -> str | None:  # 옛 형식으로 저장된 링크도 지금 화면이 여는 형식으로
+        return tracing.trace_link(v)
+
     steps: list | None
     error: str | None
 

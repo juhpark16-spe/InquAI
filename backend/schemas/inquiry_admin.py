@@ -2,8 +2,9 @@
 
 from typing import Generic, Literal, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from backend.core import tracing
 from backend.schemas.common import UTCDateTime
 from backend.training.labels import CATEGORY_LABELS, SENTIMENT_LABELS
 
@@ -203,6 +204,12 @@ class AgentLogOut(ORM):
     tokens: dict | None
     latency_ms: int | None
     trace_url: str | None
+
+    @field_validator("trace_url")
+    @classmethod
+    def _trace_link(cls, v: str | None) -> str | None:  # 옛 형식으로 저장된 링크도 지금 화면이 여는 형식으로
+        return tracing.trace_link(v)
+
     error: str | None
     steps: list | None = None  # 처리 경로 (LangGraph 노드)
     created_at: UTCDateTime
