@@ -104,7 +104,9 @@ export default function AdminLayout() {
           {isAdmin && <MenuLink to="/admin/retraining" icon="zap" label="재학습 현황" />}
           <p className="hidden px-3 pb-1 pt-5 text-xs font-semibold tracking-wider text-muted lg:block">설정</p>
           {isAdmin && <MenuLink to="/admin/faqs" icon="book" label="FAQ 관리" />}
+          {isAdmin && <MenuLink to="/admin/templates" icon="message" label="답변 문구" />}
           {isAdmin && <MenuLink to="/admin/users" icon="users" label="계정 관리" />}
+          {isAdmin && <MenuLink to="/admin/audit" icon="eye" label="작업 기록" />}
           <MenuLink to="/admin/account" icon="lock" label="내 계정" />
         </nav>
 

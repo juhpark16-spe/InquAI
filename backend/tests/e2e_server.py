@@ -3,7 +3,8 @@
 개발 DB(data/inquai.db)·첨부 사진 폴더를 건드리지 않도록 임시 폴더에 새 DB를 만들고,
 관리자·상담원 계정과 FAQ·모의 주문만 넣은 뒤 서버를 켭니다.
 분류 모델·KURE·OpenAI·LangSmith는 쓰지 않습니다 (CI에는 모델과 API 키가 없음).
-분류는 단어 규칙으로 하는 가짜 분석기(KeywordAnalyzer)가 대신해 결과가 늘 같습니다.
+분류는 단어 규칙으로 하는 가짜 분석기(KeywordAnalyzer), LLM 판단·초안은 늘 같은 답을 주는 가짜 LLM(FakeLLM)이 대신합니다.
+시험용 쇼핑몰 회원(customerNN@example.com)도 E2E_PASSWORD 로 로그인할 수 있습니다.
 
 실행 (프로젝트 루트에서, 보통은 Playwright가 알아서 켬)
     python -m backend.tests.e2e_server --port 8001
@@ -11,6 +12,7 @@
 
 import argparse
 import os
+import re
 import sys
 import tempfile
 from pathlib import Path
@@ -28,13 +30,14 @@ os.environ.update({
     "PASSWORD_MIN_LENGTH": "8",
     "SEED_ADMIN_PASSWORD": E2E_PASSWORD,
     "SEED_AGENT_PASSWORD": E2E_PASSWORD,
-    "SEED_CUSTOMER_PASSWORD": "",
+    "SEED_CUSTOMER_PASSWORD": E2E_PASSWORD,
 })
 
 from contextlib import asynccontextmanager  # noqa: E402
 
 import uvicorn  # noqa: E402
 
+from backend.ai.prompts import ROUTE_TOOL  # noqa: E402
 from backend.ai.rules import get_route, get_urgency  # noqa: E402
 
 from backend.database import seed_admin, seed_data  # noqa: E402
@@ -62,6 +65,24 @@ class KeywordAnalyzer:
                 "scores": {}, "model_version": "e2e-keyword"}
 
 
+class FakeLLM:
+    """LLM 대신: 자동 답변은 하지 않고(시험 흐름이 늘 상담원을 거치게) 처리 경로에 맞는 도구로 '답변 초안'.
+    예: 주문 취소(접수형) → 티켓 접수 → 취소 티켓이 생겨 상담원이 승인할 수 있음"""
+    label = "e2e-fake-llm"
+
+    def json(self, system, user, schema, name, timeout):
+        usage = {"input": 0, "output": 0}
+        if name == "route":
+            m = re.search(r"처리 경로: (\S+)", user)
+            tool = ROUTE_TOOL.get(m.group(1) if m else "", "상담원 이관")
+            return {"decision": "답변 초안", "tool": tool, "faq_ids": [], "reason": "시험용 판단 (e2e)"}, usage
+        text = "안녕하세요, 고객님. 요청하신 내용을 확인했습니다. (시험용 초안)"
+        data = {"answer": text, "used_faq_ids": [], "grounded": False}
+        if name == "draft":
+            data["check_points"] = []
+        return data, usage
+
+
 _lifespan = app.router.lifespan_context
 
 
@@ -69,6 +90,7 @@ _lifespan = app.router.lifespan_context
 async def lifespan(a):
     async with _lifespan(a):
         a.state.analyzer = KeywordAnalyzer()
+        a.state.llm = FakeLLM()
         yield
 
 
@@ -86,6 +108,8 @@ def main() -> None:
         seed_admin.seed_accounts(db)
         seed_data.seed_faqs(db)
         seed_data.seed_orders(db, reset=False)
+        db.flush()
+        seed_admin.seed_customer_passwords(db)
         db.commit()
     print(f"[e2e] 임시 DB: {_tmp}", flush=True)
     uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")

@@ -6,9 +6,11 @@ import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import AccountPage from "./pages/admin/AccountPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AgentLogsPage from "./pages/admin/AgentLogsPage";
+import AuditLogPage from "./pages/admin/AuditLogPage";
 import ChangePasswordPage from "./pages/admin/ChangePasswordPage";
 import FaqsPage from "./pages/admin/FaqsPage";
 import RetrainingPage from "./pages/admin/RetrainingPage";
+import TemplatesPage from "./pages/admin/TemplatesPage";
 import DraftQualityPage from "./pages/admin/DraftQualityPage";
 import InquiryDetailPage from "./pages/admin/InquiryDetailPage";
 import InquiryListPage from "./pages/admin/InquiryListPage";
@@ -65,6 +67,8 @@ export default function App() {
                 <Route path="/admin/faqs" element={<FaqsPage />} />
                 <Route path="/admin/retraining" element={<RetrainingPage />} />
                 <Route path="/admin/drafts" element={<DraftQualityPage />} />
+                <Route path="/admin/templates" element={<TemplatesPage />} />
+                <Route path="/admin/audit" element={<AuditLogPage />} />
               </Route>
             </Route>
           </Route>

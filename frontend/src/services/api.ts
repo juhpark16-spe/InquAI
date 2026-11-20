@@ -123,6 +123,38 @@ export const notificationApi = {
   seen: () => http.post("/notifications/seen").then((r) => r.data),
 };
 
+/** 자주 쓰는 답변 문구 (관리자가 '답변 문구' 화면에서 편집, backend/api/reply_templates.py) */
+export interface ReplyTemplate { id: number; label: string; text: string; sort_order: number; is_active: boolean }
+
+export const templateApi = {
+  list: (all = false) => http.get<ReplyTemplate[]>("/reply-templates", { params: all ? { all: true } : {} }).then((r) => r.data),
+  create: (label: string, text: string) => http.post<ReplyTemplate>("/reply-templates", { label, text }).then((r) => r.data),
+  update: (id: number, body: Partial<Pick<ReplyTemplate, "label" | "text" | "is_active">>) =>
+    http.patch<ReplyTemplate>(`/reply-templates/${id}`, body).then((r) => r.data),
+  remove: (id: number) => http.delete(`/reply-templates/${id}`),
+  reorder: (ids: number[]) => http.put<ReplyTemplate[]>("/reply-templates/order", { ids }).then((r) => r.data),
+};
+
+/** 작업 기록 (감사 로그, 관리자): 누가·언제·무엇을 (backend/api/audit_logs.py) */
+export interface AuditItem {
+  id: number;
+  at: string;
+  action: string;
+  label: string;
+  group: string;
+  actor: { id: number | null; name: string };
+  target: { type: string; id: number; label: string; link: string | null } | null;
+  summary: string;
+  ip: string | null;
+}
+
+export const auditApi = {
+  list: (params: { group?: string; actor?: string; days?: number; page?: number }) =>
+    http.get<{ items: AuditItem[]; total: number; login_failed: number; page: number; size: number; groups: string[]; range_days: number }>(
+      "/audit-logs", { params: Object.fromEntries(Object.entries(params).filter(([, v]) => v !== "" && v !== undefined)) },
+    ).then((r) => r.data),
+};
+
 export const inquiryApi = {
   list: (filters: InquiryFilters) => {
     const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== "" && v !== undefined));

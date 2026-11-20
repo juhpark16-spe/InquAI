@@ -302,3 +302,13 @@ class Ticket(TimestampMixin, Base):
 
     inquiry: Mapped[Inquiry] = relationship(back_populates="tickets")
     order: Mapped[Order | None] = relationship()
+
+
+class ReplyTemplate(TimestampMixin, Base):
+    """상담원이 답변 칸에 넣는 자주 쓰는 문구 (관리자가 '답변 문구' 화면에서 편집, services/reply_templates.py)"""
+    __tablename__ = "reply_templates"
+
+    label: Mapped[str] = mapped_column(String(20))          # 버튼에 보이는 이름 (예: 첫인사)
+    text: Mapped[str] = mapped_column(Text)                 # 커서 자리에 들어가는 문장
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)   # 숨기면 답변 칸에 안 보임 (지우지 않고 보관)

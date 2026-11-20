@@ -11,7 +11,8 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.api import (agent_logs, auth, faqs_admin, faqs_public, health, inquiries, inquiry_admin, notifications, responses,
+from backend.api import (agent_logs, audit_logs, auth, faqs_admin, faqs_public, health, inquiries, inquiry_admin, notifications,
+                         reply_templates as reply_templates_api, responses,
                          retraining, shop, staff, stats, tickets)
 from backend.core import tracing
 from backend.core.config import get_settings
@@ -19,6 +20,7 @@ from backend.core.errors import register_error_handlers
 from backend.core.security_headers import add_security_headers
 from backend.database.session import SessionLocal, init_db
 from backend.rag.faq_search import FaqSearch
+from backend.services import reply_templates
 
 settings = get_settings()
 logger = logging.getLogger("inquai")
@@ -42,6 +44,8 @@ async def lifespan(app: FastAPI):
     init_db()  # 테이블이 없으면 만듦
     with SessionLocal() as db:
         app.state.faq_search = load_faq_search(db)
+        if reply_templates.ensure_defaults(db):   # 답변 문구 표가 비어 있으면 기본 문구 (예전 DB도 바로 쓰이게)
+            db.commit()
 
     app.state.analyzer = None
     if settings.load_models:
@@ -90,3 +94,5 @@ app.include_router(agent_logs.router, prefix="/api")
 app.include_router(retraining.router, prefix="/api")
 app.include_router(tickets.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
+app.include_router(reply_templates_api.router, prefix="/api")
+app.include_router(audit_logs.router, prefix="/api")

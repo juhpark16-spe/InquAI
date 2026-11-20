@@ -518,6 +518,35 @@
 
 계정의 `notifications_seen_at`을 지금으로 바꿈. 이후 알림만 `unread`. 화면은 30초마다 목록을 다시 불러옵니다.
 
+### 답변 문구 — /api/reply-templates (4주차)
+
+상담원이 답변 칸의 [문구·주문 정보 넣기]로 넣는 자주 쓰는 문장. 관리자가 '답변 문구' 화면(`/admin/templates`)에서 편집합니다.
+서버가 켜질 때 표가 비어 있으면 기본 문구 8개(`backend/services/reply_templates.py`)를 넣습니다.
+
+| 메서드 · 경로 | 권한 | 설명 |
+| --- | --- | --- |
+| `GET /api/reply-templates` | 로그인 | 사용 중인 문구 (순서대로). 관리자는 `?all=true`로 숨긴 문구까지 |
+| `POST /api/reply-templates` | 관리자 | `{label(1~20자), text(2~500자)}` 추가 → 맨 뒤 |
+| `PATCH /api/reply-templates/{id}` | 관리자 | `label`·`text`·`is_active`(숨김) 변경 |
+| `DELETE /api/reply-templates/{id}` | 관리자 | 삭제 (204) |
+| `PUT /api/reply-templates/order` | 관리자 | `{ids: [...]}` 모든 문구 id 를 원하는 순서로 (일부만 보내면 422) |
+
+모든 변경은 작업 기록(`template_create`·`template_update`·`template_delete`·`template_reorder`)에 남습니다.
+
+### GET /api/audit-logs — 작업 기록 (관리자, 4주차)
+
+누가 · 언제 · 무엇을 했는지 (읽기 전용). 쿼리: `group`(로그인·보안 / 계정 / 문의 처리 / 답변 / 설정),
+`actor`(계정 id, `system` = 자동 배정 등, `unknown` = 없는 아이디로 로그인 시도), `days`(1~90, 기본 7), `page`, `size`(기본 30)
+
+```json
+{"total": 120, "login_failed": 2, "items": [{"at": "…", "action": "login_failed", "label": "로그인 실패", "group": "로그인·보안",
+  "actor": {"id": null, "name": "알 수 없음"}, "target": null, "summary": "없는 아이디 · 시도한 아이디 'nobody'", "ip": "127.0.0.1"}]}
+```
+
+- `summary`: 사람이 읽는 한 줄 (배정 "상담원 A → 상담원 B", 상태 "검토 대기 → 완료", 티켓 "취소 · 주문 … 결제 완료 → 취소" 등)
+- `target`: 문의(문의 번호, 상세 링크) · 계정 · FAQ 코드 · 답변 문구 이름. 지운 문구는 기록에 남긴 이름으로
+- 비밀번호·토큰은 처음부터 기록하지 않습니다 (`services/audit.py`)
+
 ### GET /api/stats/activity — 최근 처리 활동 (관리자)
 파라미터: `limit` (1~30, 기본 8). 최근에 움직인 문의들의 처리 이력(문의 상세의 `history`와 같은 형식)을 최신순으로 돌려줍니다.
 ```json

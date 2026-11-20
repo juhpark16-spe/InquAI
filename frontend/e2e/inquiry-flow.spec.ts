@@ -34,7 +34,8 @@ test("고객 문의 → 상담원 답변 발송 → 고객 조회에서 답변 �
   const title = "배송 문의 (자동 테스트)";
 
   // 1. 고객: 비회원 문의 등록 → 문의 번호와 접수 안내
-  const number = await createInquiry(page, email, title, "어제 주문한 상품이 아직 배송 출발을 안 했어요. 언제 보내 주시나요?");
+  // 비회원 예시는 주문번호 없이도 답할 수 있는 일반 질문으로 (특정 주문의 배송 상태·파손·중복 결제는 주문번호가 있어야 상담 가능)
+  const number = await createInquiry(page, email, title, "주말이나 공휴일에도 배송하나요? 금요일 저녁에 주문하면 언제 받을 수 있는지 궁금해요.");
   await expect(page.getByText(/담당자가 확인 후/)).toBeVisible();
 
   // 2. 관리자: 로그인 → 위쪽 검색창에 문의 번호 ('/' 키로 바로 입력) → 하나만 찾아져 상세 화면으로 바로
@@ -47,7 +48,7 @@ test("고객 문의 → 상담원 답변 발송 → 고객 조회에서 답변 �
   await expect(page.getByText("배송").first()).toBeVisible(); // 분석 결과 유형
 
   // 3. 답변 작성 → 발송
-  const answer = "안녕하세요. 주문하신 상품은 오늘 출고 예정이며, 출고되면 송장번호를 문자로 보내 드리겠습니다.";
+  const answer = "안녕하세요. 주말·공휴일에는 배송하지 않으며, 금요일 오후 2시 이후 결제하신 주문은 다음 영업일에 출고됩니다.";
   await page.getByPlaceholder(/고객에게 보낼 답변을 입력하세요/).fill(answer);
   await page.getByRole("button", { name: "발송", exact: true }).click();
   await expect(page.getByText(/답변을 보냈습니다/)).toBeVisible();
@@ -64,8 +65,8 @@ test("고객 문의 → 상담원 답변 발송 → 고객 조회에서 답변 �
 
 test("배정받은 상담원의 알림 종에 새 문의가 뜨고, 누르면 상세로", async ({ page }) => {
   // 시험용 분석기는 '배송' 단어를 배송 유형으로 봄 → 배송 담당 상담원(agent2)에게 자동 배정
-  const title = `택배 문의 ${Date.now()} (자동 테스트)`;
-  await createInquiry(page, `e2e-bell-${Date.now()}@example.com`, title, "택배가 아직 배송 출발을 안 했어요. 확인 부탁드려요.");
+  const title = `배송비 문의 ${Date.now()} (자동 테스트)`;
+  await createInquiry(page, `e2e-bell-${Date.now()}@example.com`, title, "제주도도 3만원 넘으면 무료배송인가요? 추가 배송비가 있는지 궁금해요.");
 
   await staffLogin(page, "agent2");
   const bell = page.getByRole("button", { name: /^알림 \d+건$/ });
@@ -75,6 +76,51 @@ test("배정받은 상담원의 알림 종에 새 문의가 뜨고, 누르면 �
   await expect(page.getByRole("button", { name: "알림" })).toBeVisible();   // 열면 새 알림 숫자가 사라짐
   await page.getByRole("dialog", { name: "알림" }).getByText(title).click();
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
+});
+
+test("회원 주문 취소 요청 → 상담원이 취소 티켓 승인·문구 넣어 발송 → 고객 화면에서 주문 취소·답변 완료", async ({ page, browser }) => {
+  // 고객(쇼핑몰 회원): 내 쇼핑에서 '결제 완료' 주문의 [이 주문 문의하기]
+  await page.goto("/shop/login");
+  await page.getByLabel("이메일").fill("customer08@example.com");
+  await page.getByLabel("비밀번호").fill(STAFF_PASSWORD);   // 시험용 서버는 고객 비밀번호도 같은 값
+  await page.getByRole("button", { name: "로그인" }).click();
+  await expect(page).not.toHaveURL(/\/shop\/login/);     // 로그인이 끝난 뒤 이동
+  await page.goto("/my");
+  const order = page.locator("li").filter({ hasText: "결제 완료" }).filter({ has: page.getByRole("link", { name: "이 주문 문의하기" }) }).first();
+  const orderNumber = (await order.locator(".font-mono").first().textContent())!.trim();
+  await order.getByRole("link", { name: "이 주문 문의하기" }).click();
+
+  const title = `주문 취소 요청 ${Date.now()} (자동 테스트)`;
+  await page.getByLabel("제목").fill(title);
+  await page.getByLabel(/문의 내용/).fill("방금 결제했는데 색상을 잘못 골랐어요. 이 주문 취소해 주세요.");
+  await page.getByLabel(/개인정보 수집·이용에 동의합니다/).check();
+  await page.getByRole("button", { name: "문의 등록" }).click();
+  await expect(page.getByText("문의가 등록되었습니다")).toBeVisible();
+  const number = (await page.getByText(/^INQ-\d{8}-\d{4}$/).textContent())!.trim();
+
+  // 상담원(주문 취소 담당 agent1): 다른 브라우저 창에서 문의를 찾아 취소 티켓 승인
+  const staff = await (await browser.newContext({ baseURL: "http://127.0.0.1:5174", locale: "ko-KR" })).newPage();
+  await staffLogin(staff, "agent1");
+  await expect(staff).toHaveURL(/\/admin\/inquiries/);   // 상담원은 로그인 후 문의 목록으로 옮겨짐 → 옮긴 뒤 검색
+  await staff.getByLabel("문의 검색").fill(number);
+  await staff.keyboard.press("Enter");
+  await expect(staff.getByRole("heading", { name: title })).toBeVisible();
+  await expect(staff.getByText("가능 (출고 전)")).toBeVisible();                 // 주문 정보: 출고 전이라 취소 가능
+  await staff.getByRole("button", { name: "취소 승인" }).click();
+  await expect(staff.getByText(/티켓을 승인했습니다/)).toBeVisible();
+  await expect(staff.getByText("이미 취소된 주문")).toBeVisible();               // 승인하면 주문이 바로 취소됨
+
+  // 답변: 관리자가 정한 '취소 완료' 문구를 넣고 발송
+  await staff.getByRole("button", { name: /문구·주문 정보/ }).click();
+  await staff.getByRole("button", { name: "취소 완료", exact: true }).click();
+  await expect(staff.getByPlaceholder(/고객에게 보낼 답변/)).toHaveValue(/주문 취소가 완료되었습니다/);
+  await staff.getByRole("button", { name: "발송", exact: true }).click();
+  await expect(staff.getByText(/답변을 보냈습니다/)).toBeVisible();
+
+  // 고객: 내 쇼핑에서 주문 '취소', 문의 '답변 완료'
+  await page.goto("/my");
+  await expect(page.locator("li").filter({ hasText: orderNumber }).getByText("취소", { exact: true })).toBeVisible();
+  await expect(page.locator("section").filter({ hasText: title }).getByText("답변 완료")).toBeVisible();
 });
 
 test("조회 비밀번호가 틀리면 문의가 보이지 않음", async ({ page }) => {

@@ -5,7 +5,7 @@
 // - AI 초안의 [확인 필요: …] 표시와 확인할 것 목록을 보여 주고, 표시가 남은 채로 보내려 하면 한 번 더 물음
 import { useEffect, useRef, useState } from "react";
 
-import { customerApi, errorMessage, inquiryApi, responseApi } from "../services/api";
+import { customerApi, errorMessage, inquiryApi, responseApi, templateApi, type ReplyTemplate } from "../services/api";
 import type { FaqPublic, InquiryDetail } from "../services/types";
 import { Bubble, Note } from "./Chat";
 import { Alert, Button, Spinner, Textarea, cx, formatDate } from "./ui";
@@ -35,18 +35,6 @@ function RatingBadge({ rating }: { rating: number | null }) {
   return rating > 0 ? <span className="text-emerald-700">고객 평가 👍 도움됨</span> : <span className="text-rose-700">고객 평가 👎 도움 안 됨</span>;
 }
 
-// 자주 쓰는 문구 (FAQ·쇼핑몰 정책과 같은 내용만, docs/shop_policy.md). 커서 자리에 넣음
-const TEMPLATES: [string, string][] = [
-  ["첫인사", "안녕하세요, 고객님. InquAI 쇼핑 고객센터입니다."],
-  ["사과", "불편을 드려 죄송합니다."],
-  ["취소 완료", "요청하신 주문 취소가 완료되었습니다. 결제 취소는 신용·체크카드 3~5영업일, 계좌이체·간편결제는 1~3영업일 안에 반영됩니다."],
-  ["출고 후 취소 불가", "이미 출고된 주문은 취소할 수 없어, 상품을 받으신 뒤 마이페이지 > 주문내역에서 반품을 신청해 주세요."],
-  ["회수 안내", "지정 택배사가 1~3영업일 안에 방문해 상품을 회수합니다. 받으신 상태 그대로 포장해 두어 주세요."],
-  ["환불 일정", "반품 상품이 물류센터에 도착해 검수가 끝나면 3영업일 이내에 환불됩니다. 카드 결제는 카드사 사정에 따라 3~5영업일이 더 걸릴 수 있습니다."],
-  ["파손·오배송", "파손·누락·오배송은 배송비를 저희가 부담합니다. 받으신 상품 사진을 함께 보내 주시면 더 빨리 확인해 드리겠습니다."],
-  ["마무리", "추가로 궁금하신 점은 언제든 문의해 주세요. 감사합니다."],
-];
-
 // AI 초안 다시 만들기에 붙일 요청 (상담원이 직접 적어도 됨, 200자)
 const DRAFT_ASKS = ["더 짧게", "사과를 먼저", "더 정중하게", "회수·환불 일정 안내 추가"];
 
@@ -66,6 +54,11 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
   const [faqs, setFaqs] = useState<Record<string, FaqPublic>>({});
   const [ask, setAsk] = useState("");
   const [tools, setTools] = useState(false); // 문구·주문 정보·초안 요청 버튼은 필요할 때만 펼침
+  // 자주 쓰는 문구: 관리자가 '답변 문구' 화면에서 편집 (FAQ·쇼핑몰 정책과 같은 내용만). 펼칠 때 한 번 불러옴
+  const [templates, setTemplates] = useState<ReplyTemplate[] | null>(null);
+  useEffect(() => {
+    if (tools && templates === null) templateApi.list().then(setTemplates).catch(() => setTemplates([]));
+  }, [tools, templates]);
   const box = useRef<HTMLTextAreaElement>(null);
 
   // 다른 문의로 이동하거나 저장 후 다시 불러오면 입력칸을 최신 초안으로 맞춤
@@ -262,8 +255,10 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
               <div className="space-y-2 rounded-lg bg-slate-50 p-2.5">
                 <div className="flex flex-wrap items-center gap-1.5 text-sm">
                   <span className="text-slate-600">문구 넣기:</span>
-                  {TEMPLATES.map(([label, piece]) => (
-                    <button key={label} type="button" onClick={() => insertAt(piece, true)} title={piece} disabled={!!busy}
+                  {templates === null && <Spinner />}
+                  {templates?.length === 0 && <span className="text-muted">등록된 문구가 없어요 (관리자 &gt; 답변 문구)</span>}
+                  {templates?.map(({ id, label, text: piece }) => (
+                    <button key={id} type="button" onClick={() => insertAt(piece, true)} title={piece} disabled={!!busy}
                       className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-slate-700 hover:border-indigo-400 hover:text-indigo-700">
                       {label}
                     </button>
