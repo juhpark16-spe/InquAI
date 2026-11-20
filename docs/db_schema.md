@@ -185,6 +185,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | payment_method | VARCHAR(20) NULL | 신용카드 / 간편결제 / 계좌이체 / 무통장입금 |
 | paid_at | DATETIME NULL | 결제 시각 |
 | carrier | VARCHAR(20) NULL | 택배사 (출고된 주문) |
+| shipping_address | VARCHAR(200) NULL | 배송지 (출고 전이면 상담원이 [바로 처리]로 변경) |
 | return_requested_at, picked_up_at | DATETIME NULL | 반품 접수·회수 완료 시각 |
 
 ### 상담용 주문·고객 상세 (2026-11-20 추가, 문의 상세의 주문 정보·고객 카드)

@@ -241,6 +241,12 @@ class RelatedInquiry(BaseModel):
     created_at: UTCDateTime
 
 
+class OptionChoice(BaseModel):
+    option: str
+    sold_out: bool
+    current: bool
+
+
 class OrderCard(BaseModel):
     found: bool
     order_number: str
@@ -270,6 +276,8 @@ class OrderCard(BaseModel):
     return_requested_at: UTCDateTime | None = None
     picked_up_at: UTCDateTime | None = None
     related_inquiries: list[RelatedInquiry] = []   # 같은 주문으로 들어온 다른 문의
+    shipping_address: str | None = None
+    option_choices: list[OptionChoice] = []        # 옵션 변경용 (품절 표시)
 
 
 class HistoryItem(BaseModel):

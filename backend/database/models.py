@@ -292,6 +292,7 @@ class Order(TimestampMixin, Base):
     payment_method: Mapped[str | None] = mapped_column(String(20))   # 신용카드 / 계좌이체 / 간편결제 / 무통장입금
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     carrier: Mapped[str | None] = mapped_column(String(20))           # 택배사 (출고된 주문)
+    shipping_address: Mapped[str | None] = mapped_column(String(200))   # 배송지 (출고 전이면 상담원이 바로 변경)
     return_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))   # 반품 접수
     picked_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))          # 반품 회수 완료
     payments: Mapped[list["Payment"]] = relationship(order_by="Payment.at")

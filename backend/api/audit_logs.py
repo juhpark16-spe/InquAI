@@ -25,7 +25,7 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "auto_assign": ("자동 배정", "문의 처리"), "assign": ("배정 변경", "문의 처리"),
     "status_change": ("상태 변경", "문의 처리"), "note_create": ("내부 메모", "문의 처리"),
     "label_correct": ("분류 수정", "문의 처리"), "ticket_approve": ("티켓 승인", "문의 처리"),
-    "ticket_reject": ("티켓 반려", "문의 처리"),
+    "ticket_reject": ("티켓 반려", "문의 처리"), "order_action": ("바로 처리", "문의 처리"),
     "draft_generate": ("AI 초안 만들기", "답변"), "response_create": ("답변 작성", "답변"),
     "response_edit": ("초안 수정", "답변"), "response_approve": ("답변 발송", "답변"),
     "faq_create": ("FAQ 추가", "설정"), "faq_update": ("FAQ 수정", "설정"), "faq_deactivate": ("FAQ 숨김", "설정"),
@@ -44,6 +44,8 @@ def _summary(a: AdminAuditLog, names: dict[int, str]) -> str:
     if a.action == "login_failed":
         reason = FAIL_REASONS.get(d.get("reason"), d.get("reason") or "")
         return f"{reason} · 시도한 아이디 '{d['username']}'" if d.get("username") else reason
+    if a.action == "order_action":
+        return d.get("summary", "")
     if a.action == "auto_assign":
         return f"→ {name(d.get('assigned_to'))}" + (f" ({d['rule']})" if d.get("rule") else "")
     if a.action == "assign":

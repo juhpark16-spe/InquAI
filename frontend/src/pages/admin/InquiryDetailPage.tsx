@@ -12,7 +12,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import AnalysisEditor from "../../components/AnalysisEditor";
 import AnswerComposer from "../../components/AnswerComposer";
 import { Alert, Badge, Button, Input, Select, Spinner, cx, formatDate } from "../../components/ui";
-import { errorMessage, inquiryApi } from "../../services/api";
+import { errorMessage, inquiryApi, type QuickAction } from "../../services/api";
 import type { AgentLog, InquiryDetail, OrderCard, User } from "../../services/types";
 
 const OPEN = ["접수", "검토 대기", "담당자 처리"];
@@ -214,6 +214,169 @@ function OrderRows({ o }: { o: OrderCard }) {
   );
 }
 
+const RETURN_FEE = { "단순 변심": "왕복 배송비 6,000원은 환불 금액에서 차감", "불량·오배송": "배송비는 쇼핑몰 부담" } as const;
+const COUPON_CHOICES = [
+  { name: "사과 쿠폰 3,000원", note: "3,000원 할인 · 2만원 이상", adminOnly: false },
+  { name: "무료배송 쿠폰", note: "배송비 무료", adminOnly: false },
+  { name: "사과 쿠폰 5,000원", note: "5,000원 할인 · 3만원 이상 · 관리자만", adminOnly: true },
+];
+
+/** 바로 처리 공통: 버튼을 누르면 아래에 작은 입력칸이 열리고 [실행] → 서버가 조건을 다시 확인해 처리 */
+function useQuickAction(inquiryId: number, onDone: (msg: string) => void) {
+  const [open, setOpen] = useState<QuickAction | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  async function exec(action: QuickAction, body: Record<string, string | number> = {}, confirmText?: string) {
+    if (confirmText && !window.confirm(confirmText)) return;
+    setError("");
+    setBusy(true);
+    try {
+      const r = await inquiryApi.action(inquiryId, action, body);
+      setOpen(null);
+      onDone(`${r.message} · [AI 초안 다시 만들기]를 누르면 처리 결과가 답변에 반영돼요.`);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const toggle = (a: QuickAction) => { setError(""); setOpen(open === a ? null : a); };
+  return { open, busy, error, exec, toggle };
+}
+
+function ActionButton({ label, active, tone = "plain", onClick }: { label: string; active: boolean; tone?: "plain" | "danger"; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} aria-expanded={active}
+      className={cx("rounded-lg border px-2.5 py-1 text-sm font-medium transition",
+        active ? "border-primary bg-primary-soft text-primary"
+          : tone === "danger" ? "border-rose-300 bg-rose-50 text-rose-700 hover:border-rose-400" : "border-hairline bg-white text-body hover:border-primary hover:text-primary")}>
+      {label}
+    </button>
+  );
+}
+
+/** 주문 바로 처리: 지금 주문 상태에서 할 수 있는 것만 버튼으로 (배송지·옵션 변경·부분 취소 = 출고 전, 중복 승인 취소, 반품 회수 접수) */
+function OrderActions({ o, inquiryId, onDone }: { o: OrderCard; inquiryId: number; onDone: (msg: string) => void }) {
+  const q = useQuickAction(inquiryId, onDone);
+  const beforeShipping = o.order_status === "결제 완료" || o.order_status === "상품 준비 중";
+  const qty = o.quantity ?? 1;
+  const choices = o.option_choices ?? [];
+  const canReturn = o.order_status === "배송 완료" && !o.return_requested_at && !!o.defect_return_until && new Date(o.defect_return_until).getTime() > Date.now();
+  const [address, setAddress] = useState(o.shipping_address ?? "");
+  const [option, setOption] = useState("");
+  const [count, setCount] = useState(1);
+  const [reason, setReason] = useState<keyof typeof RETURN_FEE>(o.returnable ? "단순 변심" : "불량·오배송");
+  if (!beforeShipping && !o.duplicate_payment && !canReturn) return null;
+  return (
+    <div className="mt-3 rounded-xl border border-primary/20 bg-primary-soft/40 p-3">
+      <p className="mb-2 text-sm font-semibold text-ink">바로 처리 <span className="font-normal text-muted">· 지금 주문 상태에서 할 수 있는 것</span></p>
+      <div className="flex flex-wrap gap-1.5">
+        {o.duplicate_payment && <ActionButton label="중복 승인 1건 취소" tone="danger" active={q.open === "duplicate_cancel"} onClick={() => q.toggle("duplicate_cancel")} />}
+        {beforeShipping && <ActionButton label="배송지 변경" active={q.open === "address"} onClick={() => q.toggle("address")} />}
+        {beforeShipping && choices.length > 0 && <ActionButton label="옵션 변경" active={q.open === "option"} onClick={() => q.toggle("option")} />}
+        {beforeShipping && qty > 1 && <ActionButton label="부분 취소" active={q.open === "partial_cancel"} onClick={() => q.toggle("partial_cancel")} />}
+        {canReturn && <ActionButton label="반품 회수 접수" active={q.open === "return"} onClick={() => q.toggle("return")} />}
+      </div>
+      {q.open && (
+        <div className="mt-2.5 space-y-2 rounded-lg bg-white p-2.5 text-sm">
+          {q.open === "duplicate_cancel" && (
+            <>
+              <p>같은 금액으로 두 번 승인된 것 중 <b>뒤 승인 1건</b>을 취소합니다. 카드사에 따라 3~5영업일 안에 반영돼요.</p>
+              <Button className="min-h-9 px-4 py-1" disabled={q.busy} onClick={() => q.exec("duplicate_cancel", {}, "중복 승인 1건을 취소할까요?")}>{q.busy ? <Spinner /> : "중복 승인 취소"}</Button>
+            </>
+          )}
+          {q.open === "address" && (
+            <>
+              <p className="text-xs text-muted">지금 배송지: {o.shipping_address ?? "정보 없음"}</p>
+              <Input value={address} onChange={(e) => setAddress(e.target.value)} maxLength={200} aria-label="새 배송지" />
+              <Button className="min-h-9 px-4 py-1" disabled={q.busy || address.trim().length < 5 || address.trim() === o.shipping_address}
+                onClick={() => q.exec("address", { address: address.trim() }, `배송지를 '${address.trim()}'(으)로 바꿀까요?`)}>{q.busy ? <Spinner /> : "배송지 변경"}</Button>
+            </>
+          )}
+          {q.open === "option" && (
+            <>
+              <Select value={option} onChange={(e) => setOption(e.target.value)} aria-label="새 옵션" className="w-full">
+                <option value="">바꿀 옵션 고르기</option>
+                {choices.map((c) => (
+                  <option key={c.option} value={c.option} disabled={c.sold_out || c.current}>
+                    {c.option}{c.current ? " (지금)" : c.sold_out ? " (품절)" : ""}
+                  </option>
+                ))}
+              </Select>
+              <Button className="min-h-9 px-4 py-1" disabled={q.busy || !option}
+                onClick={() => q.exec("option", { option }, `옵션을 '${option}'(으)로 바꿀까요? 가격은 같아요.`)}>{q.busy ? <Spinner /> : "옵션 변경"}</Button>
+            </>
+          )}
+          {q.open === "partial_cancel" && (
+            <>
+              <p>{qty}개 중 몇 개를 취소할까요? 취소한 만큼 결제가 부분 취소되고, 열린 취소 티켓은 처리 완료돼요.</p>
+              <div className="flex items-center gap-2">
+                <Select value={String(count)} onChange={(e) => setCount(Number(e.target.value))} aria-label="취소할 수량">
+                  {Array.from({ length: qty - 1 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}개 ({won(((o.unit_price ?? 0) * n) || null)})</option>)}
+                </Select>
+                <Button className="min-h-9 px-4 py-1" disabled={q.busy}
+                  onClick={() => q.exec("partial_cancel", { count }, `${qty}개 중 ${count}개를 취소할까요?`)}>{q.busy ? <Spinner /> : `${count}개 취소`}</Button>
+              </div>
+            </>
+          )}
+          {q.open === "return" && (
+            <>
+              <Select value={reason} onChange={(e) => setReason(e.target.value as keyof typeof RETURN_FEE)} aria-label="반품 사유" className="w-full">
+                <option value="단순 변심" disabled={!o.returnable}>단순 변심{o.returnable ? "" : " (7일 지남)"}</option>
+                <option value="불량·오배송">불량·오배송</option>
+              </Select>
+              <p className="text-xs text-muted">1~3영업일 안에 택배 기사 방문 · {RETURN_FEE[reason]}</p>
+              <Button className="min-h-9 px-4 py-1" disabled={q.busy}
+                onClick={() => q.exec("return", { reason }, `${reason} 반품 회수를 접수할까요?`)}>{q.busy ? <Spinner /> : "회수 접수"}</Button>
+            </>
+          )}
+          {q.error && <Alert>{q.error}</Alert>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 고객 바로 처리: 보상 적립금(상담원 3,000원까지), 사과 쿠폰 */
+function CustomerActions({ inquiryId, isAdmin, onDone }: { inquiryId: number; isAdmin: boolean; onDone: (msg: string) => void }) {
+  const q = useQuickAction(inquiryId, onDone);
+  const limit = isAdmin ? 50000 : 3000;
+  const [amount, setAmount] = useState(1000);
+  const [reason, setReason] = useState("");
+  const [coupon, setCoupon] = useState(COUPON_CHOICES[0].name);
+  return (
+    <div className="mt-3 border-t border-hairline pt-2.5">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 text-sm font-semibold text-body">보상</span>
+        <ActionButton label="적립금 지급" active={q.open === "points"} onClick={() => q.toggle("points")} />
+        <ActionButton label="쿠폰 발급" active={q.open === "coupon"} onClick={() => q.toggle("coupon")} />
+      </div>
+      {q.open === "points" && (
+        <div className="mt-2 space-y-2 rounded-lg bg-surface-soft p-2.5 text-sm">
+          <div className="flex items-center gap-2">
+            <Input type="number" min={100} max={limit} step={100} value={amount} onChange={(e) => setAmount(Number(e.target.value))}
+              className="min-h-9! w-28! flex-none" aria-label="적립금" />
+            <span className="text-xs text-muted">원 · 1회 {limit.toLocaleString()}원까지{isAdmin ? "" : " (더 큰 금액은 관리자)"}</span>
+          </div>
+          <Input value={reason} onChange={(e) => setReason(e.target.value)} maxLength={50} placeholder="사유 (예: 배송 지연 사과, 만료 적립금 복구)" aria-label="사유" />
+          <Button className="min-h-9 px-4 py-1" disabled={q.busy || amount < 100 || amount > limit}
+            onClick={() => q.exec("points", { amount, reason: reason.trim() || "상담 보상" }, `적립금 ${amount.toLocaleString()}원을 지급할까요?`)}>{q.busy ? <Spinner /> : "지급"}</Button>
+        </div>
+      )}
+      {q.open === "coupon" && (
+        <div className="mt-2 space-y-2 rounded-lg bg-surface-soft p-2.5 text-sm">
+          <Select value={coupon} onChange={(e) => setCoupon(e.target.value)} aria-label="쿠폰" className="w-full">
+            {COUPON_CHOICES.map((c) => <option key={c.name} value={c.name} disabled={c.adminOnly && !isAdmin}>{c.name} · {c.note}</option>)}
+          </Select>
+          <Button className="min-h-9 px-4 py-1" disabled={q.busy}
+            onClick={() => q.exec("coupon", { coupon }, `'${coupon}'을(를) 발급할까요? (30일)`)}>{q.busy ? <Spinner /> : "발급"}</Button>
+        </div>
+      )}
+      {q.error && <div className="mt-2"><Alert>{q.error}</Alert></div>}
+    </div>
+  );
+}
+
 /** 접는 소제목 (결제·환불 내역, 배송 추적 등) */
 function SubFold({ title, open, children }: { title: string; open?: boolean; children: ReactNode }) {
   return (
@@ -278,7 +441,9 @@ function OrderHead({ o }: { o: OrderCard }) {
 
 /** 주문 정보: 고객이 적은 주문(크게) + 문의 이메일로 찾은 다른 주문(핵심만 보이고 누르면 상세).
  *  category: 결제 문의면 결제·환불 내역, 배송 문의면 배송 추적을 펼쳐 둠. 주문이 필요한 유형인데 주문번호가 없으면 요청 버튼 */
-function OrderInfo({ o, others, category, needsOrder }: { o: OrderCard | null; others: OrderCard[]; category: string | null; needsOrder: boolean }) {
+function OrderInfo({ o, others, category, needsOrder, inquiryId, onDone }: {
+  o: OrderCard | null; others: OrderCard[]; category: string | null; needsOrder: boolean; inquiryId: number; onDone: (msg: string) => void;
+}) {
   const payments = o?.payments ?? [];
   const steps = o?.shipment_events ?? [];
   const related = o?.related_inquiries ?? [];
@@ -327,6 +492,8 @@ function OrderInfo({ o, others, category, needsOrder }: { o: OrderCard | null; o
             {o.option && <p className="text-xs text-muted">옵션: {o.option}</p>}
           </div>
           <OrderRows o={o} />
+          {o.shipping_address && <p className="mt-1.5 text-sm"><span className="text-muted">배송지 </span>{o.shipping_address}</p>}
+          {o.email_match !== false && <OrderActions key={`${o.order_number}-${o.order_status}-${o.quantity}-${payments.length}`} o={o} inquiryId={inquiryId} onDone={onDone} />}
           {payments.length > 0 && (
             <SubFold title={`결제·환불 내역 (${payments.length})`}
               open={o.duplicate_payment || category === "결제" || category === "반품·환불" || payments.some((p) => p.kind !== "승인")}>
@@ -576,6 +743,7 @@ export default function InquiryDetailPage() {
       <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted"><Badge value={h.status} />{timeAgo(h.created_at)}</span>
     </li>
   );
+  const actionDone = (m: string) => { setNotice(m); load(); };   // 바로 처리 결과 → 위쪽 안내 + 다시 불러오기
   const customerCard = (
     <Fold id="customer" title="고객" summary={`${data.customer.name}${p ? ` · 문의 ${p.inquiries}건` : ""}${warn ? " · ⚠ 불만 신호" : ""}`}>
       <div className="flex flex-wrap items-center gap-2">
@@ -633,6 +801,7 @@ export default function InquiryDetailPage() {
           {p!.negative_inquiries >= 2 && <> 불만 문의 {p!.negative_inquiries}건</>}
         </p>
       )}
+      {p?.points_balance != null && <CustomerActions inquiryId={data.id} isAdmin={user?.role === "admin"} onDone={actionDone} />}
       <div className="mt-3 border-t border-hairline pt-3">
         <p className="mb-1.5 text-sm font-semibold text-body">이 고객의 다른 문의 {history.length ? `(${history.length})` : ""}</p>
         {history.length === 0 ? <p className="text-sm text-muted">없음</p> : (
@@ -653,7 +822,8 @@ export default function InquiryDetailPage() {
   );
   // 주문을 확인해야 하는 문의인데 주문을 못 찾음: 주문 관련 유형 + 사람이 처리 (FAQ로 자동 답변한 일반 질문은 제외)
   const needsOrder = !!a && ORDER_CATEGORIES.includes(a.category) && a.decision !== "자동 답변" && !data.order?.found;
-  const orderCard = <OrderInfo o={data.order} others={data.email_orders} category={a?.category ?? null} needsOrder={needsOrder} />;
+  const orderCard = <OrderInfo o={data.order} others={data.email_orders} category={a?.category ?? null} needsOrder={needsOrder}
+    inquiryId={data.id} onDone={actionDone} />;
   // 주문 관련 문의(주문번호를 적었거나 이메일로 찾은 주문이 있음)는 주문 정보가 판단의 핵심 → 위에. 아니면 고객을 위에
   const orderFirst = !!data.order || needsOrder;
 

@@ -11,11 +11,11 @@ from sqlalchemy.orm import Session
 
 from backend.database.models import (AdminAuditLog, AdminUser, Coupon, Customer, Faq, Inquiry, Order, PointHistory,
                                      Response, as_utc, utcnow)
+from backend.services.order_actions import duplicates, option_choices
 
 CANCELLABLE = ("결제 완료", "상품 준비 중")   # 출고 전 (docs/shop_policy.md 2장)
 RETURN_DAYS, DEFECT_RETURN_DAYS = 7, 30      # 단순 변심 / 불량·오배송 (4장)
 HISTORY_LIMIT = 5
-DUPLICATE_WINDOW = timedelta(minutes=10)    # 같은 금액 승인이 이 안에 두 번 → 중복 결제 의심
 
 
 def order_card(db: Session, inquiry: Inquiry) -> dict | None:
@@ -51,14 +51,10 @@ def email_orders(db: Session, inquiry: Inquiry) -> list[dict]:
 
 
 def _payments(order: Order) -> tuple[list[dict], bool]:
-    """결제·취소·환불 내역과 중복 결제 의심 여부 (같은 금액 승인이 10분 안에 두 번, 그만큼 승인 취소가 없으면)"""
+    """결제·취소·환불 내역과 중복 결제 의심 여부 (정리되지 않은 중복 승인이 있으면, services/order_actions.duplicates)"""
     rows = [{"kind": p.kind, "status": p.status, "method": p.method, "amount": p.amount, "approval_no": p.approval_no,
              "at": as_utc(p.at), "memo": p.memo} for p in order.payments]
-    approvals = [r for r in rows if r["kind"] == "승인"]
-    cancels = sum(1 for r in rows if r["kind"] == "승인 취소")
-    pairs = sum(1 for a, b in zip(approvals, approvals[1:])
-                if a["amount"] == b["amount"] and b["at"] - a["at"] <= DUPLICATE_WINDOW)
-    return rows, pairs > 0 and pairs > cancels - (order.order_status == "취소")
+    return rows, bool(duplicates(order))
 
 
 def _option(product_name: str) -> str | None:
@@ -99,6 +95,8 @@ def _card(order: Order, customer: Customer, inquiry_email: str) -> dict:
         "duplicate_payment": duplicate,
         "carrier": order.carrier,
         "shipment_events": [{"at": as_utc(e.at), "status": e.status, "location": e.location} for e in order.shipment_events],
+        "shipping_address": order.shipping_address,
+        "option_choices": option_choices(order),
         "return_requested_at": as_utc(order.return_requested_at),
         "picked_up_at": as_utc(order.picked_up_at),
         "related_inquiries": [],
@@ -233,6 +231,8 @@ def history(db: Session, inquiry: Inquiry) -> list[dict]:
             if d.get("memo"):
                 text += f" ({d['memo']})"
             kind = "ticket"
+        elif a.action == "order_action":
+            text, kind = f"바로 처리 · {d.get('summary', '')}", "ticket"
         else:
             text = a.action
         events.append({"at": a.created_at, "actor": actor, "text": text, "kind": kind})

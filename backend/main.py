@@ -12,7 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.api import (agent_logs, audit_logs, auth, faqs_admin, faqs_public, health, inquiries, inquiry_admin, notifications,
-                         reply_templates as reply_templates_api, responses,
+                         order_actions, reply_templates as reply_templates_api, responses,
                          retraining, shop, staff, stats, tickets)
 from backend.core import tracing
 from backend.core.config import get_settings
@@ -96,3 +96,4 @@ app.include_router(tickets.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
 app.include_router(reply_templates_api.router, prefix="/api")
 app.include_router(audit_logs.router, prefix="/api")
+app.include_router(order_actions.router, prefix="/api")

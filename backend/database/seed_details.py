@@ -17,6 +17,12 @@ METHODS = [("신용카드", 55), ("간편결제", 25), ("계좌이체", 12), ("�
 CARRIERS = ["CJ대한통운", "롯데택배", "한진택배", "우체국택배"]
 POINT_RATE = 0.01          # 구매 금액의 1% 적립 (구매 확정 후, docs/shop_policy.md)
 POINT_VALID_DAYS = 365
+ADDRESSES = [
+    "서울 마포구 월드컵로12길 34, 101동 1203호", "서울 송파구 올림픽로 300, 롯데캐슬 205동 804호", "경기 성남시 분당구 판교역로 166, 7층",
+    "부산 해운대구 센텀중앙로 55, 1502호", "인천 연수구 송도과학로 32, 302동 1101호", "대전 유성구 대학로 99, 3동 405호",
+    "경기 고양시 일산동구 중앙로 1275, 902호", "대구 수성구 동대구로 300, 1103호", "광주 서구 상무중앙로 61, 1204호",
+    "경기 수원시 영통구 광교중앙로 140, 2105동 503호",
+]
 
 
 def approval_no(rng: random.Random) -> str:
@@ -57,6 +63,12 @@ def seed_order_details(db: Session, customers: list[Customer], orders: list[Orde
             o.carrier = rng.choice(CARRIERS)
             for at, status, location in _events(o, rng, now):
                 db.add(ShipmentEvent(order_id=o.id, at=at, status=status, location=location))
+
+    # 배송지: 고객마다 같은 주소 (따로 정한 난수 → 위 결제·수량 데이터는 그대로)
+    addr_rng = random.Random(DETAIL_SEED + 7)
+    address = {c.id: addr_rng.choice(ADDRESSES) for c in customers}
+    for o in orders:
+        o.shipping_address = address.get(o.customer_id)
 
     by_customer: dict[int, list[Order]] = {}
     for o in orders:

@@ -40,7 +40,7 @@ test("고객 문의 → 상담원 답변 발송 → 고객 조회에서 답변 �
 
   // 2. 관리자: 로그인 → 위쪽 검색창에 문의 번호 ('/' 키로 바로 입력) → 하나만 찾아져 상세 화면으로 바로
   await staffLogin(page, "admin");
-  await page.keyboard.press("/");
+  await page.getByLabel("문의 검색").focus();       // 대시보드를 다 불러온 뒤 ('/' 키 단축키는 아래 검색 테스트에서 확인)
   await page.keyboard.type(number);
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/admin\/inquiries\/\d+$/);
@@ -128,6 +128,39 @@ test("회원 주문 취소 요청 → 상담원이 취소 티켓 승인·문구 
   await expect(page.locator("section").filter({ hasText: title }).getByText("답변 완료")).toBeVisible();
 });
 
+test("출고 전 배송지 변경 요청 → 상담원이 [바로 처리]로 배송지 변경 → 처리 이력에 남음", async ({ page, browser }) => {
+  // 고객(장시우): 내 쇼핑의 출고 전 주문에서 배송지 변경 문의 (주문번호 자동)
+  await page.goto("/shop/login");
+  await page.getByLabel("이메일").fill("customer09@example.com");
+  await page.getByLabel("비밀번호").fill(STAFF_PASSWORD);
+  await page.getByRole("button", { name: "로그인" }).click();
+  await expect(page).not.toHaveURL(/\/shop\/login/);
+  await page.goto("/my");
+  const order = page.locator("li").filter({ hasText: /결제 완료|상품 준비 중/ }).filter({ has: page.getByRole("link", { name: "이 주문 문의하기" }) }).first();
+  await order.getByRole("link", { name: "이 주문 문의하기" }).click();
+  const title = `배송지 변경 ${Date.now()} (자동 테스트)`;
+  await page.getByLabel("제목").fill(title);
+  await page.getByLabel(/문의 내용/).fill("이사를 가게 돼서 배송지를 새 주소로 바꾸고 싶어요. 아직 출고 전이죠?");
+  await page.getByLabel(/개인정보 수집·이용에 동의합니다/).check();
+  await page.getByRole("button", { name: "문의 등록" }).click();
+  const number = (await page.getByText(/^INQ-\d{8}-\d{4}$/).textContent())!.trim();
+
+  // 상담원(배송 담당 agent2): 바로 처리 → 배송지 변경 (확인 창은 수락)
+  const staff = await (await browser.newContext({ baseURL: "http://127.0.0.1:5174", locale: "ko-KR" })).newPage();
+  staff.on("dialog", (d) => d.accept());
+  await staffLogin(staff, "agent2");
+  await expect(staff).toHaveURL(/\/admin\/inquiries/);
+  await staff.getByLabel("문의 검색").fill(number);
+  await staff.keyboard.press("Enter");
+  await expect(staff.getByRole("heading", { name: title })).toBeVisible();
+  await staff.getByRole("button", { name: "배송지 변경", exact: true }).click();
+  const address = "경기 성남시 분당구 판교역로 166, 7층 (자동 테스트)";
+  await staff.getByLabel("새 배송지").fill(address);
+  await staff.getByRole("button", { name: "배송지 변경", exact: true }).last().click();
+  await expect(staff.getByText(/배송지 변경: 경기 성남시 분당구 판교역로 166/).first()).toBeVisible();   // 결과 안내·처리 이력
+  await expect(staff.getByText(`배송지 ${address}`, { exact: true })).toBeVisible();                     // 주문 정보의 배송지
+});
+
 test("조회 비밀번호가 틀리면 문의가 보이지 않음", async ({ page }) => {
   const email = `e2e-wrong-${Date.now()}@example.com`;
   await createInquiry(page, email, "적립금 문의 (자동 테스트)", "적립금은 언제 들어오나요? 확인 부탁드려요.");
@@ -147,6 +180,9 @@ test("상담원은 관리자 전용 화면에 들어갈 수 없음", async ({ pa
 
 test("여러 건이 찾아지면 문의 목록에 검색어와 함께 보여 줌", async ({ page }) => {
   await staffLogin(page, "admin");
+  await expect(page.getByLabel("문의 검색")).toBeVisible();   // 로그인 확인이 끝나 관리 화면이 뜬 뒤
+  await page.keyboard.press("/");                     // '/' 키로 검색창에 바로 입력
+  await expect(page.getByLabel("문의 검색")).toBeFocused();
   await page.getByLabel("문의 검색").fill("자동 테스트");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/admin\/inquiries\?q=/);

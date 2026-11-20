@@ -18,7 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.ai.prompts import DRAFT_PROMPT, DRAFT_SCHEMA, customer_text, find_promises
-from backend.database.models import Attachment, CustomerMessage, Inquiry, Response, Ticket, as_utc
+from backend.database.models import AdminAuditLog, Attachment, CustomerMessage, Inquiry, Response, Ticket, as_utc
 from backend.services.inquiry_context import order_card
 
 KST = timezone(timedelta(hours=9))
@@ -77,8 +77,12 @@ def build_input(db: Session, inquiry: Inquiry, faqs: list[dict], analysis: dict 
     photos = db.scalar(select(func.count()).select_from(Attachment).where(Attachment.inquiry_id == inquiry.id))
     parts.append(f"[첨부 사진] {photos}장 (너는 사진을 볼 수 없음)" if photos else "[첨부 사진] 없음")
     tickets = db.scalars(select(Ticket).where(Ticket.inquiry_id == inquiry.id).order_by(Ticket.id)).all()
-    parts.append("[처리 기록]\n" + ("\n".join(
-        f"티켓 #{t.id} {t.ticket_type} {t.status}" + (f" (상담원 메모: {t.memo})" if t.memo else "") for t in tickets) or "없음"))
+    # 상담원의 바로 처리(배송지·옵션 변경, 부분 취소, 중복 승인 취소, 보상, 반품 접수)도 처리 기록으로 → 초안에 결과를 안내
+    actions = db.scalars(select(AdminAuditLog).where(AdminAuditLog.target_type == "inquiry", AdminAuditLog.target_id == inquiry.id,
+                                                     AdminAuditLog.action == "order_action").order_by(AdminAuditLog.id)).all()
+    lines = [f"티켓 #{t.id} {t.ticket_type} {t.status}" + (f" (상담원 메모: {t.memo})" if t.memo else "") for t in tickets]
+    lines += [f"상담원 처리 완료: {(a.detail or {}).get('summary', '')}" for a in actions]
+    parts.append("[처리 기록]\n" + ("\n".join(lines) or "없음"))
     parts.append("[FAQ]\n" + ("\n".join(f"[{f['id']}] Q: {f['question']}\nA: {f['answer']}" for f in faqs) or "관련 FAQ 없음"))
 
     messages = db.scalars(select(CustomerMessage).where(CustomerMessage.inquiry_id == inquiry.id)

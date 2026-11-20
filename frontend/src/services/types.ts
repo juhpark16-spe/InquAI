@@ -222,6 +222,8 @@ export interface OrderCard {
   return_requested_at?: string | null;
   picked_up_at?: string | null;
   related_inquiries?: { id: number; inquiry_number: string; title: string; status: string; created_at: string }[];
+  shipping_address?: string | null;
+  option_choices?: { option: string; sold_out: boolean; current: boolean }[];
 }
 
 export interface InquiryState {

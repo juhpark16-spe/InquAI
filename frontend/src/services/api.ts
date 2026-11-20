@@ -155,7 +155,12 @@ export const auditApi = {
     ).then((r) => r.data),
 };
 
+/** 문의 상세의 바로 처리 (backend/services/order_actions.py) */
+export type QuickAction = "address" | "option" | "partial_cancel" | "duplicate_cancel" | "points" | "coupon" | "return";
+
 export const inquiryApi = {
+  action: (id: number, action: QuickAction, body: Record<string, string | number> = {}) =>
+    http.post<{ ok: boolean; message: string }>(`/inquiries/${id}/actions`, { action, ...body }).then((r) => r.data),
   list: (filters: InquiryFilters) => {
     const params = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== "" && v !== undefined));
     return http.get<Page<InquiryListItem>>("/inquiries", { params }).then((r) => r.data);
