@@ -313,6 +313,13 @@
 - 지금과 같은 상태로 바꾸면 400 `INVALID_STATE`. 상담원은 배정된 문의만 (아니면 403)
 
 
+**상담용 상세 (2026-11-20 추가)**
+- `order` (고객이 적은 주문)와 `email_orders`의 각 주문: `quantity`, `unit_price`, `option`, `payment_method`, `paid_at`,
+  `payments[]`(kind·status·method·amount·approval_no·at·memo), `duplicate_payment`, `carrier`, `shipment_events[]`(at·status·location),
+  `return_requested_at`, `picked_up_at`. `order`에만 `related_inquiries[]`(같은 주문으로 들어온 다른 문의)
+- `customer_profile`: `points_balance`(적립금 잔액, 적립 예정 제외), `points_pending`, `point_history[]`(최근 5건), `coupons[]`(state: 사용 가능/사용함/만료)
+- 화면: 주문 관련 유형(배송·주문 취소·교환·반품·환불·결제)인데 사람이 처리하는 문의에서 주문을 찾지 못하면 [주문번호 요청 문구 넣기] 버튼
+
 ### GET /api/inquiries/{id}/queue — 처리 대기열의 이전·다음 문의 (로그인, 4주차)
 ```json
 { "total": 12, "position": 3, "prev_id": 41, "next_id": 52 }

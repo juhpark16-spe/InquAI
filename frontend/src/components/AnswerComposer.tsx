@@ -147,6 +147,18 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
     });
   }
 
+  // 주문 정보 카드의 [주문번호 요청 문구 넣기] 등 다른 곳에서 보낸 문장을 커서 자리에 넣음
+  useEffect(() => {
+    const onInsert = (e: Event) => {
+      const piece = (e as CustomEvent<string>).detail;
+      if (!piece) return;
+      setMode("answer");
+      insertAt(piece, true);
+    };
+    window.addEventListener("inquai:insert-reply", onInsert);
+    return () => window.removeEventListener("inquai:insert-reply", onInsert);
+  });
+
   // 본인 확인된 주문의 정보 (주문번호와 문의 이메일이 맞을 때만)
   const o = data.order?.found && data.order.email_match !== false ? data.order : null;
   const orderChips: [string, string][] = o ? ([

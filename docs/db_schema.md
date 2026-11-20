@@ -181,6 +181,25 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | **tracking_number** | VARCHAR(30) NULL | **송장번호** |
 | ordered_at | DATETIME | |
 | **delivered_at** | DATETIME NULL | **배송 완료 시각.** 반품·교환 기간(7일) 판단에 사용 |
+| quantity | INT (기본 1) | 수량. amount = 개당 가격 × 수량 (옵션은 상품명 괄호 안) |
+| payment_method | VARCHAR(20) NULL | 신용카드 / 간편결제 / 계좌이체 / 무통장입금 |
+| paid_at | DATETIME NULL | 결제 시각 |
+| carrier | VARCHAR(20) NULL | 택배사 (출고된 주문) |
+| return_requested_at, picked_up_at | DATETIME NULL | 반품 접수·회수 완료 시각 |
+
+### 상담용 주문·고객 상세 (2026-11-20 추가, 문의 상세의 주문 정보·고객 카드)
+
+상담원이 다른 시스템을 열지 않고 판단할 수 있게, 실제 쇼핑몰이라면 결제·물류·회원 시스템에 있을 정보를 모의 데이터로 둡니다
+(`backend/database/seed_details.py`, 시연 문의에 맞춘 내역은 `seed_demo.py`의 `_scenario_details`).
+
+| 테이블 | 컬럼 | 쓰는 곳 |
+| --- | --- | --- |
+| **payments** | order_id, kind(승인/승인 취소/환불), status(완료/예정), method, amount, approval_no, at, memo | 결제·환불 내역, **중복 결제 의심**(같은 금액 승인이 10분 안에 두 번이고 그만큼 승인 취소가 없음), 환불 진행·예정일 지남 |
+| **shipment_events** | order_id, at, status(택배사 인수/간선 상차/간선 하차/배송 출발/배송 완료), location | 배송 추적 단계 |
+| **point_histories** | customer_id, amount(+적립/-사용·소멸), reason, status(완료/예정), at, expires_at, order_number | 적립금 잔액·적립 예정·최근 내역 |
+| **coupons** | customer_id, name, benefit, min_amount, expires_at, used_at | 쿠폰 (사용 가능/사용함/만료) |
+
+- 취소 티켓을 승인하면 payments 에 '승인 취소', 환불 티켓을 승인하면 '환불 예정(3일 뒤)'이 남습니다 (`api/tickets.py`).
 
 ### tickets — 환불·교환·취소 접수와 담당자 이관
 

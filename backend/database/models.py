@@ -287,6 +287,16 @@ class Order(TimestampMixin, Base):
 
     customer: Mapped[Customer] = relationship(back_populates="orders")
 
+    # ---- 상담에 필요한 주문 상세 (2026-11-20, 상담원 주문 정보 카드) ----
+    quantity: Mapped[int] = mapped_column(Integer, default=1, server_default="1")   # amount = 개당 가격 × 수량
+    payment_method: Mapped[str | None] = mapped_column(String(20))   # 신용카드 / 계좌이체 / 간편결제 / 무통장입금
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    carrier: Mapped[str | None] = mapped_column(String(20))           # 택배사 (출고된 주문)
+    return_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))   # 반품 접수
+    picked_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))          # 반품 회수 완료
+    payments: Mapped[list["Payment"]] = relationship(order_by="Payment.at")
+    shipment_events: Mapped[list["ShipmentEvent"]] = relationship(order_by="ShipmentEvent.at")
+
 
 class Ticket(TimestampMixin, Base):
     __tablename__ = "tickets"
@@ -312,3 +322,52 @@ class ReplyTemplate(TimestampMixin, Base):
     text: Mapped[str] = mapped_column(Text)                 # 커서 자리에 들어가는 문장
     sort_order: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)   # 숨기면 답변 칸에 안 보임 (지우지 않고 보관)
+
+
+class Payment(TimestampMixin, Base):
+    """결제·취소·환불 내역 (주문 1건에 여러 줄). 중복 결제는 '승인'이 두 줄로 보임"""
+    __tablename__ = "payments"
+
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(10))            # 승인 / 승인 취소 / 환불
+    status: Mapped[str] = mapped_column(String(10), default="완료")   # 완료 / 예정 (환불 예정 등)
+    method: Mapped[str | None] = mapped_column(String(20))
+    amount: Mapped[int] = mapped_column(Integer)              # 환불·취소도 양수로 (kind 로 구분)
+    approval_no: Mapped[str | None] = mapped_column(String(20))
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    memo: Mapped[str | None] = mapped_column(String(200))     # 예: 반품 배송비 6,000원 차감
+
+
+class ShipmentEvent(TimestampMixin, Base):
+    """배송 추적 단계 (택배사 조회 결과를 흉내 낸 시연 데이터)"""
+    __tablename__ = "shipment_events"
+
+    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id"), index=True)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(30))           # 택배사 인수 / 간선 하차 / 배송 출발 / 배송 완료 …
+    location: Mapped[str | None] = mapped_column(String(50))
+
+
+class PointHistory(TimestampMixin, Base):
+    """적립금 내역 (+적립 / -사용 / -소멸). 잔액 = amount 합계 (적립 예정은 제외)"""
+    __tablename__ = "point_histories"
+
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
+    amount: Mapped[int] = mapped_column(Integer)
+    reason: Mapped[str] = mapped_column(String(100))          # 구매 적립 / 리뷰 적립 / 주문 사용 / 유효기간 만료 …
+    status: Mapped[str] = mapped_column(String(10), default="완료")   # 완료 / 예정 (구매 확정 전 적립 예정)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    order_number: Mapped[str | None] = mapped_column(String(30))
+
+
+class Coupon(TimestampMixin, Base):
+    """고객이 가진 쿠폰 (조건·기간·사용 여부)"""
+    __tablename__ = "coupons"
+
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), index=True)
+    name: Mapped[str] = mapped_column(String(50))
+    benefit: Mapped[str] = mapped_column(String(30))          # 예: 10% 할인 (최대 1만원) / 3,000원 할인
+    min_amount: Mapped[int] = mapped_column(Integer, default=0)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

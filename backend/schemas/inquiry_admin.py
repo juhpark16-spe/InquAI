@@ -116,6 +116,23 @@ class CustomerInfo(BaseModel):
     order_number: str | None
 
 
+class PointRow(BaseModel):
+    at: UTCDateTime
+    amount: int
+    reason: str
+    status: str
+    order_number: str | None
+
+
+class CouponRow(BaseModel):
+    name: str
+    benefit: str
+    min_amount: int
+    expires_at: UTCDateTime
+    used_at: UTCDateTime | None
+    state: str                # 사용 가능 / 사용함 / 만료
+
+
 class CustomerProfile(BaseModel):
     member: bool              # 쇼핑몰 회원 (로그인 연동 시연 고객)
     phone: str | None         # 가운데를 가린 번호
@@ -123,6 +140,10 @@ class CustomerProfile(BaseModel):
     inquiries: int            # 이 문의 포함
     negative_inquiries: int   # 부정 감정 문의 수
     negative_ratings: int     # 답변에 '도움 안 됨'(👎)을 준 횟수
+    points_balance: int | None = None   # 적립금 잔액 (모의 고객이 아니면 None)
+    points_pending: int = 0             # 적립 예정 (구매 확정 전)
+    point_history: list[PointRow] = []
+    coupons: list[CouponRow] = []
 
 
 class AnalysisOut(ORM):
@@ -196,6 +217,30 @@ class CorrectionOut(ORM):
     created_at: UTCDateTime
 
 
+class PaymentRow(BaseModel):
+    kind: str                 # 승인 / 승인 취소 / 환불
+    status: str               # 완료 / 예정
+    method: str | None
+    amount: int
+    approval_no: str | None
+    at: UTCDateTime
+    memo: str | None
+
+
+class ShipmentStep(BaseModel):
+    at: UTCDateTime
+    status: str
+    location: str | None
+
+
+class RelatedInquiry(BaseModel):
+    id: int
+    inquiry_number: str
+    title: str
+    status: str
+    created_at: UTCDateTime
+
+
 class OrderCard(BaseModel):
     found: bool
     order_number: str
@@ -212,6 +257,19 @@ class OrderCard(BaseModel):
     return_until: UTCDateTime | None = None
     returnable: bool | None = None
     defect_return_until: UTCDateTime | None = None
+    # 상담에 필요한 상세 (2026-11-20)
+    quantity: int | None = None
+    unit_price: int | None = None
+    option: str | None = None
+    payment_method: str | None = None
+    paid_at: UTCDateTime | None = None
+    payments: list[PaymentRow] = []
+    duplicate_payment: bool = False       # 같은 금액 승인이 10분 안에 두 번 (승인 취소로 정리되지 않음)
+    carrier: str | None = None
+    shipment_events: list[ShipmentStep] = []
+    return_requested_at: UTCDateTime | None = None
+    picked_up_at: UTCDateTime | None = None
+    related_inquiries: list[RelatedInquiry] = []   # 같은 주문으로 들어온 다른 문의
 
 
 class HistoryItem(BaseModel):

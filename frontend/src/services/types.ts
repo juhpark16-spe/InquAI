@@ -164,7 +164,11 @@ export interface InquiryDetail {
   customer: { name: string; email: string; order_number: string | null };
   // 고객 카드: 쇼핑몰 회원 여부, 전화번호(가림), 주문·문의 수, 불만 신호
   customer_profile: { member: boolean; phone: string | null; orders: number; inquiries: number;
-    negative_inquiries: number; negative_ratings: number } | null;
+    negative_inquiries: number; negative_ratings: number;
+    points_balance: number | null; points_pending: number;
+    point_history: { at: string; amount: number; reason: string; status: string; order_number: string | null }[];
+    coupons: { name: string; benefit: string; min_amount: number; expires_at: string; used_at: string | null; state: string }[];
+  } | null;
   title: string;
   content: string;
   status: string;
@@ -205,6 +209,19 @@ export interface OrderCard {
   return_until: string | null;
   returnable: boolean | null;
   defect_return_until: string | null;
+  // 상담에 필요한 상세 (결제·수량·배송 추적·반품 진행·같은 주문의 다른 문의)
+  quantity?: number | null;
+  unit_price?: number | null;
+  option?: string | null;
+  payment_method?: string | null;
+  paid_at?: string | null;
+  payments?: { kind: string; status: string; method: string | null; amount: number; approval_no: string | null; at: string; memo: string | null }[];
+  duplicate_payment?: boolean;
+  carrier?: string | null;
+  shipment_events?: { at: string; status: string; location: string | null }[];
+  return_requested_at?: string | null;
+  picked_up_at?: string | null;
+  related_inquiries?: { id: number; inquiry_number: string; title: string; status: string; created_at: string }[];
 }
 
 export interface InquiryState {

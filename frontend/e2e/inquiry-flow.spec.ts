@@ -76,6 +76,11 @@ test("배정받은 상담원의 알림 종에 새 문의가 뜨고, 누르면 �
   await expect(page.getByRole("button", { name: "알림" })).toBeVisible();   // 열면 새 알림 숫자가 사라짐
   await page.getByRole("dialog", { name: "알림" }).getByText(title).click();
   await expect(page.getByRole("heading", { name: title })).toBeVisible();
+
+  // 배송 문의인데 주문번호가 없음 → 주문 정보 카드에서 [주문번호 요청 문구 넣기] → 답변 칸에 들어감
+  await expect(page.getByText("배송 문의인데 주문번호가 없어요")).toBeVisible();
+  await page.getByRole("button", { name: "+ 주문번호 요청 문구 넣기" }).click();
+  await expect(page.getByPlaceholder(/고객에게 보낼 답변/)).toHaveValue(/주문번호\(예: 20261103-0042\)를 알려 주시겠어요/);
 });
 
 test("회원 주문 취소 요청 → 상담원이 취소 티켓 승인·문구 넣어 발송 → 고객 화면에서 주문 취소·답변 완료", async ({ page, browser }) => {

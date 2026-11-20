@@ -3,16 +3,19 @@
 상담원이 다른 화면을 오가지 않고 한 화면에서 판단·처리할 수 있게 모읍니다.
 """
 
+import re
 from datetime import timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.database.models import AdminAuditLog, AdminUser, Customer, Faq, Inquiry, Order, Response, as_utc, utcnow
+from backend.database.models import (AdminAuditLog, AdminUser, Coupon, Customer, Faq, Inquiry, Order, PointHistory,
+                                     Response, as_utc, utcnow)
 
 CANCELLABLE = ("결제 완료", "상품 준비 중")   # 출고 전 (docs/shop_policy.md 2장)
 RETURN_DAYS, DEFECT_RETURN_DAYS = 7, 30      # 단순 변심 / 불량·오배송 (4장)
 HISTORY_LIMIT = 5
+DUPLICATE_WINDOW = timedelta(minutes=10)    # 같은 금액 승인이 이 안에 두 번 → 중복 결제 의심
 
 
 def order_card(db: Session, inquiry: Inquiry) -> dict | None:
@@ -24,7 +27,13 @@ def order_card(db: Session, inquiry: Inquiry) -> dict | None:
     if row is None:
         return {"order_number": inquiry.order_number, "found": False}
     order, customer = row
-    return _card(order, customer, inquiry.customer_email)
+    card = _card(order, customer, inquiry.customer_email)
+    # 같은 주문으로 들어온 다른 문의: 같은 일을 두 번 처리하거나 서로 다르게 안내하지 않게
+    others = db.scalars(select(Inquiry).where(Inquiry.order_number == order.order_number, Inquiry.id != inquiry.id)
+                        .order_by(Inquiry.created_at.desc())).all()
+    card["related_inquiries"] = [{"id": i.id, "inquiry_number": i.inquiry_number, "title": i.title, "status": i.status,
+                                  "created_at": i.created_at} for i in others]
+    return card
 
 
 def email_orders(db: Session, inquiry: Inquiry) -> list[dict]:
@@ -41,10 +50,29 @@ def email_orders(db: Session, inquiry: Inquiry) -> list[dict]:
     return [_card(o, c, inquiry.customer_email) for o, c in rows]
 
 
+def _payments(order: Order) -> tuple[list[dict], bool]:
+    """결제·취소·환불 내역과 중복 결제 의심 여부 (같은 금액 승인이 10분 안에 두 번, 그만큼 승인 취소가 없으면)"""
+    rows = [{"kind": p.kind, "status": p.status, "method": p.method, "amount": p.amount, "approval_no": p.approval_no,
+             "at": as_utc(p.at), "memo": p.memo} for p in order.payments]
+    approvals = [r for r in rows if r["kind"] == "승인"]
+    cancels = sum(1 for r in rows if r["kind"] == "승인 취소")
+    pairs = sum(1 for a, b in zip(approvals, approvals[1:])
+                if a["amount"] == b["amount"] and b["at"] - a["at"] <= DUPLICATE_WINDOW)
+    return rows, pairs > 0 and pairs > cancels - (order.order_status == "취소")
+
+
+def _option(product_name: str) -> str | None:
+    """'와이드 데님 팬츠 (연청, 28)' → '연청, 28' (옵션이 상품명 괄호에 들어 있음)"""
+    m = re.match(r"^.*?\(([^)]*)\)\s*$", product_name)
+    return m.group(1) if m else None
+
+
 def _card(order: Order, customer: Customer, inquiry_email: str) -> dict:
     delivered = as_utc(order.delivered_at)
     now = utcnow()
     return_until = delivered + timedelta(days=RETURN_DAYS) if delivered else None
+    payments, duplicate = _payments(order)
+    qty = order.quantity or 1
     return {
         "found": True,
         "order_number": order.order_number,
@@ -61,6 +89,19 @@ def _card(order: Order, customer: Customer, inquiry_email: str) -> dict:
         "return_until": return_until,
         "returnable": bool(return_until and now <= return_until),
         "defect_return_until": delivered + timedelta(days=DEFECT_RETURN_DAYS) if delivered else None,
+        # 상담에 필요한 상세 (결제·수량·배송 추적·반품 진행)
+        "quantity": qty,
+        "unit_price": order.amount // qty,
+        "option": _option(order.product_name),
+        "payment_method": order.payment_method,
+        "paid_at": as_utc(order.paid_at),
+        "payments": payments,
+        "duplicate_payment": duplicate,
+        "carrier": order.carrier,
+        "shipment_events": [{"at": as_utc(e.at), "status": e.status, "location": e.location} for e in order.shipment_events],
+        "return_requested_at": as_utc(order.return_requested_at),
+        "picked_up_at": as_utc(order.picked_up_at),
+        "related_inquiries": [],
     }
 
 
@@ -94,7 +135,9 @@ def customer_profile(db: Session, inquiry: Inquiry) -> dict:
     negative_ratings = db.scalar(select(func.count()).select_from(Response)
                                  .where(Response.inquiry_id.in_(ids), Response.rating == -1)) if ids else 0
     negative = sum(1 for i in inquiries if i.analysis and i.analysis.sentiment == "부정")
+    points, coupons = _points_and_coupons(db, customer)
     return {
+        **points, "coupons": coupons,
         "member": bool(customer and customer.password_hash),
         "phone": mask_phone(customer.phone) if customer else None,
         "orders": len(customer.orders) if customer else 0,
@@ -102,6 +145,28 @@ def customer_profile(db: Session, inquiry: Inquiry) -> dict:
         "negative_inquiries": negative,
         "negative_ratings": negative_ratings or 0,
     }
+
+
+def _points_and_coupons(db: Session, customer: Customer | None) -> tuple[dict, list[dict]]:
+    """적립금 잔액·적립 예정·최근 내역(5건)과 쿠폰(사용 가능한 것 먼저)"""
+    if customer is None:
+        return {"points_balance": None, "points_pending": 0, "point_history": []}, []
+    rows = db.scalars(select(PointHistory).where(PointHistory.customer_id == customer.id)
+                      .order_by(PointHistory.at.desc())).all()
+    now = utcnow()
+    points = {
+        "points_balance": sum(r.amount for r in rows if r.status == "완료"),
+        "points_pending": sum(r.amount for r in rows if r.status == "예정"),
+        "point_history": [{"at": as_utc(r.at), "amount": r.amount, "reason": r.reason, "status": r.status,
+                           "order_number": r.order_number} for r in rows[:HISTORY_LIMIT]],
+    }
+    coupons = []
+    for c in db.scalars(select(Coupon).where(Coupon.customer_id == customer.id)):
+        state = "사용함" if c.used_at else "만료" if as_utc(c.expires_at) < now else "사용 가능"
+        coupons.append({"name": c.name, "benefit": c.benefit, "min_amount": c.min_amount,
+                        "expires_at": as_utc(c.expires_at), "used_at": as_utc(c.used_at), "state": state})
+    coupons.sort(key=lambda c: (c["state"] != "사용 가능", c["expires_at"]))
+    return points, coupons
 
 
 def faq_titles(db: Session, inquiry: Inquiry) -> dict[str, str]:

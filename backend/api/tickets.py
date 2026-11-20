@@ -4,11 +4,13 @@
 
 - 권한: 관리자, 또는 그 문의를 배정받은 상담원.
 - 취소 승인은 출고 전 주문(결제 완료·상품 준비 중)만 → 주문 상태를 '취소'로 바꿉니다. 이미 나간 주문은 409 (반려 후 반품 안내).
-- 교환·환불 승인은 티켓만 승인합니다 (회수·환불 처리는 실제 쇼핑몰 시스템의 일, 시연에서는 기록만).
+- 취소 승인은 결제 내역에 '승인 취소'를, 환불 승인은 '환불 예정'(3영업일)을 남깁니다 (주문 정보 카드에 보임).
+  실제 회수·환불 처리는 쇼핑몰 시스템의 일이라 시연에서는 기록만 합니다.
 - 반려는 사유(memo)가 필요합니다. 처리 결과는 작업 기록(ticket_approve / ticket_reject)과 문의 처리 이력에 남고,
   [AI 초안 다시 만들기]를 누르면 초안 근거(처리 기록)에 결과가 들어갑니다.
 """
 
+from datetime import timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Request
@@ -17,7 +19,7 @@ from pydantic import BaseModel, Field, field_validator
 from backend.api.inquiry_admin import get_inquiry_for_user
 from backend.core.dependencies import DB, LoginUser
 from backend.core.errors import AppError
-from backend.database.models import Order, Ticket, utcnow
+from backend.database.models import Order, Payment, Ticket, utcnow
 from backend.schemas.inquiry_admin import TicketOut
 from backend.services.audit import add_audit
 
@@ -59,6 +61,13 @@ def decide(ticket_id: int, body: TicketDecision, request: Request, user: LoginUs
                            "INVALID_STATE")
         order_change = {"order_number": order.order_number, "before": order.order_status, "after": "취소"}
         order.order_status, order.shipping_status = "취소", None
+        # 결제 내역에 승인 취소 (카드는 3~5영업일 안에 반영, 주문 정보 카드의 '결제·환불 내역'에 보임)
+        db.add(Payment(order_id=order.id, kind="승인 취소", method=order.payment_method, amount=order.amount,
+                       at=utcnow(), memo="주문 취소 (티켓 승인)"))
+    if body.status == "승인" and ticket.ticket_type == "환불" and order is not None:
+        # 환불 예정 (실제 환불은 쇼핑몰 결제 시스템의 일. 상담원이 고객에게 예정일을 안내할 수 있게 기록)
+        db.add(Payment(order_id=order.id, kind="환불", status="예정", method=order.payment_method, amount=order.amount,
+                       at=utcnow() + timedelta(days=3), memo="반품 회수·검수 후 3영업일 이내 (티켓 승인)"))
 
     ticket.status, ticket.memo = body.status, body.memo
     ticket.handled_by, ticket.handled_at = user.id, utcnow()

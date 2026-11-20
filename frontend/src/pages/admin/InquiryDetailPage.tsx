@@ -142,14 +142,59 @@ function DecisionBanner({ d }: { d: InquiryDetail }) {
 }
 
 /** 주문 한 건의 상세: 상태·배송·취소·반품 가능 기한 */
+const ORDER_CATEGORIES = ["배송", "주문 취소", "교환", "반품·환불", "결제"];   // 주문을 확인해야 상담할 수 있는 유형
+const ORDER_NUMBER_ASK = "정확한 확인을 위해 주문번호(예: 20261103-0042)를 알려 주시겠어요? 마이페이지 > 주문내역에서 확인하실 수 있습니다.";
+
+/** 답변 칸에 문장 넣기 (주문 정보 카드의 버튼 → AnswerComposer 가 받아 커서 자리에 넣음) */
+export function insertIntoReply(text: string) {
+  window.dispatchEvent(new CustomEvent("inquai:insert-reply", { detail: text }));
+}
+
+const shortDate = (iso: string | null | undefined) => (iso ? formatDate(iso) : "-");
+
+/** 환불 진행: 결제 내역의 환불 줄 (예정이면 날짜, 예정일이 지났으면 빨강) */
+function RefundLine({ o }: { o: OrderCard }) {
+  const refunds = (o.payments ?? []).filter((p) => p.kind === "환불");
+  if (!o.return_requested_at && refunds.length === 0) return null;
+  const now = Date.now();
+  return (
+    <>
+      {o.return_requested_at && (
+        <Row label="반품 진행">
+          접수 {shortDate(o.return_requested_at)}
+          {o.picked_up_at ? <> → 회수 완료 {shortDate(o.picked_up_at)}</> : <span className="text-amber-700"> → 회수 전</span>}
+        </Row>
+      )}
+      {refunds.map((r, i) => {
+        const late = r.status === "예정" && new Date(r.at).getTime() < now;
+        return (
+          <Row key={i} label="환불">
+            <span className={cx("font-semibold", r.status === "완료" ? "text-emerald-700" : late ? "text-rose-700" : "text-amber-700")}>
+              {r.status === "완료" ? "완료" : late ? "예정일 지남" : "예정"} {won(r.amount)}
+            </span>
+            <span className="text-muted"> · {shortDate(r.at)}</span>
+            {r.memo && <span className="block text-xs text-muted">{r.memo}</span>}
+          </Row>
+        );
+      })}
+    </>
+  );
+}
+
+/** 주문 한 건의 상세: 상태·결제·배송·반품·환불·취소/반품 가능 기한 */
 function OrderRows({ o }: { o: OrderCard }) {
   return (
     <dl className="grid grid-cols-[5.5rem_1fr] items-center gap-x-3 gap-y-1.5 text-sm">
       <Row label="주문 상태"><Badge value={o.order_status} /></Row>
-      <Row label="배송">{o.shipping_status ?? "-"}</Row>
+      <Row label="배송">
+        {o.shipping_status ?? "-"}
+        {o.carrier && <span className="text-muted"> · {o.carrier}</span>}
+      </Row>
       {o.tracking_number && <Row label="송장번호"><span className="font-mono font-semibold">{o.tracking_number}</span></Row>}
+      {o.payment_method && <Row label="결제">{o.payment_method} <span className="text-muted">· {shortDate(o.paid_at)}</span></Row>}
       <Row label="주문일">{formatDate(o.ordered_at)}</Row>
       {o.delivered_at && <Row label="배송 완료">{formatDate(o.delivered_at)}</Row>}
+      <RefundLine o={o} />
       <Row label="취소">
         {o.order_status === "취소" ? <span className="font-semibold text-slate-700">이미 취소된 주문</span>
           : <YesNo ok={o.cancellable} yes="가능 (출고 전)" no="불가 (출고됨)" />}
@@ -169,23 +214,87 @@ function OrderRows({ o }: { o: OrderCard }) {
   );
 }
 
-/** 상품명 + 주문번호·금액 (주문 정보의 머리글) */
+/** 접는 소제목 (결제·환불 내역, 배송 추적 등) */
+function SubFold({ title, open, children }: { title: string; open?: boolean; children: ReactNode }) {
+  return (
+    <details className="group/sub mt-3 border-t border-hairline pt-2.5" open={open}>
+      <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-body hover:text-primary">
+        {title}
+        <span className="font-normal text-muted"><span className="group-open/sub:hidden">펼치기 ▾</span><span className="hidden group-open/sub:inline">접기 ▴</span></span>
+      </summary>
+      <div className="mt-2">{children}</div>
+    </details>
+  );
+}
+
+/** 결제·취소·환불 내역 (중복 승인 확인용: 승인 번호·시각까지) */
+function PaymentList({ o }: { o: OrderCard }) {
+  const rows = o.payments ?? [];
+  return (
+    <ul className="space-y-1.5 text-sm">
+      {rows.map((p, i) => (
+        <li key={i} className="flex flex-wrap items-baseline gap-x-2">
+          <span className={cx("rounded px-1.5 py-0.5 text-xs font-semibold",
+            p.kind === "승인" ? "bg-primary-soft text-primary" : "bg-slate-100 text-slate-700")}>{p.kind}{p.status === "예정" ? " 예정" : ""}</span>
+          <span className="font-semibold tabular-nums text-ink">{won(p.amount)}</span>
+          <span className="text-xs text-muted">{p.method ?? ""}{p.approval_no ? ` · 승인번호 ${p.approval_no}` : ""} · {formatDate(p.at)}</span>
+          {p.memo && <span className="w-full text-xs text-muted">{p.memo}</span>}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** 배송 추적 단계 (택배사 조회 결과) */
+function ShipmentList({ o }: { o: OrderCard }) {
+  const steps = o.shipment_events ?? [];
+  return (
+    <ol className="relative space-y-2 border-l border-hairline pl-4 text-sm">
+      {steps.map((e, i) => (
+        <li key={i}>
+          <span className={cx("absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full", i === steps.length - 1 ? "bg-primary" : "bg-slate-300")} />
+          <span className={cx(i === steps.length - 1 ? "font-semibold text-ink" : "text-body")}>{e.status}</span>
+          {e.location && <span className="text-muted"> · {e.location}</span>}
+          <span className="block text-xs text-muted">{formatDate(e.at)}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** 상품명(옵션) + 주문번호·금액·수량 (주문 정보의 머리글) */
 function OrderHead({ o }: { o: OrderCard }) {
+  const qty = o.quantity ?? 1;
   return (
     <div className="min-w-0">
       <p className="truncate text-base font-semibold text-ink">{o.product_name}</p>
       <p className="text-sm text-muted">
         <span className="font-mono text-body">{o.order_number}</span> · {won(o.amount)}
+        {qty > 1 && <span className="font-semibold text-ink"> · {qty}개 ({won(o.unit_price ?? null)} × {qty})</span>}
       </p>
     </div>
   );
 }
 
-/** 주문 정보: 고객이 적은 주문(크게) + 문의 이메일로 찾은 다른 주문(핵심만 보이고 누르면 상세) */
-function OrderInfo({ o, others }: { o: OrderCard | null; others: OrderCard[] }) {
+/** 주문 정보: 고객이 적은 주문(크게) + 문의 이메일로 찾은 다른 주문(핵심만 보이고 누르면 상세).
+ *  category: 결제 문의면 결제·환불 내역, 배송 문의면 배송 추적을 펼쳐 둠. 주문이 필요한 유형인데 주문번호가 없으면 요청 버튼 */
+function OrderInfo({ o, others, category, needsOrder }: { o: OrderCard | null; others: OrderCard[]; category: string | null; needsOrder: boolean }) {
+  const payments = o?.payments ?? [];
+  const steps = o?.shipment_events ?? [];
+  const related = o?.related_inquiries ?? [];
   return (
     <Card title="주문 정보">
-      {!o && <p className="text-sm text-muted">고객이 주문번호를 적지 않았습니다.</p>}
+      {needsOrder && (
+        <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-900">
+          <p className="font-semibold">{category} 문의인데 {o ? "주문번호를 찾을 수 없어요" : "주문번호가 없어요"}</p>
+          <p className="mt-0.5 text-xs">주문을 확인해야 정확히 안내할 수 있어요.{others.length > 0 && " 아래 이메일로 찾은 주문 중 어느 것인지 고객에게 확인하세요."}</p>
+          <button type="button" onClick={() => insertIntoReply(ORDER_NUMBER_ASK)}
+            className="mt-2 rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-sm font-semibold text-amber-900 hover:bg-amber-100">
+            + 주문번호 요청 문구 넣기
+          </button>
+        </div>
+      )}
+      {!o && !needsOrder && <p className="text-sm text-muted">주문번호 없이 남긴 문의입니다{category ? ` (${category} 문의라 주문 확인이 꼭 필요하지는 않음)` : ""}.</p>}
       {o && !o.found && (
         <Alert>주문번호 <b className="font-mono">{o.order_number}</b>를 찾을 수 없습니다. 고객에게 주문번호를 다시 확인해 주세요.</Alert>
       )}
@@ -194,16 +303,46 @@ function OrderInfo({ o, others }: { o: OrderCard | null; others: OrderCard[] }) 
           {o.email_match === false && (
             <div className="mb-3"><Alert>문의 이메일과 주문자 이메일이 다릅니다 (주문자: {o.orderer}). 본인 확인 전에는 주문 정보를 안내하지 마세요.</Alert></div>
           )}
+          {o.duplicate_payment && (
+            <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-700">
+              ⚠ 같은 금액이 10분 안에 두 번 승인됐어요 (중복 결제 의심). 아래 결제·환불 내역에서 승인번호를 확인하세요.
+            </div>
+          )}
+          {related.length > 0 && (
+            <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <p className="font-semibold">이 주문의 다른 문의 {related.length}건 · 같은 내용을 서로 다르게 안내하지 않게 확인하세요</p>
+              <ul className="mt-1 space-y-0.5">
+                {related.map((r) => (
+                  <li key={r.id} className="flex items-center justify-between gap-2">
+                    <Link to={`/admin/inquiries/${r.id}`} className="truncate text-primary hover:underline">{r.title}</Link>
+                    <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted"><Badge value={r.status} />{timeAgo(r.created_at)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
           <div className="mb-3">
             <p className="mb-0.5 text-xs font-semibold text-emerald-700">고객이 문의한 주문</p>
             <OrderHead o={o} />
+            {o.option && <p className="text-xs text-muted">옵션: {o.option}</p>}
           </div>
           <OrderRows o={o} />
+          {payments.length > 0 && (
+            <SubFold title={`결제·환불 내역 (${payments.length})`}
+              open={o.duplicate_payment || category === "결제" || category === "반품·환불" || payments.some((p) => p.kind !== "승인")}>
+              <PaymentList o={o} />
+            </SubFold>
+          )}
+          {steps.length > 0 && (
+            <SubFold title={`배송 추적 (${steps.length}단계${o.carrier ? ` · ${o.carrier}` : ""})`} open={category === "배송"}>
+              <ShipmentList o={o} />
+            </SubFold>
+          )}
         </>
       )}
 
       {others.length > 0 ? (
-        <details className={cx("group/others", o?.found && "mt-4 border-t border-hairline pt-3")} open={!o?.found}>
+        <details className={cx("group/others", o?.found && "mt-4 border-t border-hairline pt-3")} open={needsOrder}>
           <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-body hover:text-primary">
             {o?.found ? `이 고객의 다른 주문 (${others.length})` : `문의 이메일로 찾은 주문 (${others.length})`}
             <span className="font-normal text-muted"><span className="group-open/others:hidden">펼치기 ▾</span><span className="hidden group-open/others:inline">접기 ▴</span></span>
@@ -231,6 +370,7 @@ function OrderInfo({ o, others }: { o: OrderCard | null; others: OrderCard[] }) 
                   </summary>
                   <div className="border-t border-hairline px-3 py-2.5">
                     <OrderRows o={x} />
+                    {(x.payments?.length ?? 0) > 0 && <SubFold title={`결제·환불 내역 (${x.payments!.length})`}><PaymentList o={x} /></SubFold>}
                   </div>
                 </details>
               </li>
@@ -291,6 +431,11 @@ function Tickets({ data, onChanged }: { data: InquiryDetail; onChanged: (msg: st
                     <p className={cx("text-sm", cancelBlocked ? "text-rose-700" : "text-emerald-700")}>
                       {cancelBlocked ? `주문이 '${o.order_status}' 상태라 취소할 수 없어요 → 반려하고 반품으로 안내`
                         : `출고 전(${o.order_status})이라 승인하면 주문이 바로 취소됩니다`}
+                    </p>
+                  )}
+                  {t.ticket_type === "취소" && o?.found && !cancelBlocked && (o.quantity ?? 1) > 1 && (
+                    <p className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-sm text-amber-900">
+                      ⚠ {o.quantity}개 주문이에요. 승인하면 <b>주문 전체</b>가 취소됩니다. 일부만 취소하려는 요청이면 반려하고 쇼핑몰 관리 화면에서 부분 취소해 주세요.
                     </p>
                   )}
                   {rejecting === t.id ? (
@@ -443,7 +588,43 @@ export default function InquiryDetailPage() {
         <Row label="이메일"><span className="break-all">{data.customer.email}</span></Row>
         {p?.phone && <Row label="전화">{p.phone}</Row>}
         {p && <Row label="이력">주문 {p.orders}건 · 문의 {p.inquiries}건</Row>}
+        {p?.points_balance != null && (
+          <Row label="적립금">
+            <span className="font-semibold">{p.points_balance.toLocaleString()}원</span>
+            {p.points_pending > 0 && <span className="text-muted"> · 적립 예정 {p.points_pending.toLocaleString()}원</span>}
+            {p.coupons.length > 0 && <span className="text-muted"> · 쿠폰 {p.coupons.filter((c) => c.state === "사용 가능").length}장</span>}
+          </Row>
+        )}
       </dl>
+      {p && (p.point_history.length > 0 || p.coupons.length > 0) && (
+        <SubFold title="적립금·쿠폰 내역" open={a?.category === "쿠폰·적립금·회원"}>
+          {p.point_history.length > 0 && (
+            <ul className="space-y-1 text-sm">
+              {p.point_history.map((h, i) => (
+                <li key={i} className="flex items-baseline justify-between gap-2">
+                  <span className="min-w-0 truncate">{h.reason}{h.status === "예정" && <span className="text-amber-700"> (예정)</span>}
+                    <span className="text-xs text-muted"> · {formatDate(h.at)}</span></span>
+                  <span className={cx("shrink-0 font-semibold tabular-nums", h.amount < 0 ? "text-rose-700" : "text-emerald-700")}>
+                    {h.amount > 0 ? "+" : ""}{h.amount.toLocaleString()}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          {p.coupons.length > 0 && (
+            <ul className="mt-2.5 space-y-1 border-t border-hairline pt-2 text-sm">
+              {p.coupons.map((c, i) => (
+                <li key={i} className={cx("flex items-baseline justify-between gap-2", c.state !== "사용 가능" && "text-muted")}>
+                  <span className="min-w-0 truncate">{c.name} <span className="text-xs">· {c.benefit}{c.min_amount ? ` · ${c.min_amount.toLocaleString()}원 이상` : ""}</span></span>
+                  <span className={cx("shrink-0 text-xs", c.state === "사용 가능" && "font-semibold text-primary")}>
+                    {c.state}{c.state === "사용 가능" && ` · ~${formatDate(c.expires_at).split(" ").slice(0, 3).join(" ")}`}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SubFold>
+      )}
       {warn && (
         <p className="mt-2 rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-amber-900">
           ⚠ 응대에 신경 쓸 고객:
@@ -470,9 +651,11 @@ export default function InquiryDetailPage() {
       </div>
     </Fold>
   );
-  const orderCard = <OrderInfo o={data.order} others={data.email_orders} />;
+  // 주문을 확인해야 하는 문의인데 주문을 못 찾음: 주문 관련 유형 + 사람이 처리 (FAQ로 자동 답변한 일반 질문은 제외)
+  const needsOrder = !!a && ORDER_CATEGORIES.includes(a.category) && a.decision !== "자동 답변" && !data.order?.found;
+  const orderCard = <OrderInfo o={data.order} others={data.email_orders} category={a?.category ?? null} needsOrder={needsOrder} />;
   // 주문 관련 문의(주문번호를 적었거나 이메일로 찾은 주문이 있음)는 주문 정보가 판단의 핵심 → 위에. 아니면 고객을 위에
-  const orderFirst = !!data.order || data.email_orders.length > 0;
+  const orderFirst = !!data.order || needsOrder;
 
   return (
     <div className="space-y-4">

@@ -29,7 +29,9 @@ from backend.core.config import get_settings
 from backend.core.security import hash_password
 from backend.database import seed_admin, seed_data
 from backend.database.models import (AdminAuditLog, AdminUser, AgentLog, AnalysisResult, CustomerMessage, Customer, Inquiry,
-                                     InquiryNote, Notification, Order, Response, Ticket, as_utc, utcnow)
+                                     InquiryNote, Notification, Order, Payment, PointHistory, Response, Ticket, as_utc,
+                                     utcnow)
+from backend.database.seed_details import approval_no
 from backend.database.session import Base, SessionLocal, engine, init_db
 from backend.services import uploads
 from backend.services.assignment import pick_assignee
@@ -249,8 +251,13 @@ SEEN_HOURS = 3                    # 상담원이 알림을 마지막으로 본 �
 REDRAFT_ASKS = ["더 짧게", "사과를 먼저", "더 정중하게", "회수·환불 일정 안내 추가"]  # AnswerComposer 의 요청 버튼과 같음
 FOLLOW_UPS = ["답변 감사합니다. 그런데 한 가지 더 여쭤봐도 될까요? 다른 색상으로도 교환이 되나요?",
               "알려주신 대로 했는데 아직 해결이 안 됐어요. 다시 확인 부탁드립니다."]
-NOTES = ["택배사에 사고 접수함. 회신 오면 고객 안내 예정", "고객과 통화 완료. 교환으로 진행하기로 함",
-         "카드사 승인 내역 확인 요청함 (내일 오전 회신)"]
+# 긴급 문의의 내부 메모: 문의 내용과 맞는 것만 (시나리오 제목 → 메모)
+NOTES = {
+    "상품이 파손되어 왔어요": "택배사에 파손 사고 접수함. 회신 오면 고객에게 교환 일정 안내 예정",
+    "환불이 아직 안 들어왔어요": "물류센터에 반품 검수 진행 상황 문의함 (내일 오전 회신)",
+    "결제가 두 번 됐어요": "카드사에 승인 내역 확인 요청함 (내일 오전 회신)",
+    "배송 완료인데 못 받았어요": "택배 기사님과 통화함. 옆 동 경비실 배달 여부 확인 중",
+}
 
 
 def backup(stamp: str) -> Path | None:
@@ -314,6 +321,7 @@ def seed_inquiries(db: Session, *, now: datetime | None = None, days: int = DAYS
     live_times = {now - timedelta(minutes=m): title for m, title in LIVE}
     plan = sorted(plan + list(live_times))
 
+    detail_rng = random.Random(seed + 1)   # 시나리오별 결제·환불·적립금 내역용 (위 문의 생성 순서에 영향 없게 따로)
     seq: dict[str, int] = {}
     used_orders: set[int] = set()
     follow_ups = notes = 0
@@ -349,6 +357,7 @@ def seed_inquiries(db: Session, *, now: datetime | None = None, days: int = DAYS
         )
         db.add(inquiry)
         db.flush()
+        _scenario_details(db, sc, order, customer, created, detail_rng)
 
         # ---- AI 분석·판단 ----
         llm = sc.decided_by == "LLM"
@@ -405,8 +414,8 @@ def seed_inquiries(db: Session, *, now: datetime | None = None, days: int = DAYS
 
         # 처리 여부: 하루 넘은 문의는 대부분 완료, 반나절 안쪽은 미처리 (일부는 기한 초과로 남김)
         p_done = 0.95 if age > timedelta(days=1) else 0.5 if age > timedelta(hours=5) else 0.0
-        if agent and notes < len(NOTES) and sc.urgency == "높음" and rng.random() < 0.4:
-            db.add(InquiryNote(inquiry_id=inquiry.id, author_id=agent.id, text=NOTES[notes],
+        if agent and notes < 3 and sc.title in NOTES and rng.random() < 0.4:
+            db.add(InquiryNote(inquiry_id=inquiry.id, author_id=agent.id, text=NOTES[sc.title],
                                created_at=decided_at + timedelta(minutes=rng.randint(20, 90))))
             notes += 1
         done = rng.random() < p_done and idx not in forced   # LIVE 문의는 미처리로 남김
@@ -454,6 +463,9 @@ def seed_inquiries(db: Session, *, now: datetime | None = None, days: int = DAYS
             ticket.status, ticket.handled_by, ticket.handled_at = "승인", agent.id, sent_at
         _rate(response, now, sent_at, rng)
         _notify(db, inquiry, sent_at)
+        if sc.title == "결제가 두 번 됐어요" and order:   # 상담원이 중복 승인 1건을 취소한 결과
+            db.add(Payment(order_id=order.id, kind="승인 취소", method=order.payment_method, amount=order.amount,
+                           at=sent_at - timedelta(minutes=5), memo="중복 승인 1건 취소"))
         inquiry.status, inquiry.updated_at = "완료", sent_at
 
         # 답변을 보고 다시 물어본 고객 (다시 담당자 처리로)
@@ -486,6 +498,40 @@ def _live_touches(db: Session, now: datetime) -> None:
     for user in db.scalars(select(AdminUser)):
         user.notifications_seen_at = now - timedelta(hours=SEEN_HOURS)
     db.flush()
+
+
+def _scenario_details(db: Session, sc: Scenario, order: Order | None, customer: Customer, created: datetime,
+                      rng: random.Random) -> None:
+    """문의 내용과 맞도록 주문·고객 상세를 덧붙임: 상담원이 주문 정보 카드에서 근거를 바로 확인할 수 있게"""
+    if sc.title == "결제가 두 번 됐어요" and order:   # 같은 금액 승인이 40초 간격으로 두 번
+        first = as_utc(order.paid_at) or as_utc(order.ordered_at)
+        db.add(Payment(order_id=order.id, kind="승인", method=order.payment_method, amount=order.amount,
+                       approval_no=approval_no(rng), at=first + timedelta(seconds=40)))
+    elif sc.title in ("환불이 아직 안 들어왔어요", "환불 금액이 적게 들어왔어요") and order:
+        delivered = as_utc(order.delivered_at) or created - timedelta(days=10)
+        late = sc.title == "환불이 아직 안 들어왔어요"
+        order.return_requested_at = max(delivered + timedelta(days=1), created - timedelta(days=9 if late else 5))
+        order.picked_up_at = order.return_requested_at + timedelta(days=1, hours=rng.randint(1, 8))
+        if late:   # 회수는 끝났는데 환불 예정일이 지남 (검수 지연)
+            db.add(Payment(order_id=order.id, kind="환불", status="예정", method=order.payment_method, amount=order.amount,
+                           at=order.picked_up_at + timedelta(days=3), memo="물류센터 검수 대기 중"))
+        else:      # 단순 변심 반품 → 왕복 배송비 차감 (docs/shop_policy.md)
+            db.add(Payment(order_id=order.id, kind="환불", method=order.payment_method, amount=order.amount - 6000,
+                           at=created - timedelta(days=1), memo="단순 변심 반품 왕복 배송비 6,000원 차감"))
+    elif sc.title == "수량 일부만 취소하고 싶어요" and order and order.quantity < 2:
+        unit = order.amount
+        order.quantity, order.amount = 2, unit * 2
+        for p in order.payments:
+            if p.kind == "승인":
+                p.amount = order.amount
+    elif sc.title == "적립금이 사라졌어요":   # 1년 전 적립금 5천원이 어제 유효기간 만료로 소멸
+        earned = created - timedelta(days=366)
+        db.add(PointHistory(customer_id=customer.id, amount=5000, reason="이벤트 적립", at=earned,
+                            expires_at=created - timedelta(days=1)))
+        db.add(PointHistory(customer_id=customer.id, amount=-5000, reason="유효기간 만료 (1년)", at=created - timedelta(days=1)))
+    elif sc.title == "적립금 언제 들어오나요" and order:   # 구매 확정 전이라 적립 예정
+        db.add(PointHistory(customer_id=customer.id, amount=int(order.amount * 0.01), reason="구매 적립 (구매 확정 후)",
+                            status="예정", at=created, order_number=order.order_number))
 
 
 def _steps(sc: Scenario) -> list[str]:

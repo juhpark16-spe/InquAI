@@ -68,10 +68,12 @@ def test_order_not_found(client, db, setup):
     i.order_number = "NOPE"
     db.commit()
     login(client)
-    assert client.get(f"/api/inquiries/{setup['old']}").json()["order"] == {**{k: None for k in (
+    order = client.get(f"/api/inquiries/{setup['old']}").json()["order"]
+    assert order["found"] is False and order["order_number"] == "NOPE"
+    assert all(order[k] is None for k in (                            # 찾지 못한 주문은 상세가 비어 있음
         "email_match", "orderer", "product_name", "amount", "order_status", "shipping_status", "tracking_number",
-        "ordered_at", "delivered_at", "cancellable", "return_until", "returnable", "defect_return_until")},
-        "found": False, "order_number": "NOPE"}
+        "ordered_at", "delivered_at", "cancellable", "return_until", "returnable", "defect_return_until", "payment_method"))
+    assert order["payments"] == [] and order["related_inquiries"] == [] and order["duplicate_payment"] is False
 
 
 def test_customer_history_and_faq_titles(client, setup):
@@ -116,7 +118,8 @@ def test_customer_profile(client, db, setup):
     db.commit()
     login(client)
     p = client.get(f"/api/inquiries/{setup['main']}").json()["customer_profile"]
-    assert p == {"member": False, "phone": "010-****-0000", "orders": 2, "inquiries": 2,
-                 "negative_inquiries": 0, "negative_ratings": 1}
+    assert {k: p[k] for k in ("member", "phone", "orders", "inquiries", "negative_inquiries", "negative_ratings")} == {
+        "member": False, "phone": "010-****-0000", "orders": 2, "inquiries": 2, "negative_inquiries": 0, "negative_ratings": 1}
+    assert p["points_balance"] == 0 and p["coupons"] == []            # 적립금·쿠폰 내역이 없는 고객
     other = client.get(f"/api/inquiries/{setup['other']}").json()["customer_profile"]
     assert other["phone"] is None and other["orders"] == 0 and other["inquiries"] == 1   # 쇼핑몰 고객 정보 없음

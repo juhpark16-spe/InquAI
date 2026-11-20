@@ -2,7 +2,7 @@
 
 - FAQ: data/faq/faqs.csv 를 code 기준으로 넣거나 고칩니다 (여러 번 실행해도 됨).
 - 고객 20명·주문 50건: 날짜를 실행 시각 기준으로 만들어, 언제 시연해도 취소(출고 전)·반품(배송 완료 7일 이내)
-  가능 여부가 골고루 나오게 합니다. 이미 있으면 건너뛰고, --reset 이면 지우고 다시 만듭니다.
+  가능 여부가 골고루 나오게 합니다. 결제·승인 내역, 수량, 택배사·배송 추적, 적립금·쿠폰도 함께 (seed_details.py). 이미 있으면 건너뛰고, --reset 이면 지우고 다시 만듭니다.
 
 실행 (프로젝트 루트에서)
     python -m backend.database.seed_data
@@ -19,7 +19,9 @@ import pandas as pd
 from sqlalchemy import delete, func, select, update
 
 from backend.core.config import PROJECT_ROOT
-from backend.database.models import Customer, Faq, Order, Ticket, utcnow
+from backend.database.models import (Coupon, Customer, Faq, Order, Payment, PointHistory, ShipmentEvent, Ticket,
+                                     utcnow)
+from backend.database.seed_details import seed_order_details
 from backend.database.session import SessionLocal, init_db
 
 FAQ_FILE = PROJECT_ROOT / "data" / "faq" / "faqs.csv"
@@ -72,6 +74,8 @@ def seed_orders(db, reset: bool) -> None:
             print("[고객·주문] 이미 있어 건너뜀 (다시 만들려면 --reset)")
             return
         db.execute(update(Ticket).values(order_id=None))
+        for table in (Payment, ShipmentEvent, PointHistory, Coupon):
+            db.execute(delete(table))
         db.execute(delete(Order))
         db.execute(delete(Customer))
         print("[고객·주문] 기존 데이터 삭제")
@@ -108,6 +112,8 @@ def seed_orders(db, reset: bool) -> None:
                 ordered_at=ordered_at, delivered_at=delivered_at,
             ))
     db.add_all(orders)
+    db.flush()
+    seed_order_details(db, customers, orders, now)   # 결제·승인, 수량, 택배사·배송 추적, 적립금, 쿠폰 (seed_details.py)
     print(f"[고객·주문] 고객 {len(customers)}명, 주문 {len(orders)}건 "
           f"({', '.join(f'{s} {c}' for s, c in Counter(o.order_status for o in orders).items())})")
 
