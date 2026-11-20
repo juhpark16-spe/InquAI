@@ -229,6 +229,19 @@ SCENARIOS: list[tuple[Scenario, int]] = [  # (시나리오, 뽑힐 비중)
        reason="유형 확신도 0.72 < 0.8 → 담당자 연결 (규칙)"), 2),
 ]
 
+# 시연을 녹화하는 '지금'에도 화면이 살아 있도록, 실행 시각 기준으로 늘 만드는 미처리 문의 (접수 몇 분 전, 시나리오).
+# 기한(긴급 4시간, 그 외 24시간)이 남은 상태라 대시보드 '기한 임박 문의'·🔔 알림·처리 대기열에 나타남
+LIVE = [
+    (23 * 60 + 25, "출고가 너무 늦어요"),        # 기한 35분 남음 → 기한 임박 목록 맨 위, 🔔 기한 임박 알림
+    (21 * 60, "배송지 바꾸고 싶어요"),           # 기한 3시간 남음
+    (5 * 60, "사이즈 교환 신청"),                # 승인할 교환 티켓
+    (130, "환불이 아직 안 들어왔어요"),          # 긴급, 기한 1시간 50분 남음
+    (50, "상품이 파손되어 왔어요"),              # 긴급, 방금 배정됨 → 🔔 배정 알림
+]
+LIVE_FOLLOW_UP = ("답변 보고 다시 여쭤요. 혹시 오늘 안에 처리될 수 있을까요? 급하게 필요해서요.", 12)   # (내용, 몇 분 전)
+LIVE_BAD_RATING_MIN = 30          # 30분 전 고객 👎 → 🔔 평가 알림
+SEEN_HOURS = 3                    # 상담원이 알림을 마지막으로 본 시각 (지금 - 3시간) → 최근 일만 '새 알림'
+
 REDRAFT_ASKS = ["더 짧게", "사과를 먼저", "더 정중하게", "회수·환불 일정 안내 추가"]  # AnswerComposer 의 요청 버튼과 같음
 FOLLOW_UPS = ["답변 감사합니다. 그런데 한 가지 더 여쭤봐도 될까요? 다른 색상으로도 교환이 되나요?",
               "알려주신 대로 했는데 아직 해결이 안 됐어요. 다시 확인 부탁드립니다."]
@@ -294,15 +307,16 @@ def seed_inquiries(db: Session, *, now: datetime | None = None, days: int = DAYS
         n = rng.randint(2, 4) if back >= 7 else rng.randint(3, 6)
         times = sorted(_kst_time(day, rng) for _ in range(n))
         plan += [t.astimezone(timezone.utc) for t in times if t.astimezone(timezone.utc) < now - timedelta(minutes=10)]
+    live_times = {now - timedelta(minutes=m): title for m, title in LIVE}
+    plan = sorted(plan + list(live_times))
 
     seq: dict[str, int] = {}
     used_orders: set[int] = set()
     follow_ups = notes = 0
     admin = db.scalar(select(AdminUser).where(AdminUser.role == "admin").order_by(AdminUser.id))
-    # 시연에서 꼭 보여야 할 미처리 문의: 마지막(가장 최근) 몇 건은 긴급·초안 문의로 고정
+    # 시연에서 꼭 보여야 할 미처리 문의: 실행 시각 기준 LIVE 문의 (시나리오 고정, 처리하지 않고 남김)
     by_title = {sc.title: sc for sc in scenarios}
-    forced = {len(plan) - 1: "상품이 파손되어 왔어요", len(plan) - 3: "환불 금액이 적게 들어왔어요",
-              len(plan) - 5: "환불이 아직 안 들어왔어요"}
+    forced = {i: live_times[t] for i, t in enumerate(plan) if t in live_times}
     # 고정 문의의 주문을 먼저 정해 둠 (앞 문의들이 맞는 주문을 다 써 버리지 않게)
     reserved = {}
     for idx, title in forced.items():
@@ -391,7 +405,7 @@ def seed_inquiries(db: Session, *, now: datetime | None = None, days: int = DAYS
             db.add(InquiryNote(inquiry_id=inquiry.id, author_id=agent.id, text=NOTES[notes],
                                created_at=decided_at + timedelta(minutes=rng.randint(20, 90))))
             notes += 1
-        done = rng.random() < p_done
+        done = rng.random() < p_done and idx not in forced   # LIVE 문의는 미처리로 남김
         if not agent and done and admin:
             # 담당 상담원이 없는 유형(기타 등)은 관리자가 직접 맡아 처리한 것으로
             at = decided_at + timedelta(minutes=rng.randint(30, 180))
@@ -446,7 +460,28 @@ def seed_inquiries(db: Session, *, now: datetime | None = None, days: int = DAYS
             follow_ups += 1
 
     db.flush()
+    _live_touches(db, now)
     return len(plan)
+
+
+def _live_touches(db: Session, now: datetime) -> None:
+    """실행 시각 기준의 최근 일: 고객 추가 문의 1건, 고객 👎 1건, 상담원 '알림 본 시각' (🔔 시연용)"""
+    done = db.scalars(select(Response).join(Inquiry, Response.inquiry_id == Inquiry.id)
+                      .join(AdminUser, Response.approved_by == AdminUser.id)
+                      .where(Response.status == "발송", Inquiry.status == "완료", AdminUser.role == "agent")
+                      .order_by(Response.approved_at.desc())).all()
+    if done:   # 가장 최근에 상담원이 답한 문의에 고객이 다시 물어봄 → 담당자 처리로
+        r = done[0]
+        text, minutes = LIVE_FOLLOW_UP
+        at = now - timedelta(minutes=minutes)
+        db.add(CustomerMessage(inquiry_id=r.inquiry_id, content=text, created_at=at))
+        r.inquiry.status, r.inquiry.updated_at = "담당자 처리", at
+    if len(done) > 1:  # 그다음 답변에 고객이 '도움 안 됨'
+        r = done[1]
+        r.rating, r.rated_at = -1, now - timedelta(minutes=LIVE_BAD_RATING_MIN)
+    for user in db.scalars(select(AdminUser)):
+        user.notifications_seen_at = now - timedelta(hours=SEEN_HOURS)
+    db.flush()
 
 
 def _steps(sc: Scenario) -> list[str]:

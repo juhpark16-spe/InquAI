@@ -77,3 +77,25 @@ def test_inquiry_text_matches_ordered_product(db):
             assert as_utc(order.delivered_at) < as_utc(i.created_at)
     broken = [i.content for i in with_order if "불량" in i.title or "불량 같" in i.content]
     assert not any("전원" in t and "이어폰" not in t for t in broken)  # 이불에 "전원이 안 켜져요" 같은 문장 없음
+
+
+def test_live_set_is_relative_to_now(client, db):
+    """시연 녹화 시각에도 화면이 살아 있게: 실행 시각 기준 미처리 문의 · 추가 문의 · 👎 · 새 알림"""
+    from backend.database.seed_demo import LIVE
+
+    seeded(db)
+    live_titles = {title for _, title in LIVE}
+    open_titles = set(db.scalars(select(Inquiry.title).where(Inquiry.status.in_(("검토 대기", "담당자 처리")))))
+    assert live_titles <= open_titles                                   # LIVE 문의는 모두 미처리
+
+    login(client)
+    due = [x["title"] for x in client.get("/api/stats/priorities").json()["due_soon"]]
+    assert "출고가 너무 늦어요" in due                                   # 기한 35분 남은 문의가 임박 목록에
+
+    client.cookies.clear()
+    client.headers.pop("X-CSRF-Token", None)
+    login(client, "agent1")
+    r = client.get("/api/notifications").json()
+    kinds = {x["kind"] for x in r["items"] if x["unread"]}
+    assert {"followup", "bad_rating", "due_soon"} <= kinds               # 최근 일이 새 알림으로
+    assert 0 < r["unread"] < len(r["items"])                             # 3시간보다 오래된 알림은 읽은 상태
