@@ -5,6 +5,7 @@ from datetime import timedelta
 from sqlalchemy import select
 
 from backend.database.models import Attachment, Inquiry, Notification, utcnow
+from backend.services import sla
 from backend.tests.conftest import TEST_PASSWORD
 from backend.tests.test_inquiries import PW, ai, post, route_reply  # noqa: F401  (ai 는 fixture)
 
@@ -165,7 +166,7 @@ def test_due_and_overdue(client, db, ai):
     admin_login(client)
     item = client.get("/api/inquiries").json()["items"][0]
     assert item["overdue"] is False and item["due_at"].endswith("Z")
-    inquiry.created_at = utcnow() - timedelta(hours=5)  # 긴급은 4시간 기한
+    inquiry.created_at = sla.sub_weekday_time(utcnow(), timedelta(hours=5))  # 긴급은 4시간 기한 (주말 제외, 평일 기준 5시간 전)
     db.commit()
     assert client.get("/api/inquiries").json()["items"][0]["overdue"] is True
     assert client.get("/api/stats/summary").json()["now"]["overdue_open"] == 1
@@ -194,7 +195,7 @@ def test_overdue_filter(client, db, ai):
     old = db.scalar(select(Inquiry).where(Inquiry.inquiry_number == post(client).json()["inquiry_number"]))
     ai["analyzer"].next = {"confidence": 0.5, "urgency": "보통"}
     post(client)
-    old.created_at = utcnow() - timedelta(hours=5)
+    old.created_at = sla.sub_weekday_time(utcnow(), timedelta(hours=5))
     db.commit()
     admin_login(client)
     assert [i["inquiry_number"] for i in client.get("/api/inquiries", params={"overdue": "true"}).json()["items"]] \

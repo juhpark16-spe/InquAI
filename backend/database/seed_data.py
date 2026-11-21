@@ -2,7 +2,7 @@
 
 - FAQ: data/faq/faqs.csv 를 code 기준으로 넣거나 고칩니다 (여러 번 실행해도 됨).
 - 고객 20명·주문 50건: 날짜를 실행 시각 기준으로 만들어, 언제 시연해도 취소(출고 전)·반품(배송 완료 7일 이내)
-  가능 여부가 골고루 나오게 합니다. 결제·승인 내역, 수량, 택배사·배송 추적, 적립금·쿠폰도 함께 (seed_details.py). 이미 있으면 건너뛰고, --reset 이면 지우고 다시 만듭니다.
+  가능 여부가 골고루 나오게 합니다. 결제·승인 내역, 수량, 택배사·배송 추적, 적립금·쿠폰도 함께 (seed_details.py), 상품 옵션·재고 (services/inventory.py). 이미 있으면 건너뛰고, --reset 이면 지우고 다시 만듭니다.
 
 실행 (프로젝트 루트에서)
     python -m backend.database.seed_data
@@ -23,6 +23,7 @@ from backend.database.models import (Coupon, Customer, Faq, Order, Payment, Poin
                                      utcnow)
 from backend.database.seed_details import seed_order_details
 from backend.database.session import SessionLocal, init_db
+from backend.services import inventory
 
 FAQ_FILE = PROJECT_ROOT / "data" / "faq" / "faqs.csv"
 
@@ -34,10 +35,10 @@ PRODUCTS = [
     ("오버핏 코튼 맨투맨 (그레이, L)", 39000), ("와이드 데님 팬츠 (연청, 28)", 49000),
     ("경량 패딩 조끼 (블랙, M)", 59000), ("니트 가디건 (아이보리, FREE)", 45000),
     ("러닝화 에어 쿠션 (화이트, 260)", 89000), ("가죽 크로스백 (브라운)", 79000),
-    ("무선 블루투스 이어폰", 69000), ("스테인리스 텀블러 500ml", 25000),
+    ("무선 블루투스 이어폰 (화이트)", 69000), ("스테인리스 텀블러 500ml (실버)", 25000),
     ("극세사 이불 세트 (퀸)", 99000), ("세라믹 프라이팬 28cm", 42000),
     ("비타민C 세럼 30ml", 32000), ("저자극 선크림 SPF50+", 21000),
-    ("유아 내복 세트 (100)", 28000), ("캠핑 접이식 의자", 55000),
+    ("유아 내복 세트 (100)", 28000), ("캠핑 접이식 의자 (카키)", 55000),
 ]
 
 HUBS = ["옥천 HUB 출발", "대전 HUB 도착", "곤지암 HUB 출발", "배송 출발 (담당 기사 배정)"]
@@ -72,6 +73,7 @@ def seed_orders(db, reset: bool) -> None:
     if db.scalar(select(func.count()).select_from(Customer)):
         if not reset:
             print("[고객·주문] 이미 있어 건너뜀 (다시 만들려면 --reset)")
+            inventory.ensure_catalog(db)
             return
         db.execute(update(Ticket).values(order_id=None))
         for table in (Payment, ShipmentEvent, PointHistory, Coupon):
@@ -114,8 +116,9 @@ def seed_orders(db, reset: bool) -> None:
     db.add_all(orders)
     db.flush()
     seed_order_details(db, customers, orders, now)   # 결제·승인, 수량, 택배사·배송 추적, 적립금, 쿠폰 (seed_details.py)
+    options = inventory.ensure_catalog(db, reset=True)   # 상품 옵션·재고도 처음 재고로 (services/inventory.py)
     print(f"[고객·주문] 고객 {len(customers)}명, 주문 {len(orders)}건 "
-          f"({', '.join(f'{s} {c}' for s, c in Counter(o.order_status for o in orders).items())})")
+          f"({', '.join(f'{s} {c}' for s, c in Counter(o.order_status for o in orders).items())}), 상품 옵션 {options}개")
 
 
 def main():

@@ -6,9 +6,10 @@ from sqlalchemy import func, select
 
 from backend.database import seed_data
 from backend.database.models import AdminUser, Inquiry, Response
-from backend.database.models import Order, as_utc
+from backend.database.models import Order, as_utc, utcnow
 from backend.database.seed_data import PRODUCTS
 from backend.database.seed_demo import DEMO_LOOKUP_PASSWORD, product_kind, seed_inquiries, short_name
+from backend.services import sla
 from backend.tests.conftest import TEST_PASSWORD
 
 
@@ -99,5 +100,6 @@ def test_live_set_is_relative_to_now(client, db):
     login(client, "agent1")
     r = client.get("/api/notifications").json()
     kinds = {x["kind"] for x in r["items"] if x["unread"]}
-    assert {"followup", "bad_rating", "due_soon", "recheck"} <= kinds    # 최근 일이 새 알림으로
+    expected = {"followup", "bad_rating", "recheck"} | (set() if sla.is_weekend(utcnow()) else {"due_soon"})
+    assert expected <= kinds    # 최근 일이 새 알림으로 (주말에는 답변 기한이 멈춰 '기한 임박' 알림이 없음)
     assert 0 < r["unread"] < len(r["items"])                             # 3시간보다 오래된 알림은 읽은 상태

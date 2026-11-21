@@ -385,7 +385,7 @@ export default function DashboardPage() {
       <section>
         <h2 className="mb-3 text-lg font-semibold text-ink">지금 처리할 일 <span className="font-normal text-muted">· 기간과 관계없이 현재</span></h2>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-          <WorkCard label="답변 기한 초과" value={data.now.overdue_open} sub="긴급 4시간 · 그 외 24시간"
+          <WorkCard label="답변 기한 초과" value={data.now.overdue_open} sub="주말 제외 · 긴급 4시간 · 그 외 24시간"
             to="/admin/inquiries?overdue=true" critical highlight />
           <WorkCard label="긴급 미처리" value={data.now.urgent_open} sub="긴급도 높음"
             to="/admin/inquiries?open=true&urgency=높음" critical />

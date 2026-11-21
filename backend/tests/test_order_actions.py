@@ -4,8 +4,9 @@ from datetime import timedelta
 
 import pytest
 
-from backend.database.models import (AdminAuditLog, Coupon, Customer, Inquiry, Order, Payment, PointHistory, Ticket,
-                                     utcnow)
+from backend.database.models import (AdminAuditLog, Coupon, Customer, Inquiry, Order, Payment, PointHistory, ProductOption,
+                                     Ticket, utcnow)
+from backend.services import inventory
 from backend.tests.conftest import TEST_PASSWORD
 
 EMAIL = "park@example.com"
@@ -20,6 +21,7 @@ def login(client, username="admin"):
 
 @pytest.fixture()
 def ids(db):
+    inventory.ensure_catalog(db)   # 상품 옵션·재고 (데님 진청 30 품절, 진청 28 재고 7, 연청 28 재고 9)
     now = utcnow()
     c = Customer(name="박지호", email=EMAIL, phone="010-3333-4444")
     other = Customer(name="남", email="other@example.com", phone="010-0000-1111")
@@ -66,6 +68,11 @@ def order(db, number):
     return db.query(Order).filter_by(order_number=number).one()
 
 
+def stock(db, option, product="와이드 데님 팬츠"):
+    db.expire_all()
+    return db.query(ProductOption).filter_by(product=product, option=option).one().stock
+
+
 def test_address_and_option_only_before_shipping(client, db, ids):
     login(client, "agent1")
     assert act(client, ids["ready"], action="address", address="경기 성남시 분당구 판교역로 166").status_code == 200
@@ -74,13 +81,22 @@ def test_address_and_option_only_before_shipping(client, db, ids):
 
     assert act(client, ids["ready"], action="option", option="진청, 30").status_code == 409             # 품절
     assert act(client, ids["ready"], action="option", option="빨강, 99").status_code == 422             # 없는 옵션
+    db.query(ProductOption).filter_by(product="와이드 데님 팬츠", option="진청, 28").one().stock = 1
+    db.commit()
+    r = act(client, ids["ready"], action="option", option="진청, 28")
+    assert r.status_code == 409 and "재고 1개뿐" in r.json()["detail"]                       # 주문 수량 2개 > 재고
+    db.query(ProductOption).filter_by(product="와이드 데님 팬츠", option="진청, 28").one().stock = 7
+    db.commit()
     assert act(client, ids["ready"], action="option", option="진청, 28").status_code == 200
     assert order(db, "R-1").product_name == "와이드 데님 팬츠 (진청, 28)"
+    assert (stock(db, "진청, 28"), stock(db, "연청, 28")) == (5, 11)                          # 재고 이동 (수량 2개)
 
     d = client.get(f"/api/inquiries/{ids['ready']}").json()
     assert any(e["text"].startswith("바로 처리 · 옵션 변경: 연청, 28 → 진청, 28") for e in d["history"])   # 처리 이력
     assert d["order"]["shipping_address"] == "경기 성남시 분당구 판교역로 166"
-    assert {c["option"]: c["sold_out"] for c in d["order"]["option_choices"]}["진청, 30"] is True
+    choices = {c["option"]: c for c in d["order"]["option_choices"]}
+    assert choices["진청, 30"]["sold_out"] is True and choices["진청, 30"]["restock_at"]      # 품절 + 재입고 예정일
+    assert choices["진청, 28"]["current"] is True and choices["연청, 30"]["low"] is True       # 재고 3개 = 적음
 
 
 def test_partial_cancel_and_duplicate_cancel(client, db, ids):
@@ -89,6 +105,7 @@ def test_partial_cancel_and_duplicate_cancel(client, db, ids):
     assert act(client, ids["ready"], action="partial_cancel", count=1).status_code == 200
     o = order(db, "R-1")
     assert (o.quantity, o.amount, o.order_status) == (1, 49000, "상품 준비 중")
+    assert stock(db, "연청, 28") == 10                                                          # 취소한 1개는 재고로
     assert db.query(Ticket).one().status == "승인"                                                      # 열린 취소 티켓도 처리됨
 
     assert client.get(f"/api/inquiries/{ids['ready']}").json()["order"]["duplicate_payment"] is True
@@ -124,3 +141,17 @@ def test_return_request_window_and_ownership(client, db, ids):
     logs = client.get("/api/audit-logs?group=문의 처리").json()["items"]
     assert any(x["label"] == "바로 처리" and x["summary"].startswith("반품 회수 접수") for x in logs)
     assert db.query(AdminAuditLog).filter_by(action="order_action").count() == 2
+
+
+def test_cancel_ticket_restocks_and_draft_sees_stock(client, db, ids):
+    """취소 티켓 승인 → 주문 수량만큼 재고로, AI 초안 입력에 같은 상품 옵션 재고가 들어감"""
+    from backend.agents.drafting import build_input
+
+    text = build_input(db, db.get(Inquiry, ids["ready"]), [], None)
+    assert "같은 상품 옵션 재고: 연청, 26 재고 5개" in text and "진청, 30 품절 (재입고 예정" in text
+
+    login(client, "agent1")
+    ticket = db.query(Ticket).one()
+    assert client.patch(f"/api/tickets/{ticket.id}", json={"status": "승인"}).status_code == 200
+    assert order(db, "R-1").order_status == "취소"
+    assert stock(db, "연청, 28") == 11                                                          # 2개 모두 재고로

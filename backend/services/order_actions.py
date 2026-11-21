@@ -3,8 +3,8 @@
 | 처리 | 조건 | 결과 |
 | --- | --- | --- |
 | address 배송지 변경 | 출고 전 | 주문 배송지 변경 |
-| option 옵션 변경 | 출고 전 + 같은 상품의 다른 옵션, 품절 아님 | 상품명의 옵션(괄호) 변경, 가격 같음 |
-| partial_cancel 부분 취소 | 출고 전 + 수량 2개 이상, 남기는 수량 1개 이상 | 수량·금액 줄임 + 결제 내역 '승인 취소'(부분) + 열린 취소 티켓은 승인 처리 |
+| option 옵션 변경 | 출고 전 + 같은 상품의 다른 옵션, 재고가 주문 수량 이상 | 상품명의 옵션(괄호) 변경, 가격 같음, 재고 이동 (새 옵션 -수량, 원래 옵션 +수량) |
+| partial_cancel 부분 취소 | 출고 전 + 수량 2개 이상, 남기는 수량 1개 이상 | 수량·금액 줄임 + 결제 내역 '승인 취소'(부분) + 열린 취소 티켓은 승인 처리 + 재고 +취소 수량 |
 | duplicate_cancel 중복 승인 취소 | 중복 결제 의심 (같은 금액 승인 10분 안에 두 번) | 결제 내역 '승인 취소' 1건 |
 | points 보상 적립금 | 쇼핑몰 고객 + 한도 (상담원 3,000원, 관리자 50,000원) | 적립금 내역 +금액 |
 | coupon 사과 쿠폰 | 쇼핑몰 고객 + 쿠폰 종류별 권한 | 쿠폰 발급 (30일) |
@@ -14,7 +14,6 @@
 모든 처리는 작업 기록(order_action)에 바뀌기 전·후와 함께 남고, 문의 처리 이력·AI 초안의 처리 기록에 들어갑니다.
 """
 
-import re
 from datetime import timedelta
 
 from fastapi import Request
@@ -24,25 +23,16 @@ from sqlalchemy.orm import Session
 from backend.core.errors import AppError
 from backend.database.models import (AdminUser, Coupon, Customer, Inquiry, Order, Payment, PointHistory, Ticket,
                                      as_utc, utcnow)
+from backend.services import inventory
 from backend.services.audit import add_audit
+from backend.services.inventory import split_product
 
 CANCELLABLE = ("결제 완료", "상품 준비 중")       # 출고 전 (docs/shop_policy.md 2장)
 RETURN_DAYS, DEFECT_RETURN_DAYS = 7, 30
 POINT_LIMIT = {"agent": 3000, "admin": 50000}     # 1회 보상 적립금 한도
 DUPLICATE_WINDOW = timedelta(minutes=10)
 
-# 상품별 옵션 (상품명 괄호 안). 품절 옵션은 바꿀 수 없음
-PRODUCT_OPTIONS: dict[str, list[str]] = {
-    "오버핏 코튼 맨투맨": ["그레이, M", "그레이, L", "그레이, XL", "블랙, M", "블랙, L", "네이비, L"],
-    "와이드 데님 팬츠": ["연청, 26", "연청, 28", "연청, 30", "진청, 28", "진청, 30"],
-    "경량 패딩 조끼": ["블랙, S", "블랙, M", "블랙, L", "카키, M"],
-    "니트 가디건": ["아이보리, FREE", "베이지, FREE", "차콜, FREE"],
-    "러닝화 에어 쿠션": ["화이트, 250", "화이트, 260", "화이트, 270", "블랙, 260"],
-    "가죽 크로스백": ["브라운", "블랙"],
-    "극세사 이불 세트": ["퀸", "킹", "슈퍼싱글"],
-    "유아 내복 세트": ["90", "100", "110"],
-}
-SOLD_OUT = {("와이드 데님 팬츠", "진청, 30"), ("니트 가디건", "차콜, FREE"), ("러닝화 에어 쿠션", "화이트, 270")}
+# 상품 옵션·재고는 product_options 표 (backend/services/inventory.py)
 
 # 사과 쿠폰: 이름 → (혜택, 최소 주문 금액, 상담원도 발급 가능)
 COUPONS = {
@@ -50,17 +40,6 @@ COUPONS = {
     "무료배송 쿠폰": ("배송비 무료", 0, True),
     "사과 쿠폰 5,000원": ("5,000원 할인", 30000, False),
 }
-
-
-def split_product(name: str) -> tuple[str, str | None]:
-    m = re.match(r"^(.*?)\s*\(([^)]*)\)\s*$", name)
-    return (m.group(1), m.group(2)) if m else (name, None)
-
-
-def option_choices(order: Order) -> list[dict]:
-    base, current = split_product(order.product_name)
-    return [{"option": o, "sold_out": (base, o) in SOLD_OUT, "current": o == current}
-            for o in PRODUCT_OPTIONS.get(base, [])]
 
 
 def duplicates(order: Order) -> list[Payment]:
@@ -129,15 +108,20 @@ def run(db: Session, request: Request, user: AdminUser, inquiry: Inquiry, action
         _before_shipping(order)
         base, current = split_product(order.product_name)
         new = (body.get("option") or "").strip()
-        if new not in PRODUCT_OPTIONS.get(base, []):
+        target = inventory.get(db, base, new)
+        if target is None:
             raise AppError(422, "이 상품에 없는 옵션입니다.", "VALIDATION_ERROR")
         if new == current:
             raise AppError(422, "지금과 같은 옵션입니다.", "VALIDATION_ERROR")
-        if (base, new) in SOLD_OUT:
-            raise AppError(409, f"'{new}'은(는) 품절이라 바꿀 수 없습니다.", "SOLD_OUT")
-        before, after = {"option": current}, {"option": new}
+        qty = order.quantity or 1
+        if target.stock < qty:
+            left = "품절" if target.stock <= 0 else f"재고 {target.stock}개뿐"
+            raise AppError(409, f"'{new}'은(는) {left}이라 바꿀 수 없습니다 (주문 수량 {qty}개).", "SOLD_OUT")
+        before, after = {"option": current, "stock": target.stock}, {"option": new, "stock": target.stock - qty}
+        target.stock -= qty
+        inventory.restock(db, order.product_name, qty)   # 원래 옵션은 재고로 돌아감
         order.product_name = f"{base} ({new})"
-        summary = f"옵션 변경: {current} → {new}"
+        summary = f"옵션 변경: {current or '옵션 없음'} → {new}"
 
     elif action == "partial_cancel":
         order = _order(db, inquiry)
@@ -149,6 +133,7 @@ def run(db: Session, request: Request, user: AdminUser, inquiry: Inquiry, action
         unit = order.amount // qty
         before, after = {"quantity": qty, "amount": order.amount}, {"quantity": qty - count, "amount": order.amount - unit * count}
         order.quantity, order.amount = qty - count, order.amount - unit * count
+        inventory.restock(db, order.product_name, count)   # 취소한 수량은 재고로
         db.add(Payment(order_id=order.id, kind="승인 취소", method=order.payment_method, amount=unit * count, at=now,
                        memo=f"부분 취소 {count}개"))
         for t in db.scalars(select(Ticket).where(Ticket.inquiry_id == inquiry.id, Ticket.ticket_type == "취소",

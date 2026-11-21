@@ -203,8 +203,10 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | **shipment_events** | order_id, at, status(택배사 인수/간선 상차/간선 하차/배송 출발/배송 완료), location | 배송 추적 단계 |
 | **point_histories** | customer_id, amount(+적립/-사용·소멸), reason, status(완료/예정), at, expires_at, order_number | 적립금 잔액·적립 예정·최근 내역 |
 | **coupons** | customer_id, name, benefit, min_amount, expires_at, used_at | 쿠폰 (사용 가능/사용함/만료) |
+| **product_options** | product(괄호 앞 상품명), option, stock, restock_at, sort_order · (product, option) 고유 | 옵션별 재고·품절·재입고 예정일 (상품 11개, 세럼·선크림·프라이팬은 옵션 없음). 옵션 변경·부분 취소·취소 승인 때 재고가 움직임 (`services/inventory.py`) |
 
 - 취소 티켓을 승인하면 payments 에 '승인 취소', 환불 티켓을 승인하면 '환불 예정(3일 뒤)'이 남습니다 (`api/tickets.py`).
+- 상품 옵션·재고는 서버가 켜질 때 표에 없는 옵션만 채우고(예전 DB도 바로 쓰임), 고객·주문을 다시 만들면 처음 재고로 돌아갑니다.
 
 ### tickets — 환불·교환·취소 접수와 담당자 이관
 
@@ -271,6 +273,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | --- | --- | --- |
 | 관리자·상담원 | 관리자 1, 상담원 2 | `seed_admin.py`. 비밀번호는 `.env`에서 읽음 |
 | 고객·주문 | 고객 20명, 주문 50건 | 주문 상태를 골고루 (출고 전, 배송 중, 배송 완료 7일 이내·이후) 만들어 취소·반품 가능 여부 시연 |
+| 상품 옵션·재고 | 상품 11개, 옵션 42개 | `services/inventory.py`의 CATALOG (품절 8개, 그중 재입고 예정일이 있는 것 6개) |
 | FAQ | 44개 | `data/faq/faqs.csv` |
 | 시연 문의 | 최근 14일 50건 안팎 | `seed_demo.py --reset` (아래) |
 

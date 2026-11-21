@@ -6,7 +6,7 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database.session import Base
@@ -302,6 +302,18 @@ class Order(TimestampMixin, Base):
     picked_up_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))          # 반품 회수 완료
     payments: Mapped[list["Payment"]] = relationship(order_by="Payment.at")
     shipment_events: Mapped[list["ShipmentEvent"]] = relationship(order_by="ShipmentEvent.at")
+
+
+class ProductOption(TimestampMixin, Base):
+    """상품 옵션·재고 (시연 쇼핑몰, backend/services/inventory.py). 상품명 괄호 안이 옵션"""
+    __tablename__ = "product_options"
+    __table_args__ = (UniqueConstraint("product", "option", name="uq_product_option"),)
+
+    product: Mapped[str] = mapped_column(String(100), index=True)   # 괄호 앞 상품명 ('와이드 데님 팬츠')
+    option: Mapped[str] = mapped_column(String(50))                 # '연청, 28'
+    stock: Mapped[int] = mapped_column(Integer, default=0)          # 0 이면 품절
+    restock_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))   # 품절일 때 재입고 예정일 (없으면 미정)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0)
 
 
 class Ticket(TimestampMixin, Base):

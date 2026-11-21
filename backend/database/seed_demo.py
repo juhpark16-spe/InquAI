@@ -33,7 +33,7 @@ from backend.database.models import (AdminAuditLog, AdminUser, AgentLog, Analysi
                                      utcnow)
 from backend.database.seed_details import approval_no
 from backend.database.session import Base, SessionLocal, engine, init_db
-from backend.services import uploads
+from backend.services import sla, uploads
 from backend.services.assignment import pick_assignee
 from backend.tools.orders import shipping_summary
 
@@ -236,7 +236,7 @@ SCENARIOS: list[tuple[Scenario, int]] = [  # (시나리오, 뽑힐 비중)
 ]
 
 # 시연을 녹화하는 '지금'에도 화면이 살아 있도록, 실행 시각 기준으로 늘 만드는 미처리 문의 (접수 몇 분 전, 시나리오).
-# 기한(긴급 4시간, 그 외 24시간)이 남은 상태라 대시보드 '기한 임박 문의'·🔔 알림·처리 대기열에 나타남
+# 기한(주말 제외, 긴급 4시간, 그 외 24시간)이 남은 상태라 대시보드 '기한 임박 문의'·🔔 알림·처리 대기열에 나타남
 LIVE = [
     (23 * 60 + 25, "출고가 너무 늦어요"),        # 기한 35분 남음 → 기한 임박 목록 맨 위, 🔔 기한 임박 알림
     (21 * 60, "배송지 바꾸고 싶어요"),           # 기한 3시간 남음
@@ -332,7 +332,8 @@ def seed_inquiries(db: Session, *, now: datetime | None = None, days: int = DAYS
         n = rng.randint(2, 4) if back >= 7 else rng.randint(3, 6)
         times = sorted(_kst_time(day, rng) for _ in range(n))
         plan += [t.astimezone(timezone.utc) for t in times if t.astimezone(timezone.utc) < now - timedelta(minutes=10)]
-    live_times = {now - timedelta(minutes=m): title for m, title in LIVE}
+    # 접수 시각은 '평일 기준 n분 전' (답변 기한이 주말을 세지 않으므로, 녹화하는 요일과 상관없이 남은 기한이 같게)
+    live_times = {sla.sub_weekday_time(now, timedelta(minutes=m)): title for m, title in LIVE}
     plan = sorted(plan + list(live_times))
 
     detail_rng = random.Random(seed + 1)   # 시나리오별 결제·환불·적립금 내역용 (위 문의 생성 순서에 영향 없게 따로)

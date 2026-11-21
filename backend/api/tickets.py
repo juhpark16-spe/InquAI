@@ -21,6 +21,7 @@ from backend.core.dependencies import DB, LoginUser
 from backend.core.errors import AppError
 from backend.database.models import Order, Payment, Ticket, utcnow
 from backend.schemas.inquiry_admin import TicketOut
+from backend.services import inventory
 from backend.services.audit import add_audit
 
 router = APIRouter(prefix="/tickets", tags=["티켓 처리"])
@@ -61,6 +62,7 @@ def decide(ticket_id: int, body: TicketDecision, request: Request, user: LoginUs
                            "INVALID_STATE")
         order_change = {"order_number": order.order_number, "before": order.order_status, "after": "취소"}
         order.order_status, order.shipping_status = "취소", None
+        inventory.restock(db, order.product_name, order.quantity or 1)   # 취소한 수량은 재고로
         # 결제 내역에 승인 취소 (카드는 3~5영업일 안에 반영, 주문 정보 카드의 '결제·환불 내역'에 보임)
         db.add(Payment(order_id=order.id, kind="승인 취소", method=order.payment_method, amount=order.amount,
                        at=utcnow(), memo="주문 취소 (티켓 승인)"))

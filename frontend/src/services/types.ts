@@ -236,7 +236,8 @@ export interface OrderCard {
   picked_up_at?: string | null;
   related_inquiries?: { id: number; inquiry_number: string; title: string; status: string; created_at: string }[];
   shipping_address?: string | null;
-  option_choices?: { option: string; sold_out: boolean; current: boolean }[];
+  // 같은 상품의 옵션별 재고 (옵션 변경·교환 안내). low = 3개 이하, restock_at = 품절일 때 재입고 예정일
+  option_choices?: { option: string; stock: number; sold_out: boolean; low: boolean; restock_at: string | null; current: boolean }[];
 }
 
 export interface InquiryState {

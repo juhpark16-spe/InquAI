@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from backend.ai.prompts import DRAFT_PROMPT, DRAFT_SCHEMA, customer_text, find_promises
 from backend.database.models import AdminAuditLog, Attachment, CustomerMessage, Inquiry, Response, Ticket, as_utc
+from backend.services import inventory
 from backend.services.inquiry_context import order_card
 
 KST = timezone(timedelta(hours=9))
@@ -62,6 +63,8 @@ def _order_text(card: dict | None) -> str:
         f"주문일: {_kst(card['ordered_at'])}" + (f" / 배송 완료: {_kst(card['delivered_at'])}" if card["delivered_at"] else ""),
         f"출고 전 취소 가능: {'예' if card['cancellable'] else '아니요'}",
     ]
+    if card.get("option_choices"):   # 같은 상품의 옵션별 재고: 옵션 변경·교환 문의에 재고를 근거로 안내
+        lines.append("같은 상품 옵션 재고: " + " · ".join(inventory.describe(c) for c in card["option_choices"]))
     if card["return_until"]:
         lines.append(f"단순 변심 반품 기한: {_kst(card['return_until'])}까지 ({'가능' if card['returnable'] else '지남'}), "
                      f"불량·오배송 반품 기한: {_kst(card['defect_return_until'])}까지")

@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 
 from backend.database.models import AdminAuditLog, AnalysisResult, CustomerMessage, Inquiry, Response
+from backend.services import sla
 from backend.tests.conftest import TEST_PASSWORD
 
 ADMIN, AGENT = 1, 2
@@ -15,7 +16,7 @@ def login(client, username):
 def inquiry(db, n, *, assigned=None, status="담당자 처리", urgency="보통", hours_ago=1.0):
     i = Inquiry(inquiry_number=f"INQ-N-{n:04d}", customer_name=f"고객{n}", customer_email=f"n{n}@example.com",
                 title=f"문의 {n}", content="내용", status=status, assigned_to=assigned,
-                created_at=datetime.now(timezone.utc) - timedelta(hours=hours_ago))
+                created_at=sla.sub_weekday_time(datetime.now(timezone.utc), timedelta(hours=hours_ago)))   # 평일 기준 (기한은 주말 제외)
     db.add(i)
     db.flush()
     db.add(AnalysisResult(inquiry_id=i.id, category="배송", confidence=0.9, sentiment="중립", sentiment_confidence=0.9,
@@ -33,7 +34,7 @@ def test_each_kind_goes_to_the_right_person(client, db):
     a = inquiry(db, 1, assigned=AGENT)                                   # 상담원에게 자동 배정
     db.add(AdminAuditLog(admin_id=None, action="auto_assign", target_type="inquiry", target_id=a.id,
                          detail={"assigned_to": AGENT}))
-    b = inquiry(db, 2, assigned=AGENT, hours_ago=23.5)                   # 기한 30분 남음
+    b = inquiry(db, 2, assigned=AGENT, hours_ago=23.5)                   # 기한 30분 남음 (평일 기준)
     c = inquiry(db, 3, assigned=AGENT)                                   # 고객 추가 문의
     db.add(CustomerMessage(inquiry_id=c.id, content="추가로 궁금해요"))
     d = inquiry(db, 4, assigned=AGENT, status="완료")                    # 상담원이 보낸 답변에 👎
@@ -51,8 +52,9 @@ def test_each_kind_goes_to_the_right_person(client, db):
 
     login(client, "agent1")
     got = set(kinds(client))
-    assert got == {("assigned", "INQ-N-0001"), ("due_soon", "INQ-N-0002"), ("followup", "INQ-N-0003"),
-                   ("bad_rating", "INQ-N-0004")}
+    # 주말에는 답변 기한이 멈춰(월요일 00:00부터 다시 셈) '기한 30분 남음'이 1시간 안이 아님 → 임박 알림 없음
+    due = set() if sla.is_weekend(now) else {("due_soon", "INQ-N-0002")}
+    assert got == {("assigned", "INQ-N-0001"), ("followup", "INQ-N-0003"), ("bad_rating", "INQ-N-0004")} | due
 
     login(client, "admin")
     got = set(kinds(client))

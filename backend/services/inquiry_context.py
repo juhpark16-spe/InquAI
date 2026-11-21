@@ -11,7 +11,8 @@ from sqlalchemy.orm import Session
 
 from backend.database.models import (AdminAuditLog, AdminUser, Coupon, Customer, Faq, Inquiry, Order, PointHistory,
                                      Response, as_utc, utcnow)
-from backend.services.order_actions import duplicates, option_choices
+from backend.services import inventory
+from backend.services.order_actions import duplicates
 
 CANCELLABLE = ("결제 완료", "상품 준비 중")   # 출고 전 (docs/shop_policy.md 2장)
 RETURN_DAYS, DEFECT_RETURN_DAYS = 7, 30      # 단순 변심 / 불량·오배송 (4장)
@@ -96,7 +97,7 @@ def _card(order: Order, customer: Customer, inquiry_email: str) -> dict:
         "carrier": order.carrier,
         "shipment_events": [{"at": as_utc(e.at), "status": e.status, "location": e.location} for e in order.shipment_events],
         "shipping_address": order.shipping_address,
-        "option_choices": option_choices(order),
+        "option_choices": inventory.choices(order),   # 옵션별 재고 (옵션 변경·교환 안내)
         "return_requested_at": as_utc(order.return_requested_at),
         "picked_up_at": as_utc(order.picked_up_at),
         "related_inquiries": [],

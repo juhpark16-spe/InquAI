@@ -298,13 +298,13 @@ function OrderActions({ o, inquiryId, onDone }: { o: OrderCard; inquiryId: numbe
               <Select value={option} onChange={(e) => setOption(e.target.value)} aria-label="새 옵션" className="w-full">
                 <option value="">바꿀 옵션 고르기</option>
                 {choices.map((c) => (
-                  <option key={c.option} value={c.option} disabled={c.sold_out || c.current}>
-                    {c.option}{c.current ? " (지금)" : c.sold_out ? " (품절)" : ""}
+                  <option key={c.option} value={c.option} disabled={c.current || c.stock < qty}>
+                    {c.option} · {c.current ? "지금 옵션" : stockText(c)}{!c.current && !c.sold_out && c.stock < qty ? ` (주문 수량 ${qty}개보다 적음)` : ""}
                   </option>
                 ))}
               </Select>
               <Button className="min-h-9 px-4 py-1" disabled={q.busy || !option}
-                onClick={() => q.exec("option", { option }, `옵션을 '${option}'(으)로 바꿀까요? 가격은 같아요.`)}>{q.busy ? <Spinner /> : "옵션 변경"}</Button>
+                onClick={() => q.exec("option", { option }, `옵션을 '${option}'(으)로 바꿀까요? 가격은 같고, 재고가 ${qty}개 옮겨져요.`)}>{q.busy ? <Spinner /> : "옵션 변경"}</Button>
             </>
           )}
           {q.open === "partial_cancel" && (
@@ -387,6 +387,30 @@ function SubFold({ title, open, children }: { title: string; open?: boolean; chi
       </summary>
       <div className="mt-2">{children}</div>
     </details>
+  );
+}
+
+/** 재고 한 줄: '재고 8개' / '재고 2개 (적음)' / '품절 · 재입고 11/26' */
+function stockText(c: NonNullable<OrderCard["option_choices"]>[number]) {
+  if (c.sold_out) {
+    if (!c.restock_at) return "품절 · 재입고 미정";
+    const d = new Date(c.restock_at);
+    return `품절 · 재입고 ${d.getMonth() + 1}/${d.getDate()} 예정`;
+  }
+  return `재고 ${c.stock}개${c.low ? " (적음)" : ""}`;
+}
+
+/** 같은 상품의 옵션별 재고 (교환·옵션 변경 문의에 바로 안내할 수 있게) */
+function StockList({ o }: { o: OrderCard }) {
+  return (
+    <ul className="space-y-1 text-sm">
+      {(o.option_choices ?? []).map((c) => (
+        <li key={c.option} className="flex items-center justify-between gap-2">
+          <span className={cx(c.current && "font-semibold text-ink")}>{c.option}{c.current && <span className="ml-1 text-xs font-normal text-muted">(주문한 옵션)</span>}</span>
+          <span className={cx("shrink-0 text-xs", c.sold_out ? "font-semibold text-rose-700" : c.low ? "font-semibold text-amber-700" : "text-muted")}>{stockText(c)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -493,7 +517,7 @@ function OrderInfo({ o, others, category, needsOrder, inquiryId, onDone }: {
           </div>
           <OrderRows o={o} />
           {o.shipping_address && <p className="mt-1.5 text-sm"><span className="text-muted">배송지 </span>{o.shipping_address}</p>}
-          {o.email_match !== false && <OrderActions key={`${o.order_number}-${o.order_status}-${o.quantity}-${payments.length}`} o={o} inquiryId={inquiryId} onDone={onDone} />}
+          {o.email_match !== false && <OrderActions key={`${o.order_number}-${o.order_status}-${o.quantity}-${o.product_name}-${payments.length}`} o={o} inquiryId={inquiryId} onDone={onDone} />}
           {payments.length > 0 && (
             <SubFold title={`결제·환불 내역 (${payments.length})`}
               open={o.duplicate_payment || category === "결제" || category === "반품·환불" || payments.some((p) => p.kind !== "승인")}>
@@ -503,6 +527,11 @@ function OrderInfo({ o, others, category, needsOrder, inquiryId, onDone }: {
           {steps.length > 0 && (
             <SubFold title={`배송 추적 (${steps.length}단계${o.carrier ? ` · ${o.carrier}` : ""})`} open={category === "배송"}>
               <ShipmentList o={o} />
+            </SubFold>
+          )}
+          {(o.option_choices?.length ?? 0) > 0 && (
+            <SubFold title={`옵션별 재고 (${o.option_choices!.length})`} open={category === "교환" || category === "상품"}>
+              <StockList o={o} />
             </SubFold>
           )}
         </>

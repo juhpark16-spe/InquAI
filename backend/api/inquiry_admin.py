@@ -3,12 +3,11 @@
 권한: 관리자는 모든 문의, 상담원은 자신에게 배정된 문의만 봅니다.
 """
 
-from datetime import timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import FileResponse
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.core.dependencies import DB, AdminOnly, LoginUser
@@ -52,7 +51,7 @@ def list_inquiries(
     status: Literal[INQUIRY_STATUSES] | None = None,
     decision: Literal[DECISIONS] | None = None,
     open: bool | None = Query(None, description="true 면 미처리(접수·검토 대기·담당자 처리)만"),
-    overdue: bool | None = Query(None, description="true 면 답변 기한(긴급 4시간, 그 외 24시간)을 넘긴 미처리만"),
+    overdue: bool | None = Query(None, description="true 면 답변 기한(주말 제외, 긴급 4시간, 그 외 24시간)을 넘긴 미처리만"),
     assigned_to: str | None = Query(None, description="상담원 id, me, none (관리자만 지정 가능)"),
     recheck: bool | None = Query(None, description="true 면 '확인 후 다시 안내' 표시가 남은 문의만 (다시 안내 기한이 가까운 순)"),
     q: str | None = Query(None, max_length=100, description="제목·내용·문의 번호·이메일 검색"),
@@ -78,12 +77,12 @@ def list_inquiries(
     if open or overdue:
         stmt = stmt.where(Inquiry.status.in_(sla.OPEN_STATUSES))
     if overdue:
+        # 기한은 주말을 빼고 계산해서 DB 조건으로 쓸 수 없음 → 미처리 문의(많지 않음)의 기한을 계산해 번호로 거름
         now = utcnow()
-        urgent_due = now - timedelta(hours=sla.SLA_HOURS["높음"])
-        normal_due = now - timedelta(hours=sla.DEFAULT_HOURS)
-        stmt = stmt.where(or_(and_(AnalysisResult.urgency == "높음", Inquiry.created_at < urgent_due),
-                              and_(or_(AnalysisResult.urgency.is_(None), AnalysisResult.urgency != "높음"),
-                                   Inquiry.created_at < normal_due)))
+        rows = db.execute(select(Inquiry.id, Inquiry.created_at, AnalysisResult.urgency)
+                          .outerjoin(AnalysisResult, AnalysisResult.inquiry_id == Inquiry.id)
+                          .where(Inquiry.status.in_(sla.OPEN_STATUSES))).all()
+        stmt = stmt.where(Inquiry.id.in_([i for i, created, urgency in rows if now > sla.due_at(created, urgency)]))
     if recheck:
         stmt = stmt.where(Inquiry.recheck_note.is_not(None))
     if category:

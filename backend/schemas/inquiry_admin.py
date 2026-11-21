@@ -40,7 +40,7 @@ class InquiryListItem(BaseModel):
     confidence: float | None  # AI 유형 분류 확신도 (0~1, 낮으면 사람이 확인)
     assigned_to: Assignee | None
     created_at: UTCDateTime
-    due_at: UTCDateTime   # 답변 기한 (긴급 4시간, 그 외 24시간)
+    due_at: UTCDateTime   # 답변 기한 (주말 제외, 긴급 4시간, 그 외 24시간)
     overdue: bool         # 미처리인데 기한을 넘김
     recheck_note: str | None = None          # '확인 후 다시 안내' 표시: 확인할 내용
     recheck_due_at: UTCDateTime | None = None  # 다시 안내할 기한
@@ -252,7 +252,10 @@ class RelatedInquiry(BaseModel):
 
 class OptionChoice(BaseModel):
     option: str
+    stock: int = 0
     sold_out: bool
+    low: bool = False                      # 재고 3개 이하
+    restock_at: UTCDateTime | None = None  # 품절일 때 재입고 예정일 (없으면 미정)
     current: bool
 
 
@@ -286,7 +289,7 @@ class OrderCard(BaseModel):
     picked_up_at: UTCDateTime | None = None
     related_inquiries: list[RelatedInquiry] = []   # 같은 주문으로 들어온 다른 문의
     shipping_address: str | None = None
-    option_choices: list[OptionChoice] = []        # 옵션 변경용 (품절 표시)
+    option_choices: list[OptionChoice] = []        # 옵션별 재고 (옵션 변경·교환 안내)
 
 
 class HistoryItem(BaseModel):

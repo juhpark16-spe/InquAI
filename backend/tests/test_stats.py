@@ -6,6 +6,7 @@ import pytest
 
 from backend.api.stats import KST
 from backend.database.models import AgentLog, AnalysisResult, Inquiry, Response
+from backend.services import sla
 from backend.tests.conftest import TEST_PASSWORD
 
 
@@ -176,7 +177,7 @@ def test_priorities(client, db):
     now = datetime.now(timezone.utc)
 
     def at(i, hours_ago):
-        i.created_at = now - timedelta(hours=hours_ago)
+        i.created_at = sla.sub_weekday_time(now, timedelta(hours=hours_ago))   # 평일 기준 (기한은 주말 제외)
 
     at(add(db, 1, "담당자 처리", "결제", "높음", "담당자 연결"), 1)    # 긴급, 기한 3시간 남음
     at(add(db, 2, "검토 대기", "배송", "보통", "답변 초안"), 23)      # 기한 1시간 남음

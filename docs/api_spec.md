@@ -268,7 +268,7 @@
   `orders`·`inquiries`=주문·문의 수, 불만 신호 `negative_ratings`(이전 답변에 👎 수)·`negative_inquiries`(부정 감정 문의 수).
   화면은 👎가 있거나 부정 문의가 2건 이상이면 "응대에 신경 쓸 고객"으로 표시
 - `history`: 접수 → AI 판단 → 자동 배정·답변 발송 → 사람의 배정·상태 변경 (시간순)
-- 추가 필드: `due_at`·`overdue`(답변 기한: 긴급 4시간, 그 외 24시간), `messages`(고객 추가 문의), `notes`(내부 메모), `attachments`(사진 목록, token 은 내보내지 않음), `notifications`(알림 기록), `responses[].rating`
+- 추가 필드: `due_at`·`overdue`(답변 기한: 주말(한국 시간 토·일) 제외, 긴급 4시간, 그 외 24시간 — `backend/services/sla.py`), `messages`(고객 추가 문의), `notes`(내부 메모), `attachments`(사진 목록, token 은 내보내지 않음), `notifications`(알림 기록), `responses[].rating`
 
 ### 내부 메모·첨부 사진·기한 (2주차 추가)
 | 메서드 | 경로 | 설명 |
@@ -318,6 +318,8 @@
 - `order` (고객이 적은 주문)와 `email_orders`의 각 주문: `quantity`, `unit_price`, `option`, `payment_method`, `paid_at`,
   `payments[]`(kind·status·method·amount·approval_no·at·memo), `duplicate_payment`, `carrier`, `shipment_events[]`(at·status·location),
   `return_requested_at`, `picked_up_at`. `order`에만 `related_inquiries[]`(같은 주문으로 들어온 다른 문의)
+- `option_choices[]`: 같은 상품의 옵션별 재고 `{option, stock, sold_out, low(3개 이하), restock_at(품절일 때 재입고 예정일, 없으면 미정), current}`.
+  옵션이 없는 상품은 빈 목록. 화면의 '옵션별 재고'와 [옵션 변경], AI 초안의 '같은 상품 옵션 재고' 근거 (`backend/services/inventory.py`)
 - `customer_profile`: `points_balance`(적립금 잔액, 적립 예정 제외), `points_pending`, `point_history[]`(최근 5건), `coupons[]`(state: 사용 가능/사용함/만료)
 - 화면: 주문 관련 유형(배송·주문 취소·교환·반품·환불·결제)인데 사람이 처리하는 문의에서 주문을 찾지 못하면 [주문번호 요청 문구 넣기] 버튼
 
@@ -329,7 +331,7 @@
 | action | 추가 값 | 조건 | 결과 |
 | --- | --- | --- | --- |
 | `address` | `address` | 출고 전 | 배송지 변경 |
-| `option` | `option` | 출고 전, 같은 상품의 다른 옵션, 품절 아님 | 옵션 변경 (가격 같음) |
+| `option` | `option` | 출고 전, 같은 상품의 다른 옵션, 재고 ≥ 주문 수량 (아니면 409 `SOLD_OUT`) | 옵션 변경 (가격 같음), 재고 이동 (새 옵션 -수량, 원래 옵션 +수량) |
 | `partial_cancel` | `count` | 출고 전, 1 ≤ count < 수량 | 수량·금액 줄임 + 결제 '승인 취소'(부분) + 열린 취소 티켓 승인 |
 | `duplicate_cancel` | - | 정리되지 않은 중복 승인 (같은 금액 10분 안 두 번) | 결제 '승인 취소' 1건 |
 | `points` | `amount`, `reason` | 쇼핑몰 고객, 상담원 3,000원 / 관리자 50,000원까지 (넘으면 403) | 적립금 +amount |
@@ -504,7 +506,8 @@
 - `next`: 처리 대기열의 첫 문의 (긴급도 높은 순 → 오래된 순, 문의 상세의 이전·다음과 같은 순서). 미처리가 없으면 null
 - `due_soon`: 아직 답변 기한이 남은 미처리 문의를 기한이 가까운 순으로 (기한을 넘긴 문의는 '답변 기한 초과'에서 봄)
 - 항목: `id, inquiry_number, title, customer_name, preview(내용 앞 90자), status, category, urgency, assigned_to(이름), created_at, due_at, overdue`
-- 답변 기한은 계산값(긴급 4시간, 그 외 24시간)이라 DB에서 정렬할 수 없어, 미처리 문의를 읽어 파이썬에서 정렬합니다 (미처리는 많지 않음)
+- 답변 기한은 계산값(주말 제외, 긴급 4시간, 그 외 24시간)이라 DB에서 정렬할 수 없어, 미처리 문의를 읽어 파이썬에서 정렬합니다 (미처리는 많지 않음).
+  목록의 `?overdue=true`도 같은 이유로 미처리 문의의 기한을 계산해 거릅니다
 - `rechecks`: '확인 후 다시 안내' 표시가 남은 문의 (다시 안내 기한 가까운 순, 위 항목 + `recheck_note, recheck_due_at, recheck_overdue`), `recheck_total`: 전체 수
 
 ```json
