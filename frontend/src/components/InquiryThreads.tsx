@@ -74,11 +74,12 @@ function FollowUp({ inquiry, actions, onDone }: { inquiry: InquiryPublic; action
   );
 }
 
-/** 고객에게 보이는 상태: 내부 상태 이름(담당자 처리·자동 처리 등) 대신, 마지막 글이 누구 것인지로 */
-function CustomerStatus({ waiting }: { waiting: boolean }) {
-  return waiting
-    ? <span className="whitespace-nowrap rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">답변 준비 중</span>
-    : <span className="whitespace-nowrap rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">답변 완료</span>;
+/** 고객에게 보이는 상태: 내부 상태 이름(담당자 처리·자동 처리 등) 대신, 마지막 글이 누구 것인지로.
+ *  상담원이 '확인 후 다시 안내'를 표시해 두었으면 답변을 받았어도 '추가 안내 예정' */
+function CustomerStatus({ waiting, more }: { waiting: boolean; more: boolean }) {
+  if (waiting) return <span className="whitespace-nowrap rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">답변 준비 중</span>;
+  if (more) return <span className="whitespace-nowrap rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">추가 안내 예정</span>;
+  return <span className="whitespace-nowrap rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">답변 완료</span>;
 }
 
 export default function InquiryThreads({ items, notice, actions, reload }: {
@@ -125,7 +126,7 @@ export default function InquiryThreads({ items, notice, actions, reload }: {
               <span className="min-w-0 flex-1">
                 <span className="flex flex-wrap items-center gap-2">
                   <span className="text-base font-semibold text-ink">{found.title}</span>
-                  <CustomerStatus waiting={waiting} />
+                  <CustomerStatus waiting={waiting} more={!!found.more_answer_coming} />
                 </span>
                 <span className="mt-0.5 block text-xs text-muted">{formatDate(found.created_at)} · <span className="font-mono">{found.inquiry_number}</span></span>
                 {!isOpen && (
@@ -149,6 +150,7 @@ export default function InquiryThreads({ items, notice, actions, reload }: {
                     </Bubble>
                   ))}
                   {waiting && <Note>담당자가 확인하고 있어요. {notice}</Note>}
+                  {!waiting && found.more_answer_coming && <Note>담당자가 확인한 뒤 이어서 안내해 드릴게요.</Note>}
                 </div>
                 <div className="mt-3">
                   <FollowUp inquiry={found} actions={actions}

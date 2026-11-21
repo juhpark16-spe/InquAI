@@ -4,6 +4,7 @@
     PUT  /api/responses/{id}               초안 수정 (AI 초안이든 상담원 초안이든)
     POST /api/responses/{id}/approve       승인·발송 → 문의 상태 '완료'
     POST /api/inquiries/{id}/draft         AI 초안 만들기 (FAQ·주문 정보·대화를 근거로, 상담원이 검토 후 발송)
+    PUT/DELETE /api/inquiries/{id}/recheck  다시 안내 표시 정하기·풀기 (발송할 때 recheck 로 함께 정해도 됨)
 
 '발송'은 메일이 아니라 DB 저장입니다. 고객은 내 문의 조회(이메일 + 비밀번호)에서 답변을 봅니다.
 권한은 문의와 같습니다: 관리자는 전체, 상담원은 자신에게 배정된 문의만.
@@ -26,6 +27,7 @@ from backend.core.rate_limit import rate_limit
 from backend.database.models import AdminUser, Inquiry, Response, utcnow
 from backend.schemas.inquiry_admin import ResponseOut
 from backend.services import notify
+from backend.services.recheck import RecheckIn, clear_recheck, set_recheck
 from backend.services.audit import add_audit
 
 router = APIRouter(tags=["답변"])
@@ -47,10 +49,15 @@ class _Text(BaseModel):
 
 class ResponseCreate(_Text):
     send: bool = False  # true: 바로 발송, false: 초안으로 저장
+    recheck: RecheckIn | None = None  # 발송하면서 '확인 후 다시 안내' 표시 (send=true 일 때만)
 
 
 class ResponseUpdate(_Text):
     pass
+
+
+class ResponseSend(_Text):
+    recheck: RecheckIn | None = None  # 발송하면서 '확인 후 다시 안내' 표시
 
 
 class DraftRequest(BaseModel):
@@ -66,7 +73,7 @@ def _get_response_for_user(db: Session, response_id: int, user: AdminUser) -> Re
     return response
 
 
-def _send(db: Session, request: Request, response: Response, user: AdminUser) -> None:
+def _send(db: Session, request: Request, response: Response, user: AdminUser, recheck: RecheckIn | None = None) -> None:
     final = response.final_text or response.draft_text
     response.final_text = final
     # AI 초안을 고쳐서 보냈는지 (성공 지표: 초안 무수정 승인율). 상담원이 직접 쓴 답변은 해당 없음
@@ -79,6 +86,11 @@ def _send(db: Session, request: Request, response: Response, user: AdminUser) ->
     add_audit(db, request, "response_approve", user, "inquiry", inquiry.id, response_id=response.id,
               generated_by=response.generated_by, is_edited=response.is_edited, before=before, after="완료")
     notify.answer_registered(db, inquiry)  # 고객에게 "답변이 등록되었습니다" 알림 (시연용 기록)
+    # 다시 안내: 체크하고 보내면 표시를 남기고(바꾸고), 체크 없이 보내면 이 답변이 다시 안내한 것이므로 표시를 풂
+    if recheck is not None:
+        set_recheck(db, request, user, inquiry, recheck)
+    else:
+        clear_recheck(db, request, user, inquiry, "answered")
 
 
 @router.post("/inquiries/{inquiry_id}/responses", response_model=ResponseOut, status_code=201,
@@ -95,7 +107,7 @@ def create_response(inquiry_id: int, body: ResponseCreate, request: Request, use
     db.flush()
     add_audit(db, request, "response_create", user, "inquiry", inquiry.id, response_id=response.id)
     if body.send:
-        _send(db, request, response, user)
+        _send(db, request, response, user, body.recheck)
     db.commit()
     db.refresh(response)
     return response
@@ -115,14 +127,14 @@ def update_response(response_id: int, body: ResponseUpdate, request: Request, us
 
 
 @router.post("/responses/{response_id}/approve", response_model=ResponseOut, summary="승인·발송 (로그인)")
-def approve_response(response_id: int, request: Request, user: LoginUser, db: DB, body: ResponseUpdate | None = None):
-    """body 로 최종 문장을 함께 보내면 그 내용으로 저장 후 발송 (수정과 발송을 한 번에)."""
+def approve_response(response_id: int, request: Request, user: LoginUser, db: DB, body: ResponseSend | None = None):
+    """body 로 최종 문장을 함께 보내면 그 내용으로 저장 후 발송 (수정과 발송을 한 번에). recheck 는 다시 안내 표시."""
     response = _get_response_for_user(db, response_id, user)
     if response.status != "초안":
         raise AppError(400, "이미 발송한 답변입니다.", "INVALID_STATE")
     if body is not None:
         response.final_text = body.text
-    _send(db, request, response, user)
+    _send(db, request, response, user, body.recheck if body else None)
     db.commit()
     db.refresh(response)
     return response
@@ -168,3 +180,23 @@ def create_draft(inquiry_id: int, request: Request, user: LoginUser, db: DB, bod
     db.commit()
     db.refresh(draft)
     return draft
+
+
+@router.put("/inquiries/{inquiry_id}/recheck", summary="다시 안내 표시 정하기·바꾸기 (로그인)")
+def put_recheck(inquiry_id: int, body: RecheckIn, request: Request, user: LoginUser, db: DB):
+    """답변을 보낸 뒤에 표시를 남기거나 기한·내용을 바꿀 때 (보통은 발송할 때 recheck 로 함께 정함)"""
+    inquiry = get_inquiry_for_user(db, inquiry_id, user)
+    set_recheck(db, request, user, inquiry, body)
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/inquiries/{inquiry_id}/recheck", summary="다시 안내 표시 풀기 (로그인)")
+def delete_recheck(inquiry_id: int, request: Request, user: LoginUser, db: DB):
+    """확인 결과를 다른 방법(전화 등)으로 안내했거나 더 안내할 것이 없을 때. 다음 답변을 보내면 자동으로 풀림"""
+    inquiry = get_inquiry_for_user(db, inquiry_id, user)
+    if not inquiry.recheck_note:
+        raise AppError(409, "다시 안내 표시가 없는 문의입니다.", "NO_RECHECK")
+    clear_recheck(db, request, user, inquiry, "manual")
+    db.commit()
+    return {"ok": True}

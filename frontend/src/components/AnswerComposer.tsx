@@ -3,9 +3,11 @@
 //         사이사이 티켓 처리·AI 오류 안내 (배정·상태 변경·알림은 '전체 처리 이력'에서)
 // - 입력: [답변] 탭 = 초안 저장·발송 (AI 초안이 있으면 채워 둠, [AI 초안 만들기], 참고 FAQ 넣기) / [내부 메모] 탭 = 상담원끼리 메모
 // - AI 초안의 [확인 필요: …] 표시와 확인할 것 목록을 보여 주고, 표시가 남은 채로 보내려 하면 한 번 더 물음
+// - [확인 후 다시 안내]: "확인 후 안내드리겠습니다"를 먼저 보낼 때 체크 → 확인할 내용·기한을 남겨 목록·대시보드·알림에 표시.
+//   다음 답변을 보내면 표시가 풀림 (backend/services/recheck.py)
 import { useEffect, useRef, useState } from "react";
 
-import { customerApi, errorMessage, inquiryApi, responseApi, templateApi, type ReplyTemplate } from "../services/api";
+import { customerApi, errorMessage, inquiryApi, responseApi, templateApi, type RecheckInput, type ReplyTemplate } from "../services/api";
 import type { FaqPublic, InquiryDetail } from "../services/types";
 import { Bubble, Note } from "./Chat";
 import { Alert, Button, Spinner, Textarea, cx, formatDate } from "./ui";
@@ -35,6 +37,29 @@ function RatingBadge({ rating }: { rating: number | null }) {
   return rating > 0 ? <span className="text-emerald-700">고객 평가 👍 도움됨</span> : <span className="text-rose-700">고객 평가 👎 도움 안 됨</span>;
 }
 
+/** datetime-local 입력값 (이 컴퓨터 시각, "2026-11-21T10:00") */
+function localInput(d: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** 다시 안내 기한 빠른 선택: 오늘 오후 6시(5시 전일 때만) · 내일 오전 10시 · 내일 오후 6시 · 2일 뒤 오전 10시 */
+function duePresets(now = new Date()): [string, string][] {
+  const at = (days: number, hour: number) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + days);
+    d.setHours(hour, 0, 0, 0);
+    return localInput(d);
+  };
+  return [
+    ...(now.getHours() < 17 ? [["오늘 오후 6시", at(0, 18)] as [string, string]] : []),
+    ["내일 오전 10시", at(1, 10)], ["내일 오후 6시", at(1, 18)], ["2일 뒤 오전 10시", at(2, 10)],
+  ];
+}
+
+// "확인 후 안내드리겠습니다" 같은 문장이 있으면 [확인 후 다시 안내] 체크를 권함
+const LATER_WORDS = /확인\s*(후|하여|해서|하고).{0,20}(안내|연락|답변)/;
+
 // AI 초안 다시 만들기에 붙일 요청 (상담원이 직접 적어도 됨, 200자)
 const DRAFT_ASKS = ["더 짧게", "사과를 먼저", "더 정중하게", "회수·환불 일정 안내 추가"];
 
@@ -60,6 +85,13 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
     if (tools && templates === null) templateApi.list().then(setTemplates).catch(() => setTemplates([]));
   }, [tools, templates]);
   const box = useRef<HTMLTextAreaElement>(null);
+  // 확인 후 다시 안내 (발송할 때 함께 남김)
+  const [recheckOn, setRecheckOn] = useState(false);
+  const [recheckNote, setRecheckNote] = useState("");
+  const [recheckDue, setRecheckDue] = useState("");
+  const recheckReady = recheckNote.trim() !== "" && recheckDue !== "" && new Date(recheckDue).getTime() > Date.now();
+  const recheckBody = (): RecheckInput | null =>
+    recheckOn ? { note: recheckNote.trim(), due_at: new Date(recheckDue).toISOString() } : null;
 
   // 다른 문의로 이동하거나 저장 후 다시 불러오면 입력칸을 최신 초안으로 맞춤
   useEffect(() => {
@@ -89,13 +121,32 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
   }
 
   const save = (send: boolean) => {
+    if (send && recheckOn && !recheckReady) {
+      setError("확인 후 다시 안내: 확인할 내용과 다시 안내할 기한(지금 이후)을 정해 주세요.");
+      return;
+    }
     if (send && text.includes(CHECK_MARK)
       && !window.confirm("답변에 [확인 필요] 표시가 남아 있습니다. 확인한 내용으로 고치지 않고 그대로 보낼까요?")) return;
+    const recheck = send ? recheckBody() : null;
+    const ok = !send ? "초안을 저장했습니다."
+      : recheck ? `답변을 보냈습니다. '${recheck.note}'을(를) 확인한 뒤 ${formatDate(recheck.due_at)}까지 다시 안내해 주세요 (목록·대시보드·알림에 표시됩니다).`
+        : data.recheck ? "답변을 보냈습니다. 다시 안내 표시도 풀었습니다."
+          : "답변을 보냈습니다. 고객 조회 화면에 보이고 이메일 알림이 기록되었으며, 문의는 완료로 바뀌었습니다.";
     return run(send ? "send" : "save", async () => {
-    if (draft) await (send ? responseApi.approve(draft.id, text) : responseApi.update(draft.id, text));
-    else await responseApi.create(data.id, text, send);
-    if (send) setText(""); // 보낸 뒤에는 입력칸을 비워 추가 답변용으로
-  }, send ? "답변을 보냈습니다. 고객 조회 화면에 보이고 이메일 알림이 기록되었으며, 문의는 완료로 바뀌었습니다." : "초안을 저장했습니다.");
+    if (draft) await (send ? responseApi.approve(draft.id, text, recheck) : responseApi.update(draft.id, text));
+    else await responseApi.create(data.id, text, send, recheck);
+    if (send) { // 보낸 뒤에는 입력칸을 비워 추가 답변용으로
+      setText("");
+      setRecheckOn(false);
+      setRecheckNote("");
+      setRecheckDue("");
+    }
+  }, ok);
+  };
+
+  const clearRecheck = () => {
+    if (!window.confirm("답변을 보내지 않고 다시 안내 표시를 풀까요? (전화 등 다른 방법으로 안내했을 때)")) return;
+    return run("save", () => inquiryApi.clearRecheck(data.id), "다시 안내 표시를 풀었습니다.");
   };
 
   // AI 초안 만들기: 상담원이 쓰던 글이 있으면 바꿀지 먼저 물음
@@ -123,7 +174,7 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
   const thread: Item[] = [
     { type: "customer" as const, at: data.created_at, text: data.content, messageId: null, followUp: false },
     ...data.messages.map((m) => ({ type: "customer" as const, at: m.created_at, text: m.text, messageId: m.id, followUp: true })),
-    ...data.history.filter((e) => e.kind === "ticket" || (e.kind === "ai" && e.text.includes("오류"))).map((e) => ({
+    ...data.history.filter((e) => e.kind === "ticket" || e.kind === "recheck" || (e.kind === "ai" && e.text.includes("오류"))).map((e) => ({
       type: "note" as const, at: e.at, warn: e.kind === "ai", text: `${e.actor} · ${e.text}`,
     })),
     ...data.notes.map((n) => ({ type: "memo" as const, at: n.created_at, text: n.text, author: n.author })),
@@ -238,6 +289,22 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
           </>
         ) : (
           <>
+            {data.recheck && (
+              <div className={cx("flex flex-wrap items-start justify-between gap-2 rounded-lg border px-3 py-2 text-sm",
+                data.recheck.overdue ? "border-rose-200 bg-rose-50 text-rose-900" : "border-blue-200 bg-blue-50 text-blue-900")}>
+                <div className="min-w-0">
+                  <p className="font-semibold">
+                    🔁 다시 안내할 문의 · {data.recheck.overdue ? "기한이 지났어요" : `${formatDate(data.recheck.due_at)}까지`}
+                  </p>
+                  <p>확인할 내용: {data.recheck.note} <span className="text-xs opacity-75">({data.recheck.set_by}{data.recheck.set_at ? ` · ${formatDate(data.recheck.set_at)}` : ""})</span></p>
+                  <p className="text-xs opacity-80">확인 결과를 담아 답변을 보내면 표시가 풀립니다. 아직 확인 중이면 아래 [확인 후 다시 안내]를 다시 체크해 보내세요.</p>
+                </div>
+                <button type="button" onClick={clearRecheck} disabled={!!busy}
+                  className="shrink-0 rounded-md border border-current/30 bg-white px-2 py-1 text-xs font-medium hover:bg-white/70">
+                  답변 없이 표시 풀기
+                </button>
+              </div>
+            )}
             {refFaqCodes.length > 0 && (
               <div className="flex flex-wrap items-center gap-1.5 text-sm">
                 <span className="text-slate-600">참고 FAQ 넣기:</span>
@@ -311,6 +378,38 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
                 if (e.key.toLowerCase() === "s") { e.preventDefault(); if (text.trim() && (!draft || dirty)) save(false); }
               }}
               placeholder="고객에게 보낼 답변을 입력하세요. 오른쪽 주문 정보와 참고 FAQ를 확인해 주세요." disabled={!!busy} />
+            <div className={cx("rounded-lg border px-3 py-2", recheckOn ? "border-blue-200 bg-blue-50/60" : "border-transparent px-0 py-0")}>
+              <label className="flex w-fit cursor-pointer items-center gap-1.5 text-sm font-medium text-ink"
+                title="바로 답할 수 없어 '확인 후 안내드리겠습니다'를 먼저 보낼 때. 확인할 내용·기한이 목록·대시보드·알림에 남습니다">
+                <input type="checkbox" checked={recheckOn} disabled={!!busy} onChange={(e) => {
+                  setRecheckOn(e.target.checked);
+                  if (e.target.checked && !recheckDue) setRecheckDue(duePresets()[0][1]);
+                }} />
+                🔁 확인 후 다시 안내
+                {!recheckOn && LATER_WORDS.test(text) && (
+                  <span className="text-xs font-normal text-blue-700">· 답변에 '확인 후 안내' 문장이 있어요. 체크하면 잊지 않게 표시해 둡니다</span>
+                )}
+              </label>
+              {recheckOn && (
+                <div className="mt-2 space-y-2">
+                  <input value={recheckNote} onChange={(e) => setRecheckNote(e.target.value)} maxLength={200} disabled={!!busy}
+                    placeholder="확인할 내용 (예: 택배사 분실 조사 결과, 재고 입고일)" aria-label="확인할 내용"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm outline-none focus:border-blue-400" />
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                    <span className="text-slate-600">다시 안내할 기한:</span>
+                    {duePresets().map(([label, value]) => (
+                      <button key={label} type="button" onClick={() => setRecheckDue(value)} disabled={!!busy}
+                        className={cx("rounded-full border px-2 py-0.5", recheckDue === value ? "border-blue-500 bg-blue-100 text-blue-800" : "border-slate-300 bg-white text-slate-700 hover:border-blue-400")}>
+                        {label}
+                      </button>
+                    ))}
+                    <input type="datetime-local" value={recheckDue} min={localInput(new Date())} onChange={(e) => setRecheckDue(e.target.value)}
+                      disabled={!!busy} aria-label="다시 안내할 기한"
+                      className="rounded-full border border-slate-300 bg-white px-2 py-0.5 outline-none focus:border-blue-400" />
+                  </div>
+                </div>
+              )}
+            </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm text-slate-500">
                 {marks > 0 && <b className="mr-1 font-semibold text-amber-700">[확인 필요] {marks}곳 남음 ·</b>}
@@ -320,9 +419,9 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
                 <Button variant="ghost" disabled={!!busy || !text.trim() || (!!draft && !dirty)} onClick={() => save(false)}>
                   {busy === "save" ? <Spinner /> : "초안 저장"}
                 </Button>
-                <Button disabled={!!busy || !text.trim()} onClick={() => save(true)}
+                <Button disabled={!!busy || !text.trim() || (recheckOn && !recheckReady)} onClick={() => save(true)}
                   title="고객 조회 화면에 보이고 이메일 알림이 기록되며 문의가 완료됩니다 (단축키 Ctrl+Enter · 초안 저장 Ctrl+S · 이전·다음 문의 Alt+←/→)">
-                  {busy === "send" ? <Spinner /> : "발송"}
+                  {busy === "send" ? <Spinner /> : recheckOn ? "발송 · 다시 안내 표시" : "발송"}
                 </Button>
               </div>
             </div>

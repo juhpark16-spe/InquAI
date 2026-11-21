@@ -161,6 +161,39 @@ test("출고 전 배송지 변경 요청 → 상담원이 [바로 처리]로 배
   await expect(staff.getByText(`배송지 ${address}`, { exact: true })).toBeVisible();                     // 주문 정보의 배송지
 });
 
+test("확인 후 다시 안내를 체크해 발송 → 다시 안내 표시·목록 필터 → 고객에게 '추가 안내 예정'", async ({ page }) => {
+  // 주문과 상관없는 일반 질문 (재입고 일정은 공급사 확인이 필요해 먼저 '확인 후 안내')
+  const email = `e2e-recheck-${Date.now()}@example.com`;
+  const title = "재입고 일정 문의 (자동 테스트)";
+  const number = await createInquiry(page, email, title, "니트 가디건 아이보리 M 사이즈가 품절인데 언제 다시 들어오는지 알 수 있을까요?");
+
+  await staffLogin(page, "admin");
+  await page.getByLabel("문의 검색").focus();
+  await page.keyboard.type(number);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: title })).toBeVisible();
+
+  await page.getByPlaceholder(/고객에게 보낼 답변을 입력하세요/).fill("문의 감사합니다. 공급사에 재입고 일정을 확인 후 다시 안내드리겠습니다.");
+  await expect(page.getByText(/'확인 후 안내' 문장이 있어요/)).toBeVisible();          // 체크 권유
+  await page.getByLabel("🔁 확인 후 다시 안내").check();
+  await page.getByLabel("확인할 내용").fill("공급사 재입고 일정");
+  await page.getByRole("button", { name: "내일 오전 10시" }).click();
+  await page.getByRole("button", { name: "발송 · 다시 안내 표시" }).click();
+  await expect(page.getByText(/공급사 재입고 일정'을\(를\) 확인한 뒤/)).toBeVisible();
+  await expect(page.getByText(/다시 안내할 문의 ·/)).toBeVisible();                     // 답변 칸 위 표시
+
+  await page.goto("/admin/inquiries?recheck=true");
+  await expect(page.getByRole("cell", { name: title })).toBeVisible();
+
+  await page.context().clearCookies();
+  await page.goto("/inquiry/lookup");
+  await page.getByLabel("문의할 때 쓴 이메일").fill(email);
+  await page.getByLabel("조회 비밀번호").fill(LOOKUP_PASSWORD);
+  await page.getByRole("button", { name: "조회" }).click();
+  await expect(page.getByText("추가 안내 예정")).toBeVisible();
+  await expect(page.getByText("공급사 재입고 일정")).toHaveCount(0);                     // 내부 메모는 고객에게 안 보임
+});
+
 test("조회 비밀번호가 틀리면 문의가 보이지 않음", async ({ page }) => {
   const email = `e2e-wrong-${Date.now()}@example.com`;
   await createInquiry(page, email, "적립금 문의 (자동 테스트)", "적립금은 언제 들어오나요? 확인 부탁드려요.");

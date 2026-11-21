@@ -42,6 +42,8 @@ class InquiryListItem(BaseModel):
     created_at: UTCDateTime
     due_at: UTCDateTime   # 답변 기한 (긴급 4시간, 그 외 24시간)
     overdue: bool         # 미처리인데 기한을 넘김
+    recheck_note: str | None = None          # '확인 후 다시 안내' 표시: 확인할 내용
+    recheck_due_at: UTCDateTime | None = None  # 다시 안내할 기한
 
 
 class NoteCreate(BaseModel):
@@ -299,7 +301,15 @@ class Event(BaseModel):
     at: UTCDateTime
     actor: str
     text: str
-    kind: str  # received / ai / assign / status / draft / sent (대화형 화면에서 안내 줄을 고를 때 씀)
+    kind: str  # received / ai / assign / status / draft / sent / ticket / recheck (대화형 화면에서 안내 줄을 고를 때 씀)
+
+
+class RecheckOut(BaseModel):
+    note: str            # 확인할 내용
+    due_at: UTCDateTime  # 다시 안내할 기한
+    set_at: UTCDateTime | None
+    set_by: str
+    overdue: bool        # 기한이 지났는데 아직 다시 안내하지 않음
 
 
 class InquiryDetail(BaseModel):
@@ -325,6 +335,7 @@ class InquiryDetail(BaseModel):
     history: list[Event]
     due_at: UTCDateTime
     overdue: bool
+    recheck: RecheckOut | None = None   # 확인 후 다시 안내 표시
     messages: list[MessageOut]          # 고객 추가 문의
     notes: list[NoteOut]                # 상담원 내부 메모 (고객에게 안 보임)
     attachments: list[AttachmentOut]

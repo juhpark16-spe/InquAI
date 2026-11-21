@@ -101,6 +101,7 @@ export interface InquiryFilters {
   open?: string;
   overdue?: string;
   assigned_to?: string;
+  recheck?: string;
   q?: string;
   sort?: "urgency" | "-created_at";
   page?: number;
@@ -109,7 +110,7 @@ export interface InquiryFilters {
 
 /** 알림 (🔔): 나에게 배정 · 고객 추가 문의 · 답변 기한 1시간 이내 · 고객 👎 (backend/api/notifications.py) */
 export interface NotificationItem {
-  kind: "assigned" | "followup" | "due_soon" | "bad_rating";
+  kind: "assigned" | "followup" | "due_soon" | "bad_rating" | "recheck";
   at: string;
   inquiry_id: number;
   inquiry_number: string;
@@ -183,15 +184,26 @@ export const inquiryApi = {
   // 티켓 승인·반려 (취소 승인은 출고 전 주문만 → 주문 취소). 반려는 사유 필수
   decideTicket: (ticketId: number, status: "승인" | "반려", memo?: string) =>
     http.patch(`/tickets/${ticketId}`, { status, memo: memo || null }).then((r) => r.data),
+  // 확인 후 다시 안내 표시: 정하기·바꾸기 / 답변 없이 풀기 (다음 답변을 보내면 자동으로 풀림)
+  setRecheck: (id: number, recheck: RecheckInput) => http.put(`/inquiries/${id}/recheck`, recheck).then((r) => r.data),
+  clearRecheck: (id: number) => http.delete(`/inquiries/${id}/recheck`).then((r) => r.data),
 };
+
+/** 답변을 보내면서 남기는 '확인 후 다시 안내' (확인할 내용 + 다시 안내할 기한, ISO 시각) */
+export interface RecheckInput {
+  note: string;
+  due_at: string;
+}
 
 // ---- 답변 (상담원 직접 작성·초안 수정·발송) ----
 export const responseApi = {
-  create: (inquiryId: number, text: string, send: boolean) =>
-    http.post<ResponseItem>(`/inquiries/${inquiryId}/responses`, { text, send }).then((r) => r.data),
+  create: (inquiryId: number, text: string, send: boolean, recheck?: RecheckInput | null) =>
+    http.post<ResponseItem>(`/inquiries/${inquiryId}/responses`, { text, send, recheck: send ? recheck ?? null : null })
+      .then((r) => r.data),
   update: (id: number, text: string) => http.put<ResponseItem>(`/responses/${id}`, { text }).then((r) => r.data),
-  approve: (id: number, text?: string) =>
-    http.post<ResponseItem>(`/responses/${id}/approve`, text === undefined ? undefined : { text }).then((r) => r.data),
+  approve: (id: number, text?: string, recheck?: RecheckInput | null) =>
+    http.post<ResponseItem>(`/responses/${id}/approve`, text === undefined ? undefined : { text, recheck: recheck ?? null })
+      .then((r) => r.data),
   // AI 초안 만들기: 보내지 않은 초안 자리에 씀. 상담원이 고친 초안이 있으면 replace=true 일 때만 바꿈 (아니면 409)
   draft: (inquiryId: number, replace = false, instruction?: string) =>
     http.post<ResponseItem>(`/inquiries/${inquiryId}/draft`, { replace, instruction: instruction?.trim() || null }, { timeout: 30000 })
@@ -262,6 +274,9 @@ export interface Priorities {
   open: number;
   next: PriorityItem | null;
   due_soon: PriorityItem[];
+  // 확인 후 다시 안내할 문의 (다시 안내 기한 가까운 순)
+  rechecks: (PriorityItem & { recheck_note: string; recheck_due_at: string; recheck_overdue: boolean })[];
+  recheck_total: number;
 }
 
 /** 상품별 문의 (주문에 연결된 문의만, 옵션이 달라도 같은 상품으로 묶음) */

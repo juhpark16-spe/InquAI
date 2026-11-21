@@ -39,6 +39,7 @@ import uvicorn  # noqa: E402
 
 from backend.ai.prompts import ROUTE_TOOL  # noqa: E402
 from backend.ai.rules import get_route, get_urgency  # noqa: E402
+from backend.core import rate_limit  # noqa: E402
 
 from backend.database import seed_admin, seed_data  # noqa: E402
 from backend.database.session import SessionLocal, init_db  # noqa: E402
@@ -95,6 +96,15 @@ async def lifespan(a):
 
 
 app.router.lifespan_context = lifespan
+
+
+@app.middleware("http")
+async def _no_inquiry_create_limit(request, call_next):
+    """화면 테스트는 한 IP(127.0.0.1)에서 1분 안에 문의를 6건 넘게 만듦 → 문의 등록 횟수 제한만 끔 (다른 제한은 그대로)"""
+    with rate_limit._lock:
+        for key in [k for k in rate_limit._hits if k[0] == "inquiry_create"]:
+            del rate_limit._hits[key]
+    return await call_next(request)
 
 
 def main() -> None:

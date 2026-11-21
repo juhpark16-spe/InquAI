@@ -81,7 +81,7 @@ def test_inquiry_text_matches_ordered_product(db):
 
 def test_live_set_is_relative_to_now(client, db):
     """시연 녹화 시각에도 화면이 살아 있게: 실행 시각 기준 미처리 문의 · 추가 문의 · 👎 · 새 알림"""
-    from backend.database.seed_demo import LIVE
+    from backend.database.seed_demo import LIVE, LIVE_RECHECK
 
     seeded(db)
     live_titles = {title for _, title in LIVE}
@@ -91,11 +91,13 @@ def test_live_set_is_relative_to_now(client, db):
     login(client)
     due = [x["title"] for x in client.get("/api/stats/priorities").json()["due_soon"]]
     assert "출고가 너무 늦어요" in due                                   # 기한 35분 남은 문의가 임박 목록에
+    p = client.get("/api/stats/priorities").json()
+    assert p["recheck_total"] == 1 and p["rechecks"][0]["title"] in LIVE_RECHECK   # 확인 후 다시 안내 (기한 40분)
 
     client.cookies.clear()
     client.headers.pop("X-CSRF-Token", None)
     login(client, "agent1")
     r = client.get("/api/notifications").json()
     kinds = {x["kind"] for x in r["items"] if x["unread"]}
-    assert {"followup", "bad_rating", "due_soon"} <= kinds               # 최근 일이 새 알림으로
+    assert {"followup", "bad_rating", "due_soon", "recheck"} <= kinds    # 최근 일이 새 알림으로
     assert 0 < r["unread"] < len(r["items"])                             # 3시간보다 오래된 알림은 읽은 상태

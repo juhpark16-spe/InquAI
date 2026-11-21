@@ -119,6 +119,7 @@ class InquiryPublic(BaseModel):
     attachment_count: int
     attachments: list[PublicAttachment]
     can_follow_up: bool            # 추가 문의를 남길 수 있는지
+    more_answer_coming: bool = False  # 상담원이 확인 후 다시 안내하기로 함 → '추가 안내 예정'
 
 
 class InquiryLookupResult(BaseModel):

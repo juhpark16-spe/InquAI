@@ -76,6 +76,7 @@ export interface InquiryPublic {
   attachment_count: number;
   attachments: { url: string; filename: string; message_id: number | null }[]; // 30분짜리 사진 주소
   can_follow_up: boolean;
+  more_answer_coming?: boolean; // 상담원이 확인 후 다시 안내하기로 함 → '추가 안내 예정'
 }
 
 // ---- 관리 ----
@@ -93,6 +94,17 @@ export interface InquiryListItem {
   assigned_to: Assignee | null;
   created_at: string;
   due_at: string;
+  overdue: boolean;
+  recheck_note?: string | null;   // '확인 후 다시 안내' 표시: 확인할 내용
+  recheck_due_at?: string | null; // 다시 안내할 기한
+}
+
+/** 확인 후 다시 안내 표시 (backend/services/recheck.py) */
+export interface Recheck {
+  note: string;
+  due_at: string;
+  set_at: string | null;
+  set_by: string;
   overdue: boolean;
 }
 
@@ -184,9 +196,10 @@ export interface InquiryDetail {
   email_orders: OrderCard[]; // 문의 이메일로 찾은 다른 주문 (본인 확인 필요)
   customer_history: { id: number; inquiry_number: string; title: string; status: string; created_at: string }[];
   faq_titles: Record<string, string>;
-  history: { at: string; actor: string; text: string; kind: "received" | "followup" | "ai" | "assign" | "status" | "draft" | "sent" | "correct" | "ticket" }[];
+  history: { at: string; actor: string; text: string; kind: "received" | "followup" | "ai" | "assign" | "status" | "draft" | "sent" | "correct" | "ticket" | "recheck" }[];
   due_at: string;
   overdue: boolean;
+  recheck?: Recheck | null;
   messages: { id: number; text: string; created_at: string }[];
   notes: { id: number; author: string; text: string; created_at: string }[];
   attachments: { id: number; filename: string; content_type: string; size: number; message_id: number | null; created_at: string }[];

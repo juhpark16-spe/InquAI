@@ -276,6 +276,7 @@
 | POST | /api/inquiries/{id}/notes | `{ "text": "택배사 확인 중" }` 상담원 내부 메모. 고객 API에는 절대 나가지 않음. audit `note_create` |
 | GET | /api/inquiries/{id}/attachments/{attachment_id} | 사진 보기 (로그인, 상담원은 배정된 문의만). 저장 때 확인한 형식으로만 응답, `nosniff` |
 | GET | /api/inquiries?overdue=true | 답변 기한을 넘긴 미처리만. 목록 항목에도 `due_at`, `overdue` |
+| GET | /api/inquiries?recheck=true | '확인 후 다시 안내' 표시가 남은 문의만 (다시 안내 기한 가까운 순). 목록 항목에도 `recheck_note`, `recheck_due_at` |
 
 - 대시보드 `now.overdue_open`(기한 초과 미처리), `ratings.ai / ratings.agent`(👍·👎 수와 만족도) 추가
 
@@ -355,6 +356,26 @@
 ```
 - `generated_by = agent_user`. 보내지 않은 초안이 이미 있으면 409 `DRAFT_EXISTS` (`response_id` 함께 반환, 그 초안을 수정)
 - 발송 후에도 추가 답변을 새로 작성할 수 있습니다 (문의 1건에 답변 여러 개). audit_logs (response_create)
+
+### 확인 후 다시 안내 (4주차)
+바로 답할 수 없어 "확인 후 다시 안내드리겠습니다"를 먼저 보낼 때, 잊지 않게 문의에 **확인할 내용·다시 안내할 기한**을 남깁니다.
+구현: `backend/services/recheck.py`
+
+- 발송할 때 함께: `POST /api/inquiries/{id}/responses`(send=true) · `POST /api/responses/{id}/approve` 본문에
+  `"recheck": {"note": "택배사 분실 조사 결과", "due_at": "2026-11-22T01:00:00Z"}` (note 1~200자, 기한은 지금 이후 14일 안, 아니면 422)
+- `recheck` 없이 발송하면 이번 답변이 다시 안내한 것이므로 표시가 자동으로 풀립니다 (다시 체크하면 새 내용·기한으로 바뀜)
+- 문의 상태는 그대로 `완료` (첫 답변은 보냈으므로 답변 기한 초과로 보지 않음)
+
+| 메서드 | 경로 | 설명 |
+| --- | --- | --- |
+| PUT | /api/inquiries/{id}/recheck | `{note, due_at}` 표시 정하기·바꾸기 (발송 없이) |
+| DELETE | /api/inquiries/{id}/recheck | 답변 없이 표시 풀기 (전화 등 다른 방법으로 안내했을 때). 표시가 없으면 409 `NO_RECHECK` |
+
+- 권한은 문의와 같음. 작업 기록 `recheck_set`(before·after) / `recheck_clear`(reason: answered·manual), 문의의 처리 이력·대화 안내 줄
+- 문의 상세 `recheck: {note, due_at, set_at, set_by, overdue}` (없으면 null)
+- 보이는 곳: 목록 `?recheck=true`, 대시보드 `GET /api/stats/priorities`의 `rechecks`, 🔔 알림 `recheck`(기한 1시간 전부터)
+- 고객 조회에는 `more_answer_coming: true`만 보냄 → 고객 화면 상태 '추가 안내 예정' (확인할 내용은 내부 정보라 보내지 않음)
+- [AI 초안 만들기]의 처리 기록에 "다시 안내하기로 한 내용"이 들어가 확인 결과 안내 초안을 쓰기 쉬움
 
 ### PUT /api/responses/{id} — 답변 초안 수정
 ```json
@@ -484,6 +505,7 @@
 - `due_soon`: 아직 답변 기한이 남은 미처리 문의를 기한이 가까운 순으로 (기한을 넘긴 문의는 '답변 기한 초과'에서 봄)
 - 항목: `id, inquiry_number, title, customer_name, preview(내용 앞 90자), status, category, urgency, assigned_to(이름), created_at, due_at, overdue`
 - 답변 기한은 계산값(긴급 4시간, 그 외 24시간)이라 DB에서 정렬할 수 없어, 미처리 문의를 읽어 파이썬에서 정렬합니다 (미처리는 많지 않음)
+- `rechecks`: '확인 후 다시 안내' 표시가 남은 문의 (다시 안내 기한 가까운 순, 위 항목 + `recheck_note, recheck_due_at, recheck_overdue`), `recheck_total`: 전체 수
 
 ```json
 {"open": 6, "next": {"id": 48, "title": "상품이 파손되어 왔어요", "urgency": "높음", "overdue": true, "...": "..."}, "due_soon": []}
@@ -534,6 +556,7 @@
 | `followup` | 고객 추가 문의 | 내 담당 문의 | 내 담당 + 미배정 문의 |
 | `due_soon` | 답변 기한 1시간 이내 (미처리, 알림 시각 = 기한 1시간 전) | 내 담당 문의 | 내 담당 + 미배정 문의 |
 | `bad_rating` | 고객 👎 '도움 안 됨' | 내가 보낸 답변 | 모든 답변 (AI 자동 답변 포함) |
+| `recheck` | '확인 후 다시 안내' 기한 1시간 전부터 (지나도 풀 때까지, 알림 시각 = 기한 1시간 전) | 내 담당 문의 | 내 담당 + 미배정 문의 |
 
 ```json
 {"unread": 1, "items": [{"kind": "followup", "at": "…", "inquiry_id": 48, "inquiry_number": "INQ-…", "title": "…", "text": "오하린 고객의 추가 문의", "unread": true}]}

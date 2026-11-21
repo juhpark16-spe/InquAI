@@ -169,7 +169,9 @@ def _public(inquiry: Inquiry) -> dict:
             # 본인 확인을 통과한 응답에만 넣는 30분짜리 사진 주소 (처음 문의 사진은 message_id 없음)
             "attachments": [{"url": uploads.public_url(a), "filename": a.filename, "message_id": a.message_id}
                             for a in inquiry.attachments],
-            "can_follow_up": len(inquiry.messages) < FOLLOW_UP_LIMIT}
+            "can_follow_up": len(inquiry.messages) < FOLLOW_UP_LIMIT,
+            # 상담원이 '확인 후 다시 안내'를 표시해 둠 (확인할 내용·기한 같은 내부 정보는 보내지 않음)
+            "more_answer_coming": inquiry.recheck_note is not None}
 
 
 FOLLOW_UP_LIMIT = 10  # 문의 1건에 추가 문의 최대 개수 (끝없는 대화 방지, 넘으면 새 문의로)

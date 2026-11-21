@@ -248,6 +248,19 @@ LIVE = [
 LIVE_FOLLOW_UP = ("답변 보고 다시 여쭤요. 혹시 오늘 안에 처리될 수 있을까요? 급하게 필요해서요.", 12)   # (내용, 몇 분 전)
 LIVE_BAD_RATING_MIN = 30          # 30분 전 고객 👎 → 🔔 평가 알림
 SEEN_HOURS = 3                    # 상담원이 알림을 마지막으로 본 시각 (지금 - 3시간) → 최근 일만 '새 알림'
+# 확인 후 다시 안내: 상담원이 "확인 후 안내드리겠습니다"를 먼저 보낸 문의 1건 (기한 40분 남음 → 🔔 다시 안내 알림·대시보드 카드)
+# 상담원이 답한 완료 문의 중 앞의 제목부터 찾아 씀: 제목 → (확인할 내용, 먼저 보낸 답변)
+LIVE_RECHECK_MIN = 40
+LIVE_RECHECK = {
+    "배송 완료인데 못 받았어요": ("택배사 배달 위치 확인 결과",
+                                 "불편을 드려 죄송합니다. 택배사에 배달 위치 확인을 요청드렸습니다. 확인되는 대로 다시 안내드리겠습니다."),
+    "상품이 파손되어 왔어요": ("택배사 파손 사고 회신 → 교환 일정",
+                               "불편을 드려 죄송합니다. 보내 주신 사진으로 택배사에 파손 사고 접수를 요청드렸습니다. "
+                               "택배사 회신을 받는 대로 교환 일정을 다시 안내드리겠습니다."),
+    "환불이 아직 안 들어왔어요": ("물류센터 반품 검수 완료일",
+                                  "기다리시게 해서 죄송합니다. 물류센터에 반품 검수 진행 상황을 확인 요청드렸습니다. "
+                                  "확인되는 대로 환불 일정을 다시 안내드리겠습니다."),
+}
 
 REDRAFT_ASKS = ["더 짧게", "사과를 먼저", "더 정중하게", "회수·환불 일정 안내 추가"]  # AnswerComposer 의 요청 버튼과 같음
 FOLLOW_UPS = ["답변 감사합니다. 그런데 한 가지 더 여쭤봐도 될까요? 다른 색상으로도 교환이 되나요?",
@@ -496,6 +509,25 @@ def _live_touches(db: Session, now: datetime) -> None:
     if len(done) > 1:  # 그다음 답변에 고객이 '도움 안 됨'
         r = done[1]
         r.rating, r.rated_at = -1, now - timedelta(minutes=LIVE_BAD_RATING_MIN)
+    used = {r.inquiry_id for r in done[:2]}
+    # 시연 상담원(agent1 김하늘)의 문의를 먼저 (장면 6-3)
+    agent1 = db.scalar(select(AdminUser.id).where(AdminUser.username == "agent1"))
+    picks = sorted((r for r in done if r.inquiry.title in LIVE_RECHECK and r.inquiry_id not in used),
+                   key=lambda r: r.approved_by != agent1)   # 같은 상담원이면 가장 최근에 답한 문의 (done 은 최신순)
+    target = picks[0] if picks else None
+    if target:   # 보낸 답변을 '확인 후 안내' 답변으로 바꾸고 다시 안내 표시
+        note, interim = LIVE_RECHECK[target.inquiry.title]
+        minutes = LIVE_RECHECK_MIN
+        target.draft_text = target.final_text = interim
+        target.is_edited = target.generated_by == "llm"
+        target.rating = target.rated_at = None
+        inquiry = target.inquiry
+        inquiry.recheck_note, inquiry.recheck_due_at = note, now + timedelta(minutes=minutes)
+        inquiry.recheck_by, inquiry.recheck_at = target.approved_by, target.approved_at
+        when = (as_utc(inquiry.recheck_due_at) + timedelta(hours=9)).strftime("%m/%d %H:%M")
+        db.add(AdminAuditLog(admin_id=target.approved_by, action="recheck_set", target_type="inquiry", target_id=inquiry.id,
+                             created_at=target.approved_at, detail={"before": None, "after": {"note": note, "due_at": when},
+                                                                    "summary": f"{note} (기한 {when})"}))
     for user in db.scalars(select(AdminUser)):
         user.notifications_seen_at = now - timedelta(hours=SEEN_HOURS)
     db.flush()

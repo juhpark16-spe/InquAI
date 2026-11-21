@@ -204,6 +204,7 @@ def priorities(_: AdminOnly, db: DB, limit: int = Query(5, ge=1, le=20)):
 
     - next: 처리 대기열의 첫 문의 (긴급도 높은 순 → 오래된 순, 문의 상세의 이전·다음과 같은 순서)
     - due_soon: 아직 기한이 남은 미처리 문의를 기한이 가까운 순으로 (기한을 넘긴 문의는 '답변 기한 초과' 카드에서 봄)
+    - rechecks: '확인 후 다시 안내' 표시가 남은 문의 (다시 안내 기한이 가까운 순)
     """
     rows = db.scalars(select(Inquiry).where(Inquiry.status.in_(OPEN_STATUSES))
                       .options(selectinload(Inquiry.analysis), selectinload(Inquiry.assignee))).all()
@@ -212,8 +213,15 @@ def priorities(_: AdminOnly, db: DB, limit: int = Query(5, ge=1, le=20)):
     now = utcnow()
     upcoming = sorted((i for i in rows if sla.due_at(i.created_at, i.analysis.urgency if i.analysis else None) > now),
                       key=lambda i: (sla.due_at(i.created_at, i.analysis.urgency if i.analysis else None), i.id))
+    rechecks = db.scalars(select(Inquiry).where(Inquiry.recheck_due_at.is_not(None))
+                          .options(selectinload(Inquiry.analysis), selectinload(Inquiry.assignee))
+                          .order_by(Inquiry.recheck_due_at, Inquiry.id)).all()
     return {"open": len(rows), "next": _priority_item(queue[0]) if queue else None,
-            "due_soon": [_priority_item(i) for i in upcoming[:limit]]}
+            "due_soon": [_priority_item(i) for i in upcoming[:limit]],
+            # 확인 후 다시 안내할 문의 (기한이 가까운 순, 지난 것 먼저)
+            "rechecks": [{**_priority_item(i), "recheck_note": i.recheck_note, "recheck_due_at": as_utc(i.recheck_due_at),
+                          "recheck_overdue": as_utc(i.recheck_due_at) <= now} for i in rechecks[:limit]],
+            "recheck_total": len(rechecks)}
 
 
 @router.get("/activity", summary="최근 처리 활동 (관리자)")

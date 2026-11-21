@@ -8,6 +8,7 @@
 | followup | 고객 추가 문의 | 내 담당 문의 | 내 담당 + 미배정 문의 |
 | due_soon | 답변 기한 1시간 이내 (미처리) | 내 담당 문의 | 내 담당 + 미배정 문의 |
 | bad_rating | 고객 👎 '도움 안 됨' | 내가 보낸 답변 | 모든 답변 (AI 자동 답변 포함) |
+| recheck | '확인 후 다시 안내' 기한 1시간 전·지남 | 내 담당 문의 | 내 담당 + 미배정 문의 |
 
 - 최근 7일, 최신순 20건. 내가 한 일(내가 나에게 배정 등)은 알리지 않음
 - 읽음: 계정의 notifications_seen_at 이후 알림이 '새 알림' (다른 PC에서 로그인해도 이어짐)
@@ -85,6 +86,14 @@ def build(db, user) -> list[dict]:
     for r, i in db.execute(stmt).all():
         who = "AI 자동 답변" if r.approved_by is None else "내 답변" if r.approved_by == user.id else "상담원 답변"
         items.append(_item("bad_rating", r.rated_at, i, f"{who}에 고객이 '도움 안 됨'을 남김"))
+
+    # 5. 다시 안내 기한: 1시간 전부터 (지나도 풀 때까지 남음). 알림 시각 = 기한 1시간 전
+    for i in db.scalars(select(Inquiry).where(Inquiry.recheck_due_at.is_not(None), scope)).all():
+        due = as_utc(i.recheck_due_at)
+        if due <= now + DUE_SOON:
+            left = round((due - now).total_seconds() / 60)
+            when = f"{left}분 남음" if left > 0 else "기한 지남"
+            items.append(_item("recheck", due - DUE_SOON, i, f"다시 안내 {when} · {i.recheck_note}"))
 
     items.sort(key=lambda x: x["at"], reverse=True)
     return items[:LIMIT]

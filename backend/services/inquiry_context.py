@@ -233,6 +233,10 @@ def history(db: Session, inquiry: Inquiry) -> list[dict]:
             kind = "ticket"
         elif a.action == "order_action":
             text, kind = f"바로 처리 · {d.get('summary', '')}", "ticket"
+        elif a.action == "recheck_set":
+            text, kind = f"다시 안내 예정 · {d.get('summary', '')}", "recheck"
+        elif a.action == "recheck_clear":
+            text, kind = f"다시 안내 완료 · {d.get('summary', '')}", "recheck"
         else:
             text = a.action
         events.append({"at": a.created_at, "actor": actor, "text": text, "kind": kind})

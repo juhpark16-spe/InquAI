@@ -8,7 +8,7 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 
 import { useAuth } from "../../auth/AuthProvider";
 import Icon, { type IconName } from "../../components/Icon";
-import { Alert, Badge, Spinner, cx, initialOf } from "../../components/ui";
+import { Alert, Badge, Spinner, cx, formatDate, initialOf } from "../../components/ui";
 import { errorMessage, statsApi, type Priorities, type PriorityItem, type ProductStats, type StatsSummary } from "../../services/api";
 import { CATEGORIES } from "../../services/types";
 
@@ -163,6 +163,35 @@ function DueSoon({ items, overdue, failed }: { items: PriorityItem[] | undefined
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/** 확인 후 다시 안내할 문의: "확인 후 안내드리겠습니다"를 먼저 보낸 문의 (다시 안내 기한 가까운 순). 있을 때만 보임 */
+function Rechecks({ items, total }: { items: Priorities["rechecks"]; total: number }) {
+  if (!total) return null;
+  return (
+    <section className="mt-3 rounded-2xl border border-hairline bg-white p-5">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-lg font-semibold text-ink">🔁 다시 안내할 문의 <span className="font-normal text-muted">{total}건</span></h2>
+        <Link to="/admin/inquiries?recheck=true" className="text-sm font-semibold text-primary hover:underline">전체 보기 →</Link>
+      </div>
+      <ul className="mt-2 divide-y divide-hairline">
+        {items.map((i) => (
+          <li key={i.id}>
+            <Link to={`/admin/inquiries/${i.id}`} className="flex items-center gap-3 rounded-lg py-2.5 hover:bg-surface-soft">
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-base font-medium text-ink">{i.title}</span>
+                <span className="block truncate text-sm text-muted">확인할 내용: {i.recheck_note} · {i.assigned_to ?? "미배정"}</span>
+              </span>
+              <span className={cx("shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold",
+                i.recheck_overdue ? "bg-rose-50 text-rose-700" : "bg-blue-50 text-blue-700")}>
+                {i.recheck_overdue ? "기한 지남" : formatDate(i.recheck_due_at)}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }
@@ -368,6 +397,7 @@ export default function DashboardPage() {
           <NextUp item={prio?.next} open={prio?.open ?? data.now.open} failed={prio === null} />
           <DueSoon items={prio?.due_soon} overdue={data.now.overdue_open} failed={prio === null} />
         </div>
+        {prio && <Rechecks items={prio.rechecks ?? []} total={prio.recheck_total ?? 0} />}
       </section>
 
       {/* 기간 지표: 한 카드 안에 구분선으로 4칸 */}

@@ -112,9 +112,14 @@ class Inquiry(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(10), default="접수")
     privacy_agreed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 개인정보 수집·이용 동의 시각
     assigned_to: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"))
+    # 다시 안내 (backend/services/recheck.py): "확인 후 다시 안내드리겠습니다"를 먼저 보냈을 때 확인할 내용·기한
+    recheck_note: Mapped[str | None] = mapped_column(String(200))
+    recheck_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    recheck_by: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"))
+    recheck_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
-    assignee: Mapped[AdminUser | None] = relationship()
+    assignee: Mapped[AdminUser | None] = relationship(foreign_keys=[assigned_to])
     analysis: Mapped["AnalysisResult | None"] = relationship(back_populates="inquiry", uselist=False)
     responses: Mapped[list["Response"]] = relationship(back_populates="inquiry", order_by="Response.id")
     tickets: Mapped[list["Ticket"]] = relationship(back_populates="inquiry")

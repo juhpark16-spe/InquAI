@@ -82,6 +82,8 @@ def build_input(db: Session, inquiry: Inquiry, faqs: list[dict], analysis: dict 
                                                      AdminAuditLog.action == "order_action").order_by(AdminAuditLog.id)).all()
     lines = [f"티켓 #{t.id} {t.ticket_type} {t.status}" + (f" (상담원 메모: {t.memo})" if t.memo else "") for t in tickets]
     lines += [f"상담원 처리 완료: {(a.detail or {}).get('summary', '')}" for a in actions]
+    if inquiry.recheck_note:  # "확인 후 다시 안내드리겠습니다"를 이미 보냈고, 이번 답변이 그 확인 결과 안내
+        lines.append(f"다시 안내하기로 한 내용: {inquiry.recheck_note} (확인 결과는 상담원이 채움)")
     parts.append("[처리 기록]\n" + ("\n".join(lines) or "없음"))
     parts.append("[FAQ]\n" + ("\n".join(f"[{f['id']}] Q: {f['question']}\nA: {f['answer']}" for f in faqs) or "관련 FAQ 없음"))
 

@@ -72,6 +72,10 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | content | TEXT | 문의 원문 |
 | status | VARCHAR(10) | 아래 상태값 |
 | assigned_to | FK → admin_users NULL | 담당 상담원 |
+| recheck_note | VARCHAR(200) NULL | 확인 후 다시 안내: 확인할 내용 (표시가 없으면 NULL, `backend/services/recheck.py`) |
+| recheck_due_at | DATETIME NULL | 다시 안내할 기한 |
+| recheck_by | FK → admin_users NULL | 표시한 상담원 |
+| recheck_at | DATETIME NULL | 표시한 시각 |
 | **updated_at** | DATETIME | 상태가 바뀔 때마다 갱신 |
 
 **status 값과 바뀌는 시점**

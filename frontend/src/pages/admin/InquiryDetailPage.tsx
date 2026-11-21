@@ -880,7 +880,9 @@ export default function InquiryDetailPage() {
         {/* 처리가 끝난 문의: 다음 미처리 문의로 바로 (목록으로 돌아갔다 오지 않게) */}
         {!isOpen && queue?.next_id && (
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800">
-            <span>이 문의는 처리됐어요. 미처리 {queue.total}건이 남아 있습니다.</span>
+            <span>
+              {data.recheck ? `답변은 보냈어요 (확인 후 다시 안내 ${formatDate(data.recheck.due_at)}까지).` : "이 문의는 처리됐어요."} 미처리 {queue.total}건이 남아 있습니다.
+            </span>
             <Button className="min-h-9 px-4 py-1" onClick={() => navigate(`/admin/inquiries/${queue.next_id}`)}>다음 미처리 문의 →</Button>
           </div>
         )}

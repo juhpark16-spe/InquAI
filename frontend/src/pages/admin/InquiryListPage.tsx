@@ -41,7 +41,7 @@ export default function InquiryListPage() {
       .list({
         category: params.get("category") ?? "", urgency: params.get("urgency") ?? "",
         status: params.get("status") ?? "", decision: params.get("decision") ?? "", open: params.get("open") ?? "", overdue: params.get("overdue") ?? "",
-        assigned_to: params.get("assigned_to") ?? "", q: params.get("q") ?? "",
+        recheck: params.get("recheck") ?? "", assigned_to: params.get("assigned_to") ?? "", q: params.get("q") ?? "",
         sort: (params.get("sort") as "urgency" | "-created_at") ?? "urgency", page, size: SIZE,
       })
       .then(setData)
@@ -94,6 +94,11 @@ export default function InquiryListPage() {
           <input type="checkbox" checked={params.get("overdue") === "true"} onChange={(e) => update("overdue", e.target.checked ? "true" : "")} />
           기한 초과만
         </label>
+        <label className="flex min-h-11 items-center gap-1.5 rounded-xl border border-hairline bg-white px-3 text-sm text-ink"
+          title="'확인 후 다시 안내드리겠습니다'를 먼저 보내고 아직 다시 안내하지 않은 문의 (다시 안내 기한이 가까운 순)">
+          <input type="checkbox" checked={params.get("recheck") === "true"} onChange={(e) => update("recheck", e.target.checked ? "true" : "")} />
+          다시 안내할 문의만
+        </label>
         {filter("status", "상태", STATUSES)}
         {filter("urgency", "긴급도", URGENCIES)}
         {filter("category", "유형", CATEGORIES)}
@@ -141,6 +146,7 @@ export default function InquiryListPage() {
                 <td className="whitespace-nowrap px-3 py-3">
                   <Badge value={i.status} />
                   {i.overdue && <span className="ml-1 text-xs font-semibold text-rose-700" title={`답변 기한 ${formatDate(i.due_at)}`}>⏰ 기한 초과</span>}
+                  {i.recheck_due_at && <RecheckTag note={i.recheck_note ?? ""} due={i.recheck_due_at} />}
                 </td>
                 {isAdmin && <td className="whitespace-nowrap px-3 py-3 text-slate-600">{i.assigned_to?.display_name ?? "-"}</td>}
                 <td className="whitespace-nowrap px-3 py-3 text-slate-500">{formatDate(i.created_at)}</td>
@@ -163,5 +169,16 @@ export default function InquiryListPage() {
         </div>
       )}
     </div>
+  );
+}
+
+/** 확인 후 다시 안내할 문의 표시 (기한이 지나면 빨간색) */
+function RecheckTag({ note, due }: { note: string; due: string }) {
+  const late = new Date(due).getTime() <= Date.now();
+  return (
+    <span className={`ml-1 text-xs font-semibold ${late ? "text-rose-700" : "text-blue-700"}`}
+      title={`확인할 내용: ${note} · 다시 안내 기한 ${formatDate(due)}`}>
+      🔁 {late ? "다시 안내 기한 지남" : `다시 안내 ${formatDate(due)}`}
+    </span>
   );
 }

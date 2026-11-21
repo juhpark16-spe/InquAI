@@ -18,6 +18,7 @@ from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, Adm
 from backend.schemas.inquiry_admin import (AnalysisCorrection, AnalysisOut, AssignRequest, InquiryDetail, InquiryListItem, InquiryState, NoteCreate,
                                            NoteOut, Page, StatusRequest)
 from backend.services import inquiry_context as ctx
+from backend.services import recheck as recheck_svc
 from backend.services import sla, uploads
 from backend.services.audit import add_audit
 from backend.services.corrections import apply_correction
@@ -53,6 +54,7 @@ def list_inquiries(
     open: bool | None = Query(None, description="true 면 미처리(접수·검토 대기·담당자 처리)만"),
     overdue: bool | None = Query(None, description="true 면 답변 기한(긴급 4시간, 그 외 24시간)을 넘긴 미처리만"),
     assigned_to: str | None = Query(None, description="상담원 id, me, none (관리자만 지정 가능)"),
+    recheck: bool | None = Query(None, description="true 면 '확인 후 다시 안내' 표시가 남은 문의만 (다시 안내 기한이 가까운 순)"),
     q: str | None = Query(None, max_length=100, description="제목·내용·문의 번호·이메일 검색"),
     sort: Literal["urgency", "-created_at"] = "urgency",
     page: int = Query(1, ge=1),
@@ -82,6 +84,8 @@ def list_inquiries(
         stmt = stmt.where(or_(and_(AnalysisResult.urgency == "높음", Inquiry.created_at < urgent_due),
                               and_(or_(AnalysisResult.urgency.is_(None), AnalysisResult.urgency != "높음"),
                                    Inquiry.created_at < normal_due)))
+    if recheck:
+        stmt = stmt.where(Inquiry.recheck_note.is_not(None))
     if category:
         stmt = stmt.where(AnalysisResult.category == category)
     if urgency:
@@ -95,6 +99,8 @@ def list_inquiries(
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery()))
     order = [URGENCY_ORDER, Inquiry.created_at.desc()] if sort == "urgency" else [Inquiry.created_at.desc()]
+    if recheck:
+        order = [Inquiry.recheck_due_at]
     rows = db.execute(stmt.options(selectinload(Inquiry.assignee)).order_by(*order, Inquiry.id.desc())
                       .offset((page - 1) * size).limit(size)).all()
 
@@ -106,6 +112,7 @@ def list_inquiries(
         "assigned_to": _assignee(i.assignee), "created_at": i.created_at,
         "due_at": sla.due_at(i.created_at, a.urgency if a else None),
         "overdue": sla.is_overdue(i.status, i.created_at, a.urgency if a else None),
+        "recheck_note": i.recheck_note, "recheck_due_at": i.recheck_due_at,
     } for i, a in rows]
     return {"items": items, "total": total, "page": page, "size": size}
 
@@ -214,6 +221,7 @@ def get_inquiry(inquiry_id: int, user: LoginUser, db: DB):
         "history": ctx.history(db, inquiry),
         "due_at": sla.due_at(inquiry.created_at, urgency),
         "overdue": sla.is_overdue(inquiry.status, inquiry.created_at, urgency),
+        "recheck": recheck_svc.info(inquiry, names),
         "messages": [{"id": m.id, "text": m.content, "created_at": m.created_at} for m in inquiry.messages],
         "notes": [{"id": n.id, "author": names.get(n.author_id, "?"), "text": n.text, "created_at": n.created_at}
                   for n in inquiry.notes],
