@@ -44,14 +44,14 @@ function PrivateTag() {
 }
 
 function NewBadge({ count }: { count?: number }) {
-  return <span className="rounded-full bg-primary px-1.5 py-0.5 text-xs font-bold text-white">New{count ? ` ${count}` : ""}</span>;
+  return <span className="rounded-full bg-orange-500 px-1.5 py-0.5 text-xs font-bold text-white">New{count ? ` ${count}` : ""}</span>;
 }
 
 function NoteList({ notes, isNew }: { notes: Note[]; isNew: (n: Note) => boolean }) {
   return (
     <ul className="space-y-2">
       {notes.map((n) => (
-        <li key={n.id} className={cx("rounded-xl border bg-white px-3 py-2 text-sm", isNew(n) ? "border-primary/40 ring-2 ring-primary/15" : "border-slate-200")}>
+        <li key={n.id} className={cx("rounded-xl border bg-white px-3 py-2 text-sm", isNew(n) ? "border-orange-400 ring-2 ring-orange-200" : "border-slate-200")}>
           <p className="flex items-center gap-1.5 text-xs text-muted">
             {isNew(n) && <NewBadge />}
             <b className="text-body">{n.author}</b> · {formatDate(n.created_at)}
