@@ -55,6 +55,17 @@ class Settings(BaseSettings):
     # load_models=false(테스트) 이거나 KURE를 불러오지 못하면 tfidf 로 동작
     faq_search_engine: str = "kure"
 
+    # 고객 답변 알림 메일 (backend/services/notify.py). 꺼져 있으면 기록만 (테스트·CI·Docker 기본)
+    mail_enabled: bool = False
+    smtp_host: str = ""
+    smtp_port: int = 587              # 587 = STARTTLS, 465 = SSL
+    smtp_user: str = ""
+    smtp_password: str = ""           # Gmail 은 계정 비밀번호가 아니라 '앱 비밀번호'
+    mail_from: str = ""               # 비우면 smtp_user
+    mail_from_name: str = "InquAI 쇼핑 고객센터"
+    mail_redirect_to: str = ""        # 시연용: 모든 답변 알림을 이 주소 하나로 (시연 고객 주소는 가짜라서)
+    shop_url: str = "http://localhost:5173"   # 메일의 '문의 조회' 링크 주소
+
     # 초기 계정 비밀번호 (seed_admin.py)
     seed_admin_password: str = ""
     seed_agent_password: str = ""

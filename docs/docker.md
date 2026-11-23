@@ -61,6 +61,7 @@ docker compose up -d --build
 - DB는 `inquai-data` 볼륨 안에 따로 있습니다. 개발 DB(`data/inquai.db`)와 섞이지 않습니다.
 - PyTorch는 CPU 버전입니다 (GPU 없이 어디서나 실행. 문의 1건 분류는 CPU로도 짧음). 학습은 개발 환경(GPU)에서 합니다.
 - 백엔드 8000 포트는 밖으로 열지 않고 nginx를 거쳐서만 접속합니다. nginx가 넘겨 준 실제 접속 IP(`X-Forwarded-For`)로 로그인 잠금·요청 제한·감사 로그를 기록합니다.
+- 답변 알림 메일은 `.env`의 `MAIL_ENABLED`·SMTP 설정을 그대로 씁니다 (기본 꺼짐). 메일 속 문의 조회 링크는 `SHOP_URL=http://localhost:8080`으로 맞춥니다.
 - `COOKIE_SECURE=false`는 http://localhost 시연용입니다. 실제로 배포할 때는 https 뒤에 두고 `true`, `API_DOCS=false`, `PASSWORD_MIN_LENGTH=8` 이상으로 바꿉니다.
 
 ## 5. CI 자동 확인 (`.github/workflows/ci.yml`의 "Docker 빌드")

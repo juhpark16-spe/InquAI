@@ -196,14 +196,15 @@ export interface InquiryDetail {
   email_orders: OrderCard[]; // 문의 이메일로 찾은 다른 주문 (본인 확인 필요)
   customer_history: { id: number; inquiry_number: string; title: string; status: string; created_at: string }[];
   faq_titles: Record<string, string>;
-  history: { at: string; actor: string; text: string; kind: "received" | "followup" | "ai" | "assign" | "status" | "draft" | "sent" | "correct" | "ticket" | "recheck" }[];
+  history: { at: string; actor: string; text: string; kind: "received" | "followup" | "ai" | "assign" | "status" | "draft" | "sent" | "correct" | "ticket" | "recheck" | "mail" }[];
   due_at: string;
   overdue: boolean;
   recheck?: Recheck | null;
   messages: { id: number; text: string; created_at: string }[];
   notes: { id: number; author: string; text: string; created_at: string }[];
   attachments: { id: number; filename: string; content_type: string; size: number; message_id: number | null; created_at: string }[];
-  notifications: { channel: string; recipient: string; subject: string; status: string; created_at: string }[];
+  // 고객 답변 알림 메일: 기록(메일 꺼짐) / 대기 / 발송 / 실패 / 건너뜀(예시 주소)
+  notifications: { channel: string; recipient: string; subject: string; status: string; error?: string | null; sent_at?: string | null; created_at: string }[];
 }
 
 export interface OrderCard {

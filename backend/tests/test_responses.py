@@ -38,7 +38,7 @@ def test_write_and_send_directly(client, db, inquiry):
     db.expire_all()
     assert db.get(Inquiry, inquiry).status == "완료"
 
-    history = [e["text"] for e in client.get(f"/api/inquiries/{inquiry}").json()["history"]]
+    history = [e["text"] for e in client.get(f"/api/inquiries/{inquiry}").json()["history"] if e["kind"] != "mail"]   # 고객 메일 줄은 test_mail
     assert history[-2:] == ["답변 작성", "직접 작성한 답변 발송"]  # 작성 → 발송 순서
 
     # 고객 조회 화면에 답변이 보임
@@ -68,7 +68,7 @@ def test_save_draft_edit_then_approve(client, db, inquiry):
     r = client.post(f"/api/responses/{rid}/approve", headers=h)
     assert r.json()["status"] == "발송" and r.json()["final_text"] == "고친 초안"
 
-    history = [e["text"] for e in client.get(f"/api/inquiries/{inquiry}").json()["history"]]
+    history = [e["text"] for e in client.get(f"/api/inquiries/{inquiry}").json()["history"] if e["kind"] != "mail"]   # 고객 메일 줄은 test_mail
     assert history[-3:] == ["답변 작성", "답변 초안 수정", "직접 작성한 답변 발송"]
 
 
@@ -79,7 +79,8 @@ def test_ai_draft_edited_flag(client, db, inquiry):
     h = login(client)
     r = client.post(f"/api/responses/{rid}/approve", headers=h, json={"text": "AI 초안을 다듬음"})
     assert r.json()["is_edited"] is True and r.json()["final_text"] == "AI 초안을 다듬음"
-    assert client.get(f"/api/inquiries/{inquiry}").json()["history"][-1]["text"] == "AI 초안 수정 후 발송"
+    history = [e for e in client.get(f"/api/inquiries/{inquiry}").json()["history"] if e["kind"] != "mail"]
+    assert history[-1]["text"] == "AI 초안 수정 후 발송"
 
 
 def test_ai_draft_unedited(client, db, inquiry):

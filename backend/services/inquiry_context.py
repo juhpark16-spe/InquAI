@@ -9,8 +9,8 @@ from datetime import timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from backend.database.models import (AdminAuditLog, AdminUser, Coupon, Customer, Faq, Inquiry, Order, PointHistory,
-                                     Response, as_utc, utcnow)
+from backend.database.models import (AdminAuditLog, AdminUser, Coupon, Customer, Faq, Inquiry, Notification, Order,
+                                     PointHistory, Response, as_utc, utcnow)
 from backend.services import inventory
 from backend.services.order_actions import duplicates
 
@@ -252,4 +252,16 @@ def history(db: Session, inquiry: Inquiry) -> list[dict]:
                 text = {"llm": "AI 초안 수정 후 발송" if r.is_edited else "AI 초안 그대로 발송"}.get(
                     r.generated_by, "직접 작성한 답변 발송")
             events.append({"at": r.approved_at or r.created_at, "actor": who, "text": text, "kind": "sent"})
+
+    # 고객 답변 알림 메일 (backend/services/notify.py)
+    for n in db.scalars(select(Notification).where(Notification.inquiry_id == inquiry.id).order_by(Notification.id)):
+        text = MAIL_TEXT.get(n.status, n.status).format(to=n.recipient)
+        if n.status == "실패" and n.error:
+            text += f" ({n.error})"
+        events.append({"at": n.sent_at or n.created_at, "actor": "시스템", "text": text, "kind": "mail"})
     return sorted(events, key=lambda e: as_utc(e["at"]))
+
+
+MAIL_TEXT = {"기록": "고객 알림 기록 (메일 발송 꺼짐)", "대기": "고객 알림 메일 보내는 중 → {to}",
+             "발송": "고객 알림 메일 발송 → {to}", "실패": "고객 알림 메일 실패 → {to}",
+             "건너뜀": "고객 알림 메일 건너뜀 (예시 주소 {to})"}

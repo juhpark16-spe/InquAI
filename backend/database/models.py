@@ -240,7 +240,7 @@ class Attachment(TimestampMixin, Base):
 
 
 class Notification(TimestampMixin, Base):
-    """고객 알림 기록. 실제 메일 서버 없이 '보낼 메일'을 기록만 함 (시연용)"""
+    """고객 답변 알림 메일 (backend/services/notify.py). 기본은 기록만, SMTP 설정이 있으면 실제로 보냄"""
     __tablename__ = "notifications"
 
     inquiry_id: Mapped[int] = mapped_column(ForeignKey("inquiries.id"), index=True)
@@ -248,7 +248,9 @@ class Notification(TimestampMixin, Base):
     recipient: Mapped[str] = mapped_column(String(255))
     subject: Mapped[str] = mapped_column(String(200))
     body: Mapped[str] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(10), default="기록")  # 기록(시연) / 발송 / 실패
+    status: Mapped[str] = mapped_column(String(10), default="기록")  # 기록(메일 꺼짐) / 대기 / 발송 / 실패 / 건너뜀(예시 주소)
+    error: Mapped[str | None] = mapped_column(String(200))           # 실패·건너뜀 이유
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))   # 보낸(또는 실패한) 시각
 
 
 # ---- FAQ -------------------------------------------------------------------

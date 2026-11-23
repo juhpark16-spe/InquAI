@@ -76,7 +76,9 @@ class NotificationOut(BaseModel):
     channel: str
     recipient: str
     subject: str
-    status: str
+    status: str                       # 기록 / 대기 / 발송 / 실패 / 건너뜀
+    error: str | None = None
+    sent_at: UTCDateTime | None = None
     created_at: UTCDateTime
 
 
@@ -304,7 +306,7 @@ class Event(BaseModel):
     at: UTCDateTime
     actor: str
     text: str
-    kind: str  # received / ai / assign / status / draft / sent / ticket / recheck (대화형 화면에서 안내 줄을 고를 때 씀)
+    kind: str  # received / ai / assign / status / draft / sent / ticket / recheck / mail (대화형 화면에서 안내 줄을 고를 때 씀)
 
 
 class RecheckOut(BaseModel):

@@ -27,6 +27,7 @@ os.environ.update({
     "LOAD_MODELS": "false",
     "OPENAI_API_KEY": "",
     "LANGSMITH_TRACING": "false",
+    "MAIL_ENABLED": "false",
     "PASSWORD_MIN_LENGTH": "8",
     "SEED_ADMIN_PASSWORD": E2E_PASSWORD,
     "SEED_AGENT_PASSWORD": E2E_PASSWORD,

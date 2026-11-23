@@ -32,6 +32,19 @@ function Photos({ data, messageId }: { data: InquiryDetail; messageId: number | 
   );
 }
 
+/** 답변마다 고객 알림 메일 결과 (n번째 보낸 답변 ↔ n번째 알림) */
+function MailBadge({ n }: { n: InquiryDetail["notifications"][number] | undefined }) {
+  if (!n || n.status === "기록") return null;
+  const look: Record<string, [string, string]> = {
+    "발송": ["text-emerald-700", "📧 고객 메일 발송됨"],
+    "대기": ["text-slate-500", "📧 고객 메일 보내는 중"],
+    "실패": ["text-rose-700", "📧 고객 메일 실패"],
+    "건너뜀": ["text-slate-500", "📧 메일 건너뜀 (예시 주소)"],
+  };
+  const [tone, label] = look[n.status] ?? ["text-slate-500", n.status];
+  return <span className={tone} title={`${n.recipient}${n.error ? ` · ${n.error}` : ""}`}>{label}</span>;
+}
+
 function RatingBadge({ rating }: { rating: number | null }) {
   if (rating === null) return <span className="text-slate-500">고객 평가 전</span>;
   return rating > 0 ? <span className="text-emerald-700">고객 평가 👍 도움됨</span> : <span className="text-rose-700">고객 평가 👎 도움 안 됨</span>;
@@ -131,7 +144,7 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
     const ok = !send ? "초안을 저장했습니다."
       : recheck ? `답변을 보냈습니다. '${recheck.note}'을(를) 확인한 뒤 ${formatDate(recheck.due_at)}까지 다시 안내해 주세요 (목록·대시보드·알림에 표시됩니다).`
         : data.recheck ? "답변을 보냈습니다. 다시 안내 표시도 풀었습니다."
-          : "답변을 보냈습니다. 고객 조회 화면에 보이고 이메일 알림이 기록되었으며, 문의는 완료로 바뀌었습니다.";
+          : "답변을 보냈습니다. 고객 조회 화면에 보이고 고객에게 답변 알림(메일)이 가며, 문의는 완료로 바뀌었습니다.";
     return run(send ? "send" : "save", async () => {
     if (draft) await (send ? responseApi.approve(draft.id, text, recheck) : responseApi.update(draft.id, text));
     else await responseApi.create(data.id, text, send, recheck);
@@ -140,6 +153,8 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
       setRecheckOn(false);
       setRecheckNote("");
       setRecheckDue("");
+      // 알림 메일은 답변 저장 뒤 따로 보내짐 → 몇 초 뒤 한 번 더 불러와 '메일 발송됨/실패'를 보여 줌
+      window.setTimeout(onChanged, 5000);
     }
   }, ok);
   };
@@ -169,7 +184,7 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
     | { type: "customer"; at: string; text: string; messageId: number | null; followUp: boolean }
     | { type: "note"; at: string; text: string; warn: boolean }
     | { type: "memo"; at: string; text: string; author: string }
-    | { type: "sent"; at: string; r: (typeof sent)[number]; who: string };
+    | { type: "sent"; at: string; r: (typeof sent)[number]; who: string; mail: InquiryDetail["notifications"][number] | undefined };
   const sentEvents = data.history.filter((e) => e.kind === "sent");
   const thread: Item[] = [
     { type: "customer" as const, at: data.created_at, text: data.content, messageId: null, followUp: false },
@@ -178,7 +193,8 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
       type: "note" as const, at: e.at, warn: e.kind === "ai", text: `${e.actor} · ${e.text}`,
     })),
     ...data.notes.map((n) => ({ type: "memo" as const, at: n.created_at, text: n.text, author: n.author })),
-    ...sent.map((r, i) => ({ type: "sent" as const, at: r.approved_at ?? r.created_at, r, who: sentEvents[i]?.actor ?? "상담원" })),
+    ...sent.map((r, i) => ({ type: "sent" as const, at: r.approved_at ?? r.created_at, r, who: sentEvents[i]?.actor ?? "상담원",
+      mail: data.notifications[i] })),
   ].sort((x, y) => new Date(x.at).getTime() - new Date(y.at).getTime());
 
   /** 커서 자리(선택한 글이 있으면 그 자리)에 넣고, 넣은 글 뒤로 커서를 옮김 */
@@ -253,6 +269,7 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
               footer={
                 <span className="flex flex-col items-end gap-0.5">
                   <RatingBadge rating={item.r.rating} />
+                  <MailBadge n={item.mail} />
                   {item.r.used_faq_ids.length > 0 && <span>근거: {item.r.used_faq_ids.map((c) => `${c} ${data.faq_titles[c] ?? ""}`).join(" · ")}</span>}
                 </span>
               }>
@@ -420,7 +437,7 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
                   {busy === "save" ? <Spinner /> : "초안 저장"}
                 </Button>
                 <Button disabled={!!busy || !text.trim() || (recheckOn && !recheckReady)} onClick={() => save(true)}
-                  title="고객 조회 화면에 보이고 이메일 알림이 기록되며 문의가 완료됩니다 (단축키 Ctrl+Enter · 초안 저장 Ctrl+S · 이전·다음 문의 Alt+←/→)">
+                  title="고객 조회 화면에 보이고 고객에게 답변 알림 메일이 가며 문의가 완료됩니다 (단축키 Ctrl+Enter · 초안 저장 Ctrl+S · 이전·다음 문의 Alt+←/→)">
                   {busy === "send" ? <Spinner /> : recheckOn ? "발송 · 다시 안내 표시" : "발송"}
                 </Button>
               </div>

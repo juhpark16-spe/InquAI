@@ -143,7 +143,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | customer_messages | inquiry_id, content | 고객 추가 문의 (같은 문의에 이어서) |
 | inquiry_notes | inquiry_id, author_id, text | 상담원 내부 메모 (고객에게 안 보임) |
 | attachments | token(UNIQUE), inquiry_id NULL, message_id NULL, filename, content_type, size, path | 고객 사진. 먼저 올려 token 을 받고 문의 등록 때 연결. 파일은 `data/uploads/`(Git 제외) |
-| notifications | inquiry_id, channel, recipient, subject, body, status | 답변 알림 기록 (메일 서버 없이 시연용으로 기록만) |
+| notifications | inquiry_id, channel, recipient, subject, body, status, error, sent_at | 고객 답변 알림 메일 (`services/notify.py`). status: 기록(메일 꺼짐) / 대기 / 발송 / 실패 / 건너뜀(예시 주소) |
 
 - inquiries에 **privacy_agreed_at**(개인정보 동의 시각), responses에 **rating**(1 / -1)·**rated_at** 추가
 - agent_logs에 **steps**(JSON, 3주차): 지나간 LangGraph 노드 이름 목록

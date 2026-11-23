@@ -18,6 +18,7 @@ services:
       # 컨테이너 안 경로·주소로 맞춤 (.env 의 개발용 값보다 우선)
       DATABASE_URL: sqlite:///./data/inquai.db
       FRONTEND_ORIGINS: http://localhost:8080
+      SHOP_URL: http://localhost:8080   # 답변 알림 메일의 '문의 조회' 링크
       COOKIE_SECURE: "false"         # http://localhost 시연용. https로 배포할 때는 true
     volumes:
       - inquai-data:/app/data                                              # DB·첨부 사진·FAQ 벡터·백업

@@ -177,7 +177,15 @@
 | 답변 평가 | `POST /api/inquiries/answers/{response_id}/rating?inquiry_number=` `{ customer_email, password, helpful }` | 본인 확인 후 `responses.rating` = 1 / -1 (다시 누르면 변경). 대시보드 "AI 자동 답변 만족도" |
 | 추가 문의 | `POST /api/inquiries/follow-up` `{ customer_email, password, inquiry_number, content, attachment_tokens }` | 같은 문의에 이어서. 자동 처리·완료된 문의는 `담당자 처리`로 다시 열고, 미배정이면 자동 배정. AI 재분석은 하지 않음. 문의당 10개까지, IP 1분 5회 |
 | 답변 시간 안내 | `/lookup` 응답의 `notice` | "영업일 기준 1일 이내에 답변드립니다 (평일 10:00~17:00)" |
-| 답변 알림 | (자동) | 자동 답변·상담원 발송 때 "답변이 등록되었습니다" 이메일을 `notifications`에 **기록만** 함 (메일 서버 없음, 시연용). 본문에 답변 내용은 넣지 않음 |
+| 답변 알림 | (자동) | 자동 답변·상담원 발송 때 "답변이 등록되었습니다" 메일 (`services/notify.py`). 본문에는 답변 내용 대신 문의 조회 링크만 |
+
+**답변 알림 메일** (`backend/services/notify.py`, 설정은 `.env.example`)
+- 기본 `MAIL_ENABLED=false`: 보내지 않고 `notifications`에 기록만 (status `기록`). 테스트·CI·화면 자동 테스트는 항상 꺼짐
+- 켜면(SMTP 설정): 답변이 DB에 **커밋된 뒤** 따로 보냄 → 메일 서버가 느리거나 실패해도 답변 발송은 그대로. 저장이 취소되면(오류) 메일도 안 나감
+- 결과: `발송`/`실패`(error, 예: 인증 실패)·`sent_at`. 예시 주소(example.com·.test 등)는 `건너뜀`. 다시 보내지는 않음
+- `MAIL_REDIRECT_TO`(시연용): 모든 알림을 한 주소로 (제목에 원래 받는 사람). 시연 고객 주소는 가짜라서
+- 문의 상세: `notifications[]`에 `error`, `sent_at`, 처리 이력에 `kind: "mail"` 줄, 화면의 보낸 답변 아래 '📧 고객 메일 발송됨/실패'
+- 설정 확인: `python -m backend.services.notify --test 받을주소` (실제로 1통 보냄)
 
 - 추가 문의·평가도 조회와 같은 잠금(같은 이메일 15분 5회 실패)을 씁니다.
 - `/lookup` 응답 항목에 `answers[].id`, `answers[].rating`, `messages`(추가 문의), `attachment_count`, `attachments`, `can_follow_up`이 추가됐습니다.
