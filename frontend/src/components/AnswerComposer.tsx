@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 import { customerApi, errorMessage, inquiryApi, responseApi, templateApi, type RecheckInput, type ReplyTemplate } from "../services/api";
 import type { FaqPublic, InquiryDetail } from "../services/types";
 import { Bubble, Note } from "./Chat";
+import { confirmDialog } from "./ConfirmDialog";
 import { Alert, Button, Spinner, Textarea, cx, formatDate } from "./ui";
 
 const MAX = 4000;
@@ -135,13 +136,16 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
     }
   }
 
-  const save = (send: boolean) => {
+  const save = async (send: boolean) => {
     if (send && recheckOn && !recheckReady) {
       setError("확인 후 다시 안내: 확인할 내용과 다시 안내할 기한(지금 이후)을 정해 주세요.");
       return;
     }
-    if (send && text.includes(CHECK_MARK)
-      && !window.confirm("답변에 [확인 필요] 표시가 남아 있습니다. 확인한 내용으로 고치지 않고 그대로 보낼까요?")) return;
+    if (send && text.includes(CHECK_MARK) && !(await confirmDialog({
+      title: "[확인 필요] 표시가 남아 있어요",
+      message: `답변에 [확인 필요] 표시가 ${text.split(CHECK_MARK).length - 1}곳 남아 있습니다.\n확인한 내용으로 고치지 않고 그대로 고객에게 보낼까요?`,
+      confirmLabel: "그대로 보내기", cancelLabel: "고치러 가기", tone: "danger",
+    }))) return;
     const recheck = send ? recheckBody() : null;
     const ok = !send ? "초안을 저장했습니다."
       : recheck ? `답변을 보냈습니다. '${recheck.note}'을(를) 확인한 뒤 ${formatDate(recheck.due_at)}까지 다시 안내해 주세요 (목록·대시보드·알림에 표시됩니다).`
@@ -161,16 +165,24 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
   }, ok);
   };
 
-  const clearRecheck = () => {
-    if (!window.confirm("답변을 보내지 않고 다시 안내 표시를 풀까요? (전화 등 다른 방법으로 안내했을 때)")) return;
+  const clearRecheck = async () => {
+    if (!(await confirmDialog({
+      title: "다시 안내 표시 풀기",
+      message: "답변을 보내지 않고 다시 안내 표시를 풀까요?\n전화 등 다른 방법으로 이미 안내했을 때 씁니다.",
+      confirmLabel: "표시 풀기",
+    }))) return;
     return run("save", () => inquiryApi.clearRecheck(data.id), "다시 안내 표시를 풀었습니다.");
   };
 
   // AI 초안 만들기: 상담원이 쓰던 글이 있으면 바꿀지 먼저 물음
-  const aiDraft = () => {
+  const aiDraft = async () => {
     const edited = !!draft && (draft.generated_by !== "llm" || (draft.final_text !== null && draft.final_text !== draft.draft_text));
     const replace = edited || (dirty && !!text.trim());
-    if (replace && !window.confirm("작성 중인 답변이 AI 초안으로 바뀝니다. 계속할까요?")) return;
+    if (replace && !(await confirmDialog({
+      title: "AI 초안으로 바꾸기",
+      message: "작성 중인 답변이 AI 초안으로 바뀝니다. 지금 쓴 내용은 사라져요. 계속할까요?",
+      confirmLabel: "AI 초안으로 바꾸기", tone: "danger",
+    }))) return;
     return run("draft", async () => { await responseApi.draft(data.id, replace, ask); setAsk(""); },
       ask.trim() ? `요청("${ask.trim()}")을 반영해 AI 초안을 다시 만들었습니다. 확인한 뒤 보내 주세요.`
         : "AI 초안을 만들었습니다. [확인 필요] 표시와 아래 확인할 것을 살펴본 뒤 고쳐서 보내 주세요.");

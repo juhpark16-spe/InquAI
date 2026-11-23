@@ -145,9 +145,8 @@ test("출고 전 배송지 변경 요청 → 상담원이 [바로 처리]로 배
   await page.getByRole("button", { name: "문의 등록" }).click();
   const number = (await page.getByText(/^INQ-\d{8}-\d{4}$/).textContent())!.trim();
 
-  // 상담원(배송 담당 agent2): 바로 처리 → 배송지 변경 (확인 창은 수락)
+  // 상담원(배송 담당 agent2): 바로 처리 → 배송지 변경 (화면의 확인창에서 [배송지 변경])
   const staff = await (await browser.newContext({ baseURL: "http://127.0.0.1:5174", locale: "ko-KR" })).newPage();
-  staff.on("dialog", (d) => d.accept());
   await staffLogin(staff, "agent2");
   await expect(staff).toHaveURL(/\/admin\/inquiries/);
   await staff.getByLabel("문의 검색").fill(number);
@@ -157,6 +156,10 @@ test("출고 전 배송지 변경 요청 → 상담원이 [바로 처리]로 배
   const address = "경기 성남시 분당구 판교역로 166, 7층 (자동 테스트)";
   await staff.getByLabel("새 배송지").fill(address);
   await staff.getByRole("button", { name: "배송지 변경", exact: true }).last().click();
+  const confirm = staff.getByRole("alertdialog");
+  await expect(confirm.getByText(/배송지를 '경기 성남시 분당구 판교역로 166/)).toBeVisible();   // 브라우저 확인창 대신 화면 디자인의 확인창
+  await confirm.getByRole("button", { name: "배송지 변경" }).click();
+  await expect(confirm).toHaveCount(0);
   await expect(staff.getByText(/배송지 변경: 경기 성남시 분당구 판교역로 166/).first()).toBeVisible();   // 결과 안내·처리 이력
   await expect(staff.getByText(`배송지 ${address}`, { exact: true })).toBeVisible();                     // 주문 정보의 배송지
 });

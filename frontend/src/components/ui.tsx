@@ -1,5 +1,5 @@
 // 여러 화면이 같이 쓰는 작은 UI 조각
-import type { ButtonHTMLAttributes, ComponentProps, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
+import type { ComponentProps, InputHTMLAttributes, ReactNode, SelectHTMLAttributes } from "react";
 
 export function cx(...names: (string | false | null | undefined)[]) {
   return names.filter(Boolean).join(" ");
@@ -32,7 +32,7 @@ export function Select(props: SelectHTMLAttributes<HTMLSelectElement>) {
   return <select {...props} className={cx(fieldBase, props.className)} />;
 }
 
-export function Button({ variant = "primary", ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "ghost" | "danger" }) {
+export function Button({ variant = "primary", ...props }: ComponentProps<"button"> & { variant?: "primary" | "ghost" | "danger" }) {
   const styles = {
     // 기본 버튼 = 파란색, 보조 버튼 = 흰 바탕 + 테두리
     primary: "bg-primary text-white shadow-sm shadow-primary/20 hover:bg-primary-hover disabled:bg-hairline disabled:text-muted disabled:shadow-none",

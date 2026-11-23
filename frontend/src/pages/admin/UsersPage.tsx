@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
 import { useAuth } from "../../auth/AuthProvider";
+import { confirmDialog } from "../../components/ConfirmDialog";
 import { Alert, Badge, Button, Card, Field, Input, Select, Spinner, cx, formatDate } from "../../components/ui";
 import { errorMessage, userApi } from "../../services/api";
 import { CATEGORIES, type Role, type UserDetail } from "../../services/types";
@@ -159,8 +160,11 @@ function UserRow({ u, isMe, onChanged }: { u: UserDetail; isMe: boolean; onChang
         <div className="flex flex-wrap gap-2">
           {!isMe && (
             <Button variant={u.is_active ? "ghost" : "primary"} disabled={busy}
-              onClick={() => {
-                if (u.is_active && !window.confirm(`${u.display_name} 계정을 비활성화할까요? 바로 로그아웃되고 로그인할 수 없게 됩니다.`)) return;
+              onClick={async () => {
+                if (u.is_active && !(await confirmDialog({
+                  title: "계정 비활성화", confirmLabel: "비활성화", tone: "danger",
+                  message: `${u.display_name} 계정을 비활성화할까요?\n바로 로그아웃되고 로그인할 수 없게 됩니다. 다시 활성화할 수 있습니다.`,
+                }))) return;
                 run(() => userApi.update(u.id, { is_active: !u.is_active }),
                   `${u.display_name}: ${u.is_active ? "비활성화했습니다." : "다시 활성화했습니다."}`);
               }}>

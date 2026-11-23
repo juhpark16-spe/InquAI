@@ -3,6 +3,7 @@ import { lazy, Suspense } from "react";
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router";
 
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
+import ConfirmHost from "./components/ConfirmDialog";
 import AccountPage from "./pages/admin/AccountPage";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AgentLogsPage from "./pages/admin/AgentLogsPage";
@@ -76,6 +77,7 @@ export default function App() {
 
         <Route path="*" element={<Navigate to="/inquiry" replace />} />
       </Routes>
+      <ConfirmHost />
     </BrowserRouter>
   );
 }

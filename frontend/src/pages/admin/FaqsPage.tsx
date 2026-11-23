@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } fro
 import { Link } from "react-router";
 
 import Icon from "../../components/Icon";
+import { confirmDialog } from "../../components/ConfirmDialog";
 import { Alert, Button, Card, Field, Input, Select, Spinner, Textarea, cx, formatDate } from "../../components/ui";
 import { errorMessage, faqApi, type FaqInput } from "../../services/api";
 import { CATEGORIES, type FaqAdmin, type FaqSearchTest, type FaqSuggestResult, type FaqSuggestion } from "../../services/types";
@@ -284,8 +285,11 @@ function FaqRow({ f, onChanged }: { f: FaqAdmin; onChanged: (msg: string) => voi
           <Button variant="ghost" className="min-h-9 px-3 py-1" disabled={busy} onClick={() => setEditing(true)}>수정</Button>
           {f.is_active ? (
             <Button variant="ghost" className="min-h-9 px-3 py-1" disabled={busy}
-              onClick={() => {
-                if (!window.confirm(`${f.code} "${f.question}"을(를) 비활성화할까요?\n고객 FAQ 화면과 AI 검색에서 빠집니다. 다시 활성화할 수 있습니다.`)) return;
+              onClick={async () => {
+                if (!(await confirmDialog({
+                  title: "FAQ 비활성화", confirmLabel: "비활성화", tone: "danger",
+                  message: `${f.code} "${f.question}"을(를) 비활성화할까요?\n고객 FAQ 화면과 AI 검색에서 빠집니다. 다시 활성화할 수 있습니다.`,
+                }))) return;
                 run(() => faqApi.deactivate(f.id), `${f.code}를 비활성화했습니다. 고객 화면과 AI 검색에서 빠졌습니다.`);
               }}>
               비활성화

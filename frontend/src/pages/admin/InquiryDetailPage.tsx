@@ -11,6 +11,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { useAuth } from "../../auth/AuthProvider";
 import AnalysisEditor from "../../components/AnalysisEditor";
 import AnswerComposer from "../../components/AnswerComposer";
+import { confirmDialog } from "../../components/ConfirmDialog";
 import { Alert, Badge, Button, Input, Select, Spinner, cx, formatDate } from "../../components/ui";
 import { errorMessage, inquiryApi, type QuickAction } from "../../services/api";
 import type { AgentLog, InquiryDetail, OrderCard, User } from "../../services/types";
@@ -221,13 +222,25 @@ const COUPON_CHOICES = [
   { name: "사과 쿠폰 5,000원", note: "5,000원 할인 · 3만원 이상 · 관리자만", adminOnly: true },
 ];
 
+// 바로 처리 확인창: 제목·확인 버튼 이름, 되돌리기 어려운 처리는 빨간 버튼
+const ACTION_CONFIRM: Record<QuickAction, { title: string; label: string; danger?: boolean }> = {
+  address: { title: "배송지 변경", label: "배송지 변경" },
+  option: { title: "옵션 변경", label: "옵션 변경" },
+  partial_cancel: { title: "부분 취소", label: "취소하기", danger: true },
+  duplicate_cancel: { title: "중복 승인 취소", label: "승인 취소", danger: true },
+  points: { title: "보상 적립금 지급", label: "지급" },
+  coupon: { title: "사과 쿠폰 발급", label: "발급" },
+  return: { title: "반품 회수 접수", label: "접수" },
+};
+
 /** 바로 처리 공통: 버튼을 누르면 아래에 작은 입력칸이 열리고 [실행] → 서버가 조건을 다시 확인해 처리 */
 function useQuickAction(inquiryId: number, onDone: (msg: string) => void) {
   const [open, setOpen] = useState<QuickAction | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   async function exec(action: QuickAction, body: Record<string, string | number> = {}, confirmText?: string) {
-    if (confirmText && !window.confirm(confirmText)) return;
+    const c = ACTION_CONFIRM[action];
+    if (confirmText && !(await confirmDialog({ title: c.title, message: confirmText, confirmLabel: c.label, tone: c.danger ? "danger" : "primary" }))) return;
     setError("");
     setBusy(true);
     try {

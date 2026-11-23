@@ -3,6 +3,7 @@
 // - 문장은 FAQ·쇼핑몰 정책(docs/shop_policy.md)과 같은 내용만 쓰도록 안내 (고객에게 잘못된 약속을 하지 않게)
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 
+import { confirmDialog } from "../../components/ConfirmDialog";
 import { Alert, Button, Card, Field, Input, Spinner, Textarea, cx } from "../../components/ui";
 import { errorMessage, templateApi, type ReplyTemplate } from "../../services/api";
 
@@ -41,8 +42,11 @@ function Row({ t, first, last, onMove, onSaved, onError }: {
           className="min-h-9! w-44! flex-none py-1.5 font-semibold" aria-label="문구 이름" />
         {!t.is_active && <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs text-slate-600">숨김 · 답변 칸에 안 보임</span>}
         <span className="ml-auto flex gap-1.5">
-          <Button variant="ghost" className="min-h-9 px-3 py-1" disabled={busy} onClick={() => {
-            if (window.confirm(`'${t.label}' 문구를 지울까요? 지운 기록은 작업 기록에 남습니다.`)) act(() => templateApi.remove(t.id), "문구를 지웠습니다.");
+          <Button variant="ghost" className="min-h-9 px-3 py-1" disabled={busy} onClick={async () => {
+            if (await confirmDialog({ title: "답변 문구 삭제", confirmLabel: "삭제", tone: "danger",
+              message: `'${t.label}' 문구를 지울까요?\n지운 기록은 작업 기록에 남습니다. 잠깐 쓰지 않을 거라면 [숨기기]를 쓰세요.` })) {
+              act(() => templateApi.remove(t.id), "문구를 지웠습니다.");
+            }
           }}>삭제</Button>
           <Button variant="ghost" className="min-h-9 px-3 py-1" disabled={busy} onClick={() => act(() => templateApi.update(t.id, { is_active: !t.is_active }),
             t.is_active ? "문구를 숨겼습니다. 답변 칸에 보이지 않아요." : "문구를 다시 사용합니다.")}>
