@@ -49,7 +49,10 @@ export function errorMessage(err: unknown, fallback = "요청을 처리하지 �
   if (axios.isAxiosError(err)) {
     const detail = err.response?.data?.detail;
     if (typeof detail === "string") return detail;
-    if (Array.isArray(detail)) return "입력 내용을 확인해 주세요."; // 422 (형식 오류)
+    if (Array.isArray(detail)) {   // 422 (형식 오류): 서버가 정한 안내 문장이 있으면 그대로 (예: 주문번호 형식)
+      const own = detail.map((d) => String(d?.msg ?? "")).find((m) => m.startsWith("Value error, "));
+      return own ? own.slice("Value error, ".length) : "입력 내용을 확인해 주세요.";
+    }
     if (!err.response) return "서버에 연결할 수 없습니다.";
   }
   return fallback;

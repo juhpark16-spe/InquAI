@@ -178,7 +178,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | 컬럼 | 타입 | 설명 |
 | --- | --- | --- |
 | customer_id | FK → customers | |
-| order_number | VARCHAR(30) UNIQUE | 예: `20261103-0042` |
+| order_number | VARCHAR(30) UNIQUE | `주문일 8자리-그날 순번 4자리` (예: `20261103-0042`). 문의 등록 때 형식 확인 (`schemas/inquiry.py`) |
 | product_name | VARCHAR(200) | |
 | **amount** | INT | **결제 금액 (원).** 환불 티켓·반품 배송비 안내에 사용 |
 | **order_status** | VARCHAR(10) | **결제 완료 / 상품 준비 중 / 출고 / 배송 중 / 배송 완료 / 취소** (취소 가능 여부 판단: 출고 전만, `docs/shop_policy.md` 2장) |

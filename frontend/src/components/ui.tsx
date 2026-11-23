@@ -9,12 +9,13 @@ const fieldBase =
   "min-h-11 rounded-xl border border-hairline bg-white px-4 py-2.5 text-sm text-ink outline-none placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:bg-surface-card";
 const inputBase = `w-full ${fieldBase}`;
 
-export function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+export function Field({ label, hint, error, children }: { label: string; hint?: string; error?: string; children: ReactNode }) {
   return (
     <label className="block space-y-1">
       <span className="text-sm font-semibold text-ink">{label}</span>
       {children}
-      {hint && <span className="block text-xs text-slate-500">{hint}</span>}
+      {error ? <span role="alert" className="block text-xs font-medium text-rose-600">{error}</span>
+        : hint && <span className="block text-xs text-slate-500">{hint}</span>}
     </label>
   );
 }
@@ -97,4 +98,25 @@ export function initialOf(name: string) {
 export function formatDate(iso: string | null | undefined) {
   if (!iso) return "-";
   return new Date(iso).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
+}
+
+function PersonIcon() {   // 글자색을 따라가는 사람 모양 (이모지는 진한 배지 위에서 안 보임)
+  return (
+    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+      <circle cx="12" cy="8" r="4" /><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1" />
+    </svg>
+  );
+}
+
+/** 고객 화면 페이지 제목 옆 로그인 상태: 비회원(진한 회색) / 회원 · 이름(파랑) */
+export function MemberBadge({ name }: { name?: string | null }) {
+  return name ? (
+    <span className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-3 py-1 text-sm font-semibold text-primary">
+      <PersonIcon />회원 · {name}님
+    </span>
+  ) : (
+    <span className="inline-flex items-center gap-1 rounded-full bg-slate-700 px-3 py-1 text-sm font-semibold text-white" title="쇼핑몰에 로그인하지 않은 상태">
+      <PersonIcon />비회원
+    </span>
+  );
 }

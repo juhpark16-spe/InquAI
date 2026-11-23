@@ -1,14 +1,23 @@
 // 내 문의 조회 (/inquiry/lookup): 비회원은 이메일 + 조회 비밀번호로 내 문의를 대화형으로 보고,
 // 답변 평가(도움이 되었나요?)와 추가 문의를 남길 수 있음. 비밀번호는 이 화면 안에서만 기억(저장하지 않음)
-// 쇼핑몰에 로그인한 고객은 비밀번호 없이 '내 쇼핑'(/my)에서 봅니다.
-import { useState, type FormEvent } from "react";
+// - 맨 위 표시: 비회원이면 '비회원 조회' + [회원 로그인], 회원이면 '○○님' + [내 쇼핑에서 보기] (문의하기 화면과 같은 모양)
+// - 조회에 성공하면 입력 카드를 한 줄 띠(이메일 · 건수 · 답변 상태 · [다른 이메일로 조회] [조회 끝내기])로 접고 결과로 내려감
+// - [조회 끝내기]: 결과와 입력한 비밀번호를 지우고 처음으로 (공용 PC)
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useLocation } from "react-router";
 
 import { useShop } from "../../auth/ShopProvider";
 import InquiryThreads from "../../components/InquiryThreads";
-import { Alert, Button, Card, Field, Input, Spinner } from "../../components/ui";
+import { Alert, Button, Card, Field, Input, MemberBadge, Spinner } from "../../components/ui";
 import { customerApi, errorMessage } from "../../services/api";
 import type { InquiryPublic } from "../../services/types";
+
+/** 고객에게 보이는 상태 (InquiryThreads 와 같은 기준: 마지막 글이 고객 것이면 '답변 준비 중') */
+function waiting(i: InquiryPublic) {
+  const mine = Math.max(new Date(i.created_at).getTime(), ...i.messages.map((m) => new Date(m.at).getTime()));
+  const answered = Math.max(0, ...i.answers.map((a) => new Date(a.answered_at).getTime()));
+  return mine > answered;
+}
 
 export default function InquiryLookupPage() {
   const { customer } = useShop();
@@ -19,6 +28,7 @@ export default function InquiryLookupPage() {
   const [error, setError] = useState("");
   const [items, setItems] = useState<InquiryPublic[] | null>(null);
   const [notice, setNotice] = useState("");
+  const results = useRef<HTMLDivElement>(null);
 
   async function load() {
     const r = await customerApi.lookup(email.trim(), password);
@@ -40,37 +50,94 @@ export default function InquiryLookupPage() {
     }
   }
 
+  // 조회 결과가 나오면 결과 위치로 (휴대폰에서 첫 화면에 답변이 보이게)
+  useEffect(() => {
+    if (items) results.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [items === null]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** 다른 이메일로 조회: 결과를 닫고 입력 카드로 (이메일은 남기고 비밀번호는 지움) */
+  function again() {
+    setItems(null);
+    setPassword("");
+    setError("");
+  }
+
+  /** 조회 끝내기: 결과·이메일·비밀번호를 모두 지움 (공용 PC) */
+  function finish() {
+    again();
+    setEmail("");
+    setNotice("");
+  }
+
+  const pending = items?.filter((i) => waiting(i)).length ?? 0;
+  const more = items?.filter((i) => !waiting(i) && i.more_answer_coming).length ?? 0;
+  const done = (items?.length ?? 0) - pending - more;
+
   return (
     <div className="space-y-4">
-      {customer && (
-        <Alert kind="info">
-          {customer.name}님은 쇼핑몰에 로그인되어 있어요. <Link to="/my" className="font-semibold underline">내 쇼핑</Link>에서
-          비밀번호 없이 내 문의를 볼 수 있습니다.
-        </Alert>
-      )}
       <div>
-        <h1 className="page-title">내 문의 조회</h1>
-        <p className="mt-1 text-sm text-muted">문의할 때 쓴 이메일과 조회 비밀번호로 답변을 확인하세요. 쇼핑몰 회원은 로그인하면 '내 쇼핑'에서 바로 볼 수 있어요.</p>
+        <h1 className="page-title flex flex-wrap items-center gap-2">내 문의 조회 <MemberBadge name={customer?.name} /></h1>
+        <p className="mt-1 text-sm text-muted">문의할 때 쓴 이메일과 조회 비밀번호로 답변을 확인하세요.</p>
       </div>
-      <Card>
-        <form onSubmit={submit} className="space-y-4">
-          <Field label="문의할 때 쓴 이메일">
-            <Input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
-          </Field>
-          <Field label="조회 비밀번호" hint="문의할 때 정한 비밀번호입니다. 비밀번호가 다르게 작성된 문의는 따로 조회됩니다.">
-            <Input required type="password" autoComplete="current-password" autoFocus={!!fromForm}
-              value={password} onChange={(e) => setPassword(e.target.value)} />
-          </Field>
-          {error && <Alert>{error}</Alert>}
-          <Button type="submit" disabled={loading}>{loading ? <Spinner /> : "조회"}</Button>
-        </form>
-        <p className="mt-4 text-xs text-slate-500">
-          비밀번호가 기억나지 않으면 <Link to="/inquiry" className="text-indigo-600 hover:underline">새 문의</Link>에
-          이전 문의 내용을 함께 적어 주세요. 담당자가 확인해 드립니다.
-        </p>
-      </Card>
 
-      {items && <p className="text-sm text-muted">문의 {items.length}건 · 최신순 (누르면 펼쳐져요)</p>}
+      {/* 회원·비회원 표시 (문의하기 화면과 같은 모양) */}
+      {customer ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-primary-soft px-4 py-3 text-sm">
+          <span><b className="text-ink">{customer.name}</b>님은 로그인되어 있어요. 비밀번호 없이 내 쇼핑에서 모든 문의를 볼 수 있어요.</span>
+          <Link to="/my" className="inline-flex min-h-9 shrink-0 items-center rounded-lg bg-primary px-3.5 text-sm font-semibold text-white hover:bg-primary-hover">
+            내 쇼핑에서 보기
+          </Link>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-hairline bg-surface-soft px-4 py-3 text-sm">
+          <span className="min-w-0 text-body">
+            <b className="text-ink">로그인하지 않은 비회원 조회예요.</b> 회원은 비밀번호 없이 내 쇼핑에서 바로 볼 수 있어요.
+          </span>
+          <Link to="/shop/login" state={{ from: "/my" }}
+            className="inline-flex min-h-9 shrink-0 items-center rounded-lg bg-primary px-3.5 text-sm font-semibold text-white hover:bg-primary-hover">
+            회원 로그인
+          </Link>
+        </div>
+      )}
+
+      {items ? (
+        /* 조회 뒤: 입력 카드 대신 한 줄 띠 (결과가 나오면 이 띠가 화면 위에 오도록 내려감, 위쪽 메뉴 높이만큼 띄움) */
+        <div ref={results} className="flex scroll-mt-28 flex-wrap items-center justify-between gap-3 rounded-2xl border border-hairline bg-white px-5 py-3.5">
+          <div className="min-w-0 text-sm">
+            <p className="truncate font-semibold text-ink">{email.trim()}의 문의 {items.length}건</p>
+            <p className="mt-0.5 flex flex-wrap gap-x-2 text-xs text-muted">
+              {pending > 0 && <span className="font-semibold text-primary">답변 준비 중 {pending}</span>}
+              {more > 0 && <span className="font-semibold text-primary">추가 안내 예정 {more}</span>}
+              {done > 0 && <span className="text-emerald-700">답변 완료 {done}</span>}
+              <span>· 최신순, 누르면 펼쳐져요</span>
+            </p>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <Button variant="ghost" className="min-h-9 px-3.5 py-1.5" onClick={again}>다른 이메일로 조회</Button>
+            <Button variant="ghost" className="min-h-9 px-3.5 py-1.5" onClick={finish}
+              title="조회 결과와 입력한 비밀번호를 지웁니다 (여러 사람이 쓰는 PC라면 눌러 주세요)">조회 끝내기</Button>
+          </div>
+        </div>
+      ) : (
+        <Card>
+          <form onSubmit={submit} className="space-y-4">
+            <Field label="문의할 때 쓴 이메일">
+              <Input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </Field>
+            <Field label="조회 비밀번호" hint="문의할 때 정한 비밀번호입니다. 비밀번호가 다르게 작성된 문의는 따로 조회됩니다.">
+              <Input required type="password" autoComplete="current-password" autoFocus={!!fromForm || (!!email && !password)}
+                value={password} onChange={(e) => setPassword(e.target.value)} />
+            </Field>
+            {error && <Alert>{error}</Alert>}
+            <Button type="submit" disabled={loading}>{loading ? <Spinner /> : "조회"}</Button>
+          </form>
+          <p className="mt-4 text-xs text-slate-500">
+            비밀번호가 기억나지 않으면 <Link to="/inquiry" className="text-indigo-600 hover:underline">새 문의</Link>에
+            이전 문의 내용을 함께 적어 주세요. 담당자가 확인해 드립니다.
+          </p>
+        </Card>
+      )}
+
       {items && (
         <InquiryThreads items={items} notice={notice} reload={load} actions={{
           rate: (n, id, helpful) => customerApi.rate(id, n, email.trim(), password, helpful),

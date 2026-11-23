@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import select
 
 from backend.ai.rules import get_route, get_urgency
+from backend.core import rate_limit
 from backend.database.models import AgentLog, AnalysisResult, Customer, Inquiry, Order, Response, Ticket, utcnow
 from backend.main import app
 from backend.rag.faq_search import FaqSearch
@@ -247,3 +248,17 @@ def test_model_not_ready(client, ai):
     app.state.analyzer = None
     r = post(client)
     assert r.status_code == 503 and r.json()["code"] == "MODEL_NOT_READY"
+
+
+def test_order_number_format(client, db, ai):
+    """주문번호는 주문일 8자리-순번 4자리. 12자리 숫자·공백은 고쳐서 받고, 형식이 다르면 422 (안내 문장 그대로)"""
+    r = post(client, order_number="20261120-022")
+    assert r.status_code == 422 and "숫자 8자리-4자리" in r.json()["detail"][0]["msg"]
+    assert post(client, order_number="A-2").status_code == 422
+    for raw in ("202611100001", " 20261110-0001 ", "20261110 - 0001"):
+        rate_limit.reset()                                                         # 문의 등록 1분 5건 제한
+        number = post(client, order_number=raw).json()["inquiry_number"]
+        assert db.scalar(select(Inquiry.order_number).where(Inquiry.inquiry_number == number)) == "20261110-0001", raw
+    rate_limit.reset()
+    number = post(client, order_number="  ").json()["inquiry_number"]                 # 빈칸 = 주문번호 없음
+    assert db.scalar(select(Inquiry.order_number).where(Inquiry.inquiry_number == number)) is None

@@ -7,7 +7,14 @@ import { cx } from "../../components/ui";
 function ShopMenu() {
   const { customer, logout } = useShop();
   const navigate = useNavigate();
-  if (!customer) return <NavLink to="/shop/login" className="whitespace-nowrap rounded-full px-3 py-2 text-sm text-muted hover:bg-white/60 hover:text-ink">로그인</NavLink>;
+  if (!customer) {
+    return (
+      <span className="flex items-center gap-1 text-sm">
+        <span className="hidden whitespace-nowrap text-muted sm:inline">비회원 ·</span>
+        <NavLink to="/shop/login" className="whitespace-nowrap rounded-full px-3 py-2 font-medium text-ink hover:bg-white/60">로그인</NavLink>
+      </span>
+    );
+  }
   return (
     <span className="flex items-center gap-1 text-sm">
       <NavLink to="/my" className={({ isActive }) => cx("whitespace-nowrap rounded-full px-3 py-2 font-medium",

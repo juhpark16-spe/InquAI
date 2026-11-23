@@ -56,11 +56,19 @@ test("고객 문의 → 상담원 답변 발송 → 고객 조회에서 답변 �
   // 4. 고객: 이메일 + 조회 비밀번호로 조회 → 상담원 답변이 보임
   await page.context().clearCookies(); // 관리자 로그인과 상관없이 고객으로
   await page.goto("/inquiry/lookup");
+  await expect(page.getByRole("heading", { name: "내 문의 조회 비회원" })).toBeVisible();   // 제목 옆 '비회원' 표시
   await page.getByLabel("문의할 때 쓴 이메일").fill(email);
   await page.getByLabel("조회 비밀번호").fill(LOOKUP_PASSWORD);
-  await page.getByRole("button", { name: "조회" }).click();
-  await expect(page.getByText(/문의 1건/)).toBeVisible();
+  await page.getByRole("button", { name: "조회", exact: true }).click();
+  await expect(page.getByText(/문의 1건/)).toBeVisible();                       // 입력 카드는 한 줄 띠로 접힘
+  await expect(page.getByText("답변 완료 1")).toBeVisible();
+  await expect(page.getByLabel("조회 비밀번호")).toHaveCount(0);
   await expect(page.getByText(answer)).toBeVisible();
+
+  // 5. 조회 끝내기 → 결과와 입력한 내용이 지워지고 처음 화면 (공용 PC)
+  await page.getByRole("button", { name: "조회 끝내기" }).click();
+  await expect(page.getByText(answer)).toHaveCount(0);
+  await expect(page.getByLabel("문의할 때 쓴 이메일")).toHaveValue("");
 });
 
 test("배정받은 상담원의 알림 종에 새 문의가 뜨고, 누르면 상세로", async ({ page }) => {
@@ -192,8 +200,9 @@ test("확인 후 다시 안내를 체크해 발송 → 다시 안내 표시·목
   await page.goto("/inquiry/lookup");
   await page.getByLabel("문의할 때 쓴 이메일").fill(email);
   await page.getByLabel("조회 비밀번호").fill(LOOKUP_PASSWORD);
-  await page.getByRole("button", { name: "조회" }).click();
-  await expect(page.getByText("추가 안내 예정")).toBeVisible();
+  await page.getByRole("button", { name: "조회", exact: true }).click();
+  await expect(page.getByText("추가 안내 예정", { exact: true })).toBeVisible();          // 문의 카드의 상태
+  await expect(page.getByText("추가 안내 예정 1")).toBeVisible();                          // 위쪽 요약 띠
   await expect(page.getByText("공급사 재입고 일정")).toHaveCount(0);                     // 내부 메모는 고객에게 안 보임
 });
 
@@ -228,6 +237,18 @@ test("파손 문의는 송장·파손 부위 사진 두 장이 있어야 등록 
   await expect(page.getByText(/\[추가 문의하기\]로 보내 주세요/)).toBeVisible();
 });
 
+test("비회원 문의 표시 · 주문번호 형식이 틀리면 안내하고 등록하지 않음", async ({ page }) => {
+  await page.goto("/inquiry");
+  await expect(page.getByRole("heading", { name: "1:1 문의하기 비회원" })).toBeVisible();   // 제목 옆 '비회원' 표시
+  await expect(page.getByRole("link", { name: "회원 로그인" })).toBeVisible();
+  await page.getByLabel(/주문번호/).fill("20261120-022");                          // 뒤가 3자리
+  await expect(page.getByText(/숫자 8자리-4자리예요/)).toBeVisible();
+  await page.getByLabel(/주문번호/).fill("202611200022");                          // 12자리 숫자는 칸을 벗어나면 8-4 로
+  await expect(page.getByText(/숫자 8자리-4자리예요/)).toHaveCount(0);
+  await page.getByLabel("제목").click();
+  await expect(page.getByLabel(/주문번호/)).toHaveValue("20261120-0022");
+});
+
 test("조회 비밀번호가 틀리면 문의가 보이지 않음", async ({ page }) => {
   const email = `e2e-wrong-${Date.now()}@example.com`;
   await createInquiry(page, email, "적립금 문의 (자동 테스트)", "적립금은 언제 들어오나요? 확인 부탁드려요.");
@@ -235,7 +256,7 @@ test("조회 비밀번호가 틀리면 문의가 보이지 않음", async ({ pag
   await page.goto("/inquiry/lookup");
   await page.getByLabel("문의할 때 쓴 이메일").fill(email);
   await page.getByLabel("조회 비밀번호").fill("wrong-password-9");
-  await page.getByRole("button", { name: "조회" }).click();
+  await page.getByRole("button", { name: "조회", exact: true }).click();
   await expect(page.getByText("적립금 문의 (자동 테스트)")).toHaveCount(0);
 });
 

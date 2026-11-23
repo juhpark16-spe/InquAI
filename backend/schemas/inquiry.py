@@ -1,5 +1,6 @@
 """고객 문의 API 요청·응답 형식 (docs/api_spec.md 3장)."""
 
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator
@@ -7,6 +8,25 @@ from pydantic import BaseModel, Field, field_validator
 from backend.schemas.common import UTCDateTime
 
 EMAIL_PATTERN = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+# 쇼핑몰 주문번호: 주문일 8자리 - 그날 순번 4자리 (예: 20261103-0042). 하이픈 없이 12자리로 적어도 받아 줌
+ORDER_NUMBER = re.compile(r"^\d{8}-\d{4}$")
+ORDER_NUMBER_HELP = "주문번호는 20261103-0042처럼 숫자 8자리-4자리예요. 마이페이지 > 주문내역에서 확인해 주세요."
+
+
+def normalize_order_number(v: str | None) -> str | None:
+    """빈칸 → None, 공백 제거, 12자리 숫자 → 8-4 (예: 202611030042 → 20261103-0042). 형식이 다르면 ValueError"""
+    if v is None:
+        return None
+    v = re.sub(r"\s", "", v)
+    if not v:
+        return None
+    if re.fullmatch(r"\d{12}", v):
+        v = f"{v[:8]}-{v[8:]}"
+    if not ORDER_NUMBER.match(v):
+        raise ValueError(ORDER_NUMBER_HELP)
+    return v
+
+
 LOOKUP_PASSWORD_MIN = 6
 
 
@@ -48,8 +68,8 @@ class InquiryCreate(_Email):
 
     @field_validator("order_number", mode="before")
     @classmethod
-    def _empty_to_none(cls, v):
-        return (v.strip() or None) if isinstance(v, str) else v
+    def _order_number(cls, v):
+        return normalize_order_number(v) if isinstance(v, str) else v
 
     @field_validator("privacy_agreed")
     @classmethod
