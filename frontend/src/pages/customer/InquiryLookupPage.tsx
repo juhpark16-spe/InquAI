@@ -1,6 +1,6 @@
 // 내 문의 조회 (/inquiry/lookup): 비회원은 이메일 + 조회 비밀번호로 내 문의를 대화형으로 보고,
 // 답변 평가(도움이 되었나요?)와 추가 문의를 남길 수 있음. 비밀번호는 이 화면 안에서만 기억(저장하지 않음)
-// - 맨 위 표시: 비회원이면 '비회원 조회' + [회원 로그인], 회원이면 '○○님' + [내 쇼핑에서 보기] (문의하기 화면과 같은 모양)
+// - 로그인 상태는 제목 옆 배지(비회원 / 회원 · ○○님)와 오른쪽 위 메뉴(로그인 · 내 쇼핑)에서
 // - 조회에 성공하면 입력 카드를 한 줄 띠(이메일 · 건수 · 답변 상태 · [다른 이메일로 조회] [조회 끝내기])로 접고 결과로 내려감
 // - [조회 끝내기]: 결과와 입력한 비밀번호를 지우고 처음으로 (공용 PC)
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -79,26 +79,6 @@ export default function InquiryLookupPage() {
         <h1 className="page-title flex flex-wrap items-center gap-2">내 문의 조회 <MemberBadge name={customer?.name} /></h1>
         <p className="mt-1 text-sm text-muted">문의할 때 쓴 이메일과 조회 비밀번호로 답변을 확인하세요.</p>
       </div>
-
-      {/* 회원·비회원 표시 (문의하기 화면과 같은 모양) */}
-      {customer ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-primary-soft px-4 py-3 text-sm">
-          <span><b className="text-ink">{customer.name}</b>님은 로그인되어 있어요. 비밀번호 없이 내 쇼핑에서 모든 문의를 볼 수 있어요.</span>
-          <Link to="/my" className="inline-flex min-h-9 shrink-0 items-center rounded-lg bg-primary px-3.5 text-sm font-semibold text-white hover:bg-primary-hover">
-            내 쇼핑에서 보기
-          </Link>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-hairline bg-surface-soft px-4 py-3 text-sm">
-          <span className="min-w-0 text-body">
-            <b className="text-ink">로그인하지 않은 비회원 조회예요.</b> 회원은 비밀번호 없이 내 쇼핑에서 바로 볼 수 있어요.
-          </span>
-          <Link to="/shop/login" state={{ from: "/my" }}
-            className="inline-flex min-h-9 shrink-0 items-center rounded-lg bg-primary px-3.5 text-sm font-semibold text-white hover:bg-primary-hover">
-            회원 로그인
-          </Link>
-        </div>
-      )}
 
       {items ? (
         /* 조회 뒤: 입력 카드 대신 한 줄 띠 (결과가 나오면 이 띠가 화면 위에 오도록 내려감, 위쪽 메뉴 높이만큼 띄움) */

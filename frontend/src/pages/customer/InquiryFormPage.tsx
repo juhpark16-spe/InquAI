@@ -163,22 +163,8 @@ export default function InquiryFormPage() {
       </div>
     <Card>
       <form onSubmit={submit} className="space-y-4">
-        {customer ? (
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-primary-soft px-4 py-3 text-sm">
-            <span><b className="text-ink">{customer.name}</b>님 ({customer.email})으로 문의합니다.</span>
-            <span className="text-xs text-muted">답변은 내 쇼핑에서 바로 볼 수 있어요</span>
-          </div>
-        ) : (
-        <>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-hairline bg-surface-soft px-4 py-3 text-sm">
-          <span className="min-w-0 text-body">
-            <b className="text-ink">로그인하지 않은 비회원 문의예요.</b> 회원은 주문을 목록에서 바로 고르고, 답변도 내 쇼핑에서 바로 볼 수 있어요.
-          </span>
-          <Link to="/shop/login" state={{ from: "/inquiry" }}
-            className="inline-flex min-h-9 shrink-0 items-center rounded-lg bg-primary px-3.5 text-sm font-semibold text-white hover:bg-primary-hover">
-            회원 로그인
-          </Link>
-        </div>
+        {/* 로그인 상태는 제목 옆 배지와 오른쪽 위 메뉴(로그인 · 내 쇼핑)에서 보여 줌 */}
+        {!customer && (
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="이름">
             <Input required maxLength={50} value={form.customer_name} onChange={set("customer_name")} disabled={sending} />
@@ -195,7 +181,6 @@ export default function InquiryFormPage() {
               value={form.password2} onChange={set("password2")} disabled={sending} />
           </Field>
         </div>
-        </>
         )}
 
         <Field label="제목">

@@ -240,7 +240,7 @@ test("파손 문의는 송장·파손 부위 사진 두 장이 있어야 등록 
 test("비회원 문의 표시 · 주문번호 형식이 틀리면 안내하고 등록하지 않음", async ({ page }) => {
   await page.goto("/inquiry");
   await expect(page.getByRole("heading", { name: "1:1 문의하기 비회원" })).toBeVisible();   // 제목 옆 '비회원' 표시
-  await expect(page.getByRole("link", { name: "회원 로그인" })).toBeVisible();
+  await expect(page.getByRole("banner").getByRole("link", { name: "로그인", exact: true })).toBeVisible();   // 오른쪽 위 로그인 버튼
   await page.getByLabel(/주문번호/).fill("20261120-022");                          // 뒤가 3자리
   await expect(page.getByText(/숫자 8자리-4자리예요/)).toBeVisible();
   await page.getByLabel(/주문번호/).fill("202611200022");                          // 12자리 숫자는 칸을 벗어나면 8-4 로

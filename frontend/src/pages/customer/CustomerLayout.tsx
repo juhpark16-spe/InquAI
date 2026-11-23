@@ -3,23 +3,30 @@ import { NavLink, Outlet, useNavigate } from "react-router";
 import { ShopProvider, useShop } from "../../auth/ShopProvider";
 import { cx } from "../../components/ui";
 
-// 쇼핑몰 로그인 상태 (연동 시연): 로그인하면 이름·내 쇼핑·로그아웃, 아니면 로그인
+// 쇼핑몰 로그인 상태 (오른쪽 위): 로그인하지 않았으면 '비회원' + [로그인] 버튼,
+// 로그인했으면 이름 원형 + 'OO님' + [내 쇼핑] 버튼(파랑) + 로그아웃. 문의하기·문의 조회의 로그인 안내 줄 대신 여기서 보여 줌
 function ShopMenu() {
   const { customer, logout } = useShop();
   const navigate = useNavigate();
   if (!customer) {
     return (
-      <span className="flex items-center gap-1 text-sm">
-        <span className="hidden whitespace-nowrap text-muted sm:inline">비회원 ·</span>
-        <NavLink to="/shop/login" className="whitespace-nowrap rounded-full px-3 py-2 font-medium text-ink hover:bg-white/60">로그인</NavLink>
+      <span className="flex items-center gap-2 text-sm">
+        <span className="hidden whitespace-nowrap text-muted sm:inline">비회원</span>
+        <NavLink to="/shop/login" className="whitespace-nowrap rounded-full border border-primary/40 bg-white px-4 py-1.5 font-semibold text-primary hover:bg-primary-soft">
+          로그인
+        </NavLink>
       </span>
     );
   }
   return (
-    <span className="flex items-center gap-1 text-sm">
-      <NavLink to="/my" className={({ isActive }) => cx("whitespace-nowrap rounded-full px-3 py-2 font-medium",
-        isActive ? "bg-primary text-white" : "text-ink hover:bg-white/60")}>{customer.name}님 · 내 쇼핑</NavLink>
-      <button className="whitespace-nowrap rounded-full px-2 py-2 text-muted hover:text-ink"
+    <span className="flex items-center gap-2 text-sm">
+      <span className="flex items-center gap-1.5" title={customer.email}>
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-white" aria-hidden>{customer.name.slice(0, 1)}</span>
+        <span className="whitespace-nowrap font-semibold text-ink">{customer.name}님</span>
+      </span>
+      <NavLink to="/my" className={({ isActive }) => cx("whitespace-nowrap rounded-full px-4 py-1.5 font-semibold",
+        isActive ? "bg-primary text-white shadow-sm shadow-primary/25" : "border border-primary/40 bg-white text-primary hover:bg-primary-soft")}>내 쇼핑</NavLink>
+      <button className="whitespace-nowrap rounded-full px-2 py-1.5 text-muted hover:text-ink"
         onClick={async () => { navigate("/inquiry"); await logout(); }}>로그아웃</button>
     </span>
   );
