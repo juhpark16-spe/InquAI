@@ -314,6 +314,15 @@ def _pick_order(db: Session, sc: Scenario, at: datetime, used: set[int], rng: ra
     return rng.choice(orders) if orders else None
 
 
+def _shift_order(order: Order, delta: timedelta) -> None:
+    """주문의 모든 날짜를 delta 만큼 옮김 (주문·결제·배송 완료·반품·결제 내역·배송 추적)"""
+    for name in ("ordered_at", "paid_at", "delivered_at", "return_requested_at", "picked_up_at"):
+        if getattr(order, name) is not None:
+            setattr(order, name, as_utc(getattr(order, name)) + delta)
+    for row in [*order.payments, *order.shipment_events]:
+        row.at = as_utc(row.at) + delta
+
+
 def seed_inquiries(db: Session, *, now: datetime | None = None, days: int = DAYS, seed: int = SEED) -> int:
     """최근 days일치 시연 문의를 만듭니다 (커밋은 부르는 쪽에서). 만든 문의 수를 돌려줌"""
     rng = random.Random(seed)
@@ -347,7 +356,14 @@ def seed_inquiries(db: Session, *, now: datetime | None = None, days: int = DAYS
     # 고정 문의의 주문을 먼저 정해 둠 (앞 문의들이 맞는 주문을 다 써 버리지 않게)
     reserved = {}
     for idx, title in forced.items():
-        if 0 <= idx < len(plan) and (o := _pick_order(db, by_title[title], plan[idx], used_orders, rng)):
+        o = _pick_order(db, by_title[title], plan[idx], used_orders, rng)
+        if o is None and plan[idx] < now:
+            # 접수 시각이 '평일 기준'이라 주말을 건너 금요일로 가면, '지금 기준 n일 전'에 만든 주문이 그보다 늦을 수 있음
+            # → 지금 기준으로 맞는 주문을 골라 날짜를 문의 시각에 맞춰 함께 앞당김 (주문·결제·배송·반품 간격은 그대로)
+            o = _pick_order(db, by_title[title], now, used_orders, rng)
+            if o is not None:
+                _shift_order(o, plan[idx] - now)
+        if o is not None:
             reserved[idx] = o
             used_orders.add(o.id)
     for idx, created in enumerate(plan):
