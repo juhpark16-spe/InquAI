@@ -113,6 +113,8 @@ class Inquiry(TimestampMixin, Base):
     privacy_agreed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 개인정보 수집·이용 동의 시각
     assigned_to: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"))
     # 다시 안내 (backend/services/recheck.py): "확인 후 다시 안내드리겠습니다"를 먼저 보냈을 때 확인할 내용·기한
+    # 파손·불량·오배송 문의인데 고객이 '지금은 사진이 없어요'를 고름 → '나중에' (추가 문의로 사진이 오면 풀림)
+    photo_request: Mapped[str | None] = mapped_column(String(10))
     recheck_note: Mapped[str | None] = mapped_column(String(200))
     recheck_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     recheck_by: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"))
@@ -237,6 +239,7 @@ class Attachment(TimestampMixin, Base):
     content_type: Mapped[str] = mapped_column(String(30))
     size: Mapped[int] = mapped_column(Integer)
     path: Mapped[str] = mapped_column(String(300))        # 서버 저장 위치 (무작위 이름)
+    label: Mapped[str | None] = mapped_column(String(20))  # 파손 문의의 사진 칸: 송장 / 파손 부위 (services/photo_evidence.py)
 
 
 class Notification(TimestampMixin, Base):

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from backend.agents.pipeline import needs_draft, run_agent
 from backend.core.security import hash_password, verify_password
-from backend.services import notify, uploads
+from backend.services import notify, photo_evidence, uploads
 from backend.services.assignment import auto_assign
 from backend.core.errors import AppError
 from backend.database.models import AgentLog, AnalysisResult, CustomerMessage, Inquiry, Response, utcnow
@@ -32,7 +32,12 @@ def _next_inquiry_number(db: Session) -> str:
 
 
 def _save_inquiry(db: Session, body: InquiryCreate) -> Inquiry:
-    fields = body.model_dump(exclude={"password", "privacy_agreed", "attachment_tokens"})
+    photo_evidence.check(body.title, body.content, body.attachment_tokens, body.photo_labels, body.photos_later,
+                         body.damage_report)   # 파손 문의: 송장·파손 부위 사진 또는 '지금은 사진이 없어요'
+    fields = body.model_dump(exclude={"password", "privacy_agreed", "attachment_tokens", "photo_labels", "damage_report",
+                                      "photos_later"})
+    needs = body.damage_report or photo_evidence.needs_photos(body.title, body.content)
+    fields["photo_request"] = photo_evidence.LATER if needs and body.photos_later and not body.photo_labels else None
     # 평문 비밀번호는 저장하지 않음. 로그인 고객은 비밀번호 없이 '내 문의'로 봄
     fields["lookup_password_hash"] = hash_password(body.password) if body.password else None
     fields["privacy_agreed_at"] = utcnow()
@@ -41,7 +46,8 @@ def _save_inquiry(db: Session, body: InquiryCreate) -> Inquiry:
         db.add(inquiry)
         try:
             db.flush()
-            uploads.claim(db, body.attachment_tokens, inquiry.id)  # 사진이 잘못되면 문의도 저장하지 않음 (AppError)
+            for a in uploads.claim(db, body.attachment_tokens, inquiry.id):  # 사진이 잘못되면 문의도 저장하지 않음 (AppError)
+                a.label = body.photo_labels.get(a.token)
             db.commit()
             return inquiry
         except IntegrityError:
@@ -167,7 +173,7 @@ def _public(inquiry: Inquiry) -> dict:
             "messages": [{"id": m.id, "text": m.content, "at": m.created_at} for m in inquiry.messages],
             "attachment_count": len(inquiry.attachments),
             # 본인 확인을 통과한 응답에만 넣는 30분짜리 사진 주소 (처음 문의 사진은 message_id 없음)
-            "attachments": [{"url": uploads.public_url(a), "filename": a.filename, "message_id": a.message_id}
+            "attachments": [{"url": uploads.public_url(a), "filename": a.filename, "message_id": a.message_id, "label": a.label}
                             for a in inquiry.attachments],
             "can_follow_up": len(inquiry.messages) < FOLLOW_UP_LIMIT,
             # 상담원이 '확인 후 다시 안내'를 표시해 둠 (확인할 내용·기한 같은 내부 정보는 보내지 않음)
@@ -185,7 +191,8 @@ def add_follow_up(db: Session, inquiry: Inquiry, content: str, tokens: list[str]
     msg = CustomerMessage(inquiry_id=inquiry.id, content=content)
     db.add(msg)
     db.flush()
-    uploads.claim(db, tokens, inquiry.id, message_id=msg.id)
+    if uploads.claim(db, tokens, inquiry.id, message_id=msg.id) and inquiry.photo_request:
+        inquiry.photo_request = None   # 나중에 보내기로 한 사진이 옴
     if inquiry.status in REOPEN_FROM or inquiry.status == "접수":
         inquiry.status = "담당자 처리"  # 사람이 이어서 봐야 함
     if inquiry.assigned_to is None:

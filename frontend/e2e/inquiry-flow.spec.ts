@@ -194,6 +194,37 @@ test("확인 후 다시 안내를 체크해 발송 → 다시 안내 표시·목
   await expect(page.getByText("공급사 재입고 일정")).toHaveCount(0);                     // 내부 메모는 고객에게 안 보임
 });
 
+test("파손 문의는 송장·파손 부위 사진 두 장이 있어야 등록 (없으면 '지금은 사진이 없어요')", async ({ page }) => {
+  // 파손은 어느 주문인지 알아야 확인할 수 있으므로 주문번호를 함께 적음
+  const png = { name: "photo.png", mimeType: "image/png", buffer: Buffer.from("89504e470d0a1a0a" + "00".repeat(64), "hex") };
+  const fill = async (title: string) => {
+    await page.goto("/inquiry");
+    await page.getByLabel("이름").fill("테스트 고객");
+    await page.getByLabel(/^이메일/).fill(`e2e-damage-${Date.now()}@example.com`);
+    await page.getByLabel("조회 비밀번호").fill(LOOKUP_PASSWORD);
+    await page.getByLabel("비밀번호 확인").fill(LOOKUP_PASSWORD);
+    await page.getByLabel("제목").fill(title);
+    await page.getByLabel(/문의 내용/).fill("주문한 머그컵이 깨져서 왔어요. 교환 부탁드려요. (주문번호 20261110-0001)");
+    await page.getByLabel(/개인정보 수집·이용에 동의합니다/).check();
+  };
+
+  await fill("머그컵 파손 (자동 테스트)");
+  await expect(page.getByText("송장 사진", { exact: false }).first()).toBeVisible();          // 내용을 보고 사진 두 칸
+  await page.getByRole("button", { name: "문의 등록" }).click();
+  await expect(page.getByText(/송장 · 파손 부위 사진이 필요해요/)).toBeVisible();              // 사진 없이는 등록 안 됨
+  await page.getByLabel("송장 사진 올리기").setInputFiles(png);
+  await page.getByLabel("파손 부위 사진 올리기").setInputFiles(png);
+  await expect(page.getByAltText("파손 부위 사진")).toBeVisible();
+  await page.getByRole("button", { name: "문의 등록" }).click();
+  await expect(page.getByText("문의가 등록되었습니다")).toBeVisible();
+
+  await fill("머그컵 파손 사진 없음 (자동 테스트)");
+  await page.getByLabel(/지금은 사진이 없어요/).check();
+  await page.getByRole("button", { name: "문의 등록" }).click();
+  await expect(page.getByText("문의가 등록되었습니다")).toBeVisible();
+  await expect(page.getByText(/\[추가 문의하기\]로 보내 주세요/)).toBeVisible();
+});
+
 test("조회 비밀번호가 틀리면 문의가 보이지 않음", async ({ page }) => {
   const email = `e2e-wrong-${Date.now()}@example.com`;
   await createInquiry(page, email, "적립금 문의 (자동 테스트)", "적립금은 언제 들어오나요? 확인 부탁드려요.");

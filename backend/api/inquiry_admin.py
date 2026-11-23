@@ -221,6 +221,7 @@ def get_inquiry(inquiry_id: int, user: LoginUser, db: DB):
         "due_at": sla.due_at(inquiry.created_at, urgency),
         "overdue": sla.is_overdue(inquiry.status, inquiry.created_at, urgency),
         "recheck": recheck_svc.info(inquiry, names),
+        "photo_request": inquiry.photo_request,
         "messages": [{"id": m.id, "text": m.content, "created_at": m.created_at} for m in inquiry.messages],
         "notes": [{"id": n.id, "author": names.get(n.author_id, "?"), "text": n.text, "created_at": n.created_at}
                   for n in inquiry.notes],

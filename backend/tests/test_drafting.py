@@ -62,7 +62,7 @@ def test_draft_failure_keeps_inquiry_for_review(client, db, ai):
 
 def test_draft_button_for_escalated_inquiry(client, db, ai):
     ai["analyzer"].next = {"confidence": 0.6}                                # 규칙으로 담당자 연결 (LLM 안 씀)
-    number = post(client, content="상품이 깨져서 왔어요").json()["inquiry_number"]
+    number = post(client, content="상품이 깨져서 왔어요", photos_later=True).json()["inquiry_number"]   # 사진은 나중에 (test_photo_evidence)
     inquiry, _ = saved(db, number)
     ai["llm"].replies = {"draft": {**DRAFT, "check_points": []}}
     h = login(client)

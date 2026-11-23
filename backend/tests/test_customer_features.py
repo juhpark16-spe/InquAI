@@ -46,7 +46,8 @@ def test_privacy_consent_required(client, db, ai):
 def test_upload_and_attach(client, db, ai):
     token = upload(client).json()["token"]
     ai["analyzer"].next = {"confidence": 0.5}
-    number = post(client, content="상자가 찢어져서 왔어요", attachment_tokens=[token]).json()["inquiry_number"]
+    # 파손 문의는 송장·파손 부위 두 장이 필요 → 한 장만 있으면 '지금은 사진이 없어요'(나머지는 나중에)로 (test_photo_evidence)
+    number = post(client, content="상자가 찢어져서 왔어요", attachment_tokens=[token], photos_later=True).json()["inquiry_number"]
     inquiry = db.scalar(select(Inquiry).where(Inquiry.inquiry_number == number))
     att = db.scalar(select(Attachment).where(Attachment.inquiry_id == inquiry.id))
     assert att.filename == "파손.png" and att.content_type == "image/png"

@@ -54,6 +54,10 @@ export interface InquiryCreate {
   password: string | null; // 쇼핑몰 로그인 고객은 비워도 됨 ('내 문의'에서 바로 봄)
   privacy_agreed: boolean;
   attachment_tokens: string[];
+  // 파손·불량·오배송 문의: 사진 칸 이름(token → 송장/파손 부위), 고객이 고른 '파손 문의예요', '지금은 사진이 없어요'
+  photo_labels?: Record<string, "송장" | "파손 부위">;
+  damage_report?: boolean;
+  photos_later?: boolean;
 }
 
 export interface InquiryCreated {
@@ -200,9 +204,10 @@ export interface InquiryDetail {
   due_at: string;
   overdue: boolean;
   recheck?: Recheck | null;
+  photo_request?: string | null; // '나중에': 파손 문의인데 고객이 사진을 나중에 보내기로 함
   messages: { id: number; text: string; created_at: string }[];
   notes: { id: number; author: string; text: string; created_at: string }[];
-  attachments: { id: number; filename: string; content_type: string; size: number; message_id: number | null; created_at: string }[];
+  attachments: { id: number; filename: string; content_type: string; size: number; message_id: number | null; label?: string | null; created_at: string }[];
   // 고객 답변 알림 메일: 기록(메일 꺼짐) / 대기 / 발송 / 실패 / 건너뜀(예시 주소)
   notifications: { channel: string; recipient: string; subject: string; status: string; error?: string | null; sent_at?: string | null; created_at: string }[];
 }

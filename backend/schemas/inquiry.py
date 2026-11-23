@@ -1,5 +1,7 @@
 """고객 문의 API 요청·응답 형식 (docs/api_spec.md 3장)."""
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, field_validator
 
 from backend.schemas.common import UTCDateTime
@@ -33,6 +35,11 @@ class InquiryCreate(_Email):
     privacy_agreed: bool = Field(default=False, validate_default=True)
     # 먼저 올린 사진의 token (POST /api/inquiries/uploads), 최대 3장
     attachment_tokens: list[str] = Field(default_factory=list, max_length=3)
+    # 파손·불량·오배송 문의의 사진 칸 (token → '송장' / '파손 부위'), 고객이 고른 '파손·불량·오배송 문의예요',
+    # '지금은 사진이 없어요' (backend/services/photo_evidence.py)
+    photo_labels: dict[str, Literal["송장", "파손 부위"]] = Field(default_factory=dict, max_length=3)
+    damage_report: bool = False
+    photos_later: bool = False
 
     @field_validator("customer_name", "title", "content", mode="before")
     @classmethod
@@ -104,6 +111,7 @@ class PublicAttachment(BaseModel):
     url: str               # 30분짜리 서명 주소
     filename: str
     message_id: int | None  # 추가 문의에 붙은 사진이면 그 메시지 id
+    label: str | None = None  # 파손 문의의 사진 칸: 송장 / 파손 부위
 
 
 class InquiryPublic(BaseModel):

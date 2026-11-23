@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import timedelta, timezone
 
 from langsmith import traceable
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.ai.prompts import DRAFT_PROMPT, DRAFT_SCHEMA, customer_text, find_promises
@@ -77,8 +77,14 @@ def build_input(db: Session, inquiry: Inquiry, faqs: list[dict], analysis: dict 
     if analysis:
         parts.append(f"[분석] 유형: {analysis['category']}, 감정: {analysis['sentiment']}, 긴급도: {analysis['urgency']}")
     parts.append("[주문 정보]\n" + _order_text(order_card(db, inquiry)))
-    photos = db.scalar(select(func.count()).select_from(Attachment).where(Attachment.inquiry_id == inquiry.id))
-    parts.append(f"[첨부 사진] {photos}장 (너는 사진을 볼 수 없음)" if photos else "[첨부 사진] 없음")
+    photos = db.scalars(select(Attachment).where(Attachment.inquiry_id == inquiry.id)).all()
+    labels = ", ".join(a.label for a in photos if a.label)
+    if photos:
+        parts.append(f"[첨부 사진] {len(photos)}장" + (f" ({labels})" if labels else "") + " (너는 사진을 볼 수 없음)")
+    elif inquiry.photo_request:   # 파손 문의인데 고객이 사진을 나중에 보내기로 함 → 답변에서 사진을 먼저 요청
+        parts.append("[첨부 사진] 없음 — 고객이 나중에 보내기로 함. 송장이 보이는 사진 1장과 파손 부위 사진 1장을 추가 문의로 보내 달라고 요청할 것")
+    else:
+        parts.append("[첨부 사진] 없음")
     tickets = db.scalars(select(Ticket).where(Ticket.inquiry_id == inquiry.id).order_by(Ticket.id)).all()
     # 상담원의 바로 처리(배송지·옵션 변경, 부분 취소, 중복 승인 취소, 보상, 반품 접수)도 처리 기록으로 → 초안에 결과를 안내
     actions = db.scalars(select(AdminAuditLog).where(AdminAuditLog.target_type == "inquiry", AdminAuditLog.target_id == inquiry.id,

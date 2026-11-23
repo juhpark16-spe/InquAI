@@ -63,6 +63,7 @@ class AttachmentOut(BaseModel):
     content_type: str
     size: int
     message_id: int | None  # 추가 문의에 붙은 사진이면 그 메시지
+    label: str | None = None  # 파손 문의의 사진 칸: 송장 / 파손 부위
     created_at: UTCDateTime
 
 
@@ -341,6 +342,7 @@ class InquiryDetail(BaseModel):
     due_at: UTCDateTime
     overdue: bool
     recheck: RecheckOut | None = None   # 확인 후 다시 안내 표시
+    photo_request: str | None = None    # '나중에': 파손 문의인데 고객이 사진을 나중에 보내기로 함
     messages: list[MessageOut]          # 고객 추가 문의
     notes: list[NoteOut]                # 상담원 내부 메모 (고객에게 안 보임)
     attachments: list[AttachmentOut]

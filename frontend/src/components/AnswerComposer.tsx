@@ -23,8 +23,10 @@ function Photos({ data, messageId }: { data: InquiryDetail; messageId: number | 
       {list.map((a) => {
         const url = inquiryApi.attachmentUrl(data.id, a.id);
         return (
-          <a key={a.id} href={url} target="_blank" rel="noreferrer" title={`${a.filename} (${Math.round(a.size / 1024)}KB) · 크게 보기`}>
-            <img src={url} alt={a.filename} className="h-20 w-20 rounded-lg border border-slate-200 object-cover hover:opacity-90" />
+          <a key={a.id} href={url} target="_blank" rel="noreferrer" title={`${a.label ? `${a.label} 사진 · ` : ""}${a.filename} (${Math.round(a.size / 1024)}KB) · 크게 보기`}
+            className="relative block">
+            <img src={url} alt={a.label ? `${a.label} 사진` : a.filename} className="h-20 w-20 rounded-lg border border-slate-200 object-cover hover:opacity-90" />
+            {a.label && <span className="absolute inset-x-0 bottom-0 rounded-b-lg bg-black/60 py-0.5 text-center text-[11px] font-medium text-white">{a.label}</span>}
           </a>
         );
       })}
@@ -277,6 +279,9 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
             </Bubble>
           );
         })}
+        {data.photo_request && (
+          <Note tone="warn">📷 파손·불량·오배송 문의인데 고객이 사진을 나중에 보내기로 했어요 → 답변에서 송장 사진·파손 부위 사진을 먼저 요청해 주세요</Note>
+        )}
         {sent.length === 0 && <Note>아직 고객에게 보낸 답변이 없습니다</Note>}
       </div>
 

@@ -72,6 +72,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | content | TEXT | 문의 원문 |
 | status | VARCHAR(10) | 아래 상태값 |
 | assigned_to | FK → admin_users NULL | 담당 상담원 |
+| photo_request | VARCHAR(10) NULL | '나중에': 파손·불량·오배송 문의인데 고객이 사진을 나중에 보내기로 함 (추가 문의로 사진이 오면 NULL, `services/photo_evidence.py`) |
 | recheck_note | VARCHAR(200) NULL | 확인 후 다시 안내: 확인할 내용 (표시가 없으면 NULL, `backend/services/recheck.py`) |
 | recheck_due_at | DATETIME NULL | 다시 안내할 기한 |
 | recheck_by | FK → admin_users NULL | 표시한 상담원 |
@@ -142,7 +143,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | --- | --- | --- |
 | customer_messages | inquiry_id, content | 고객 추가 문의 (같은 문의에 이어서) |
 | inquiry_notes | inquiry_id, author_id, text | 상담원 내부 메모 (고객에게 안 보임) |
-| attachments | token(UNIQUE), inquiry_id NULL, message_id NULL, filename, content_type, size, path | 고객 사진. 먼저 올려 token 을 받고 문의 등록 때 연결. 파일은 `data/uploads/`(Git 제외) |
+| attachments | token(UNIQUE), inquiry_id NULL, message_id NULL, filename, content_type, size, path, label NULL | 고객 사진. 먼저 올려 token 을 받고 문의 등록 때 연결. 파일은 `data/uploads/`(Git 제외). label: 파손 문의의 사진 칸 (송장 / 파손 부위) |
 | notifications | inquiry_id, channel, recipient, subject, body, status, error, sent_at | 고객 답변 알림 메일 (`services/notify.py`). status: 기록(메일 꺼짐) / 대기 / 발송 / 실패 / 건너뜀(예시 주소) |
 
 - inquiries에 **privacy_agreed_at**(개인정보 동의 시각), responses에 **rating**(1 / -1)·**rated_at** 추가

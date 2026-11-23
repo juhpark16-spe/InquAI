@@ -174,6 +174,7 @@
 | 개인정보 동의 | `POST /api/inquiries` 의 `privacy_agreed` | 반드시 `true` (빼거나 false 면 422). 동의 시각을 `inquiries.privacy_agreed_at`에 저장. 화면에 수집 항목·목적·보관 기간(3년, 전자상거래법)·외부 AI 처리 안내 |
 | 사진 올리기 | `POST /api/inquiries/uploads` (multipart `file`) → `{ token, filename, size }` | JPG·PNG·WEBP만 (파일 앞부분으로 형식 확인, 확장자는 믿지 않음), 1장 5MB, 문의당 3장, IP 1분 10회. 저장 이름은 무작위, `data/uploads/`(Git 제외) |
 | 사진 연결 | `POST /api/inquiries` 의 `attachment_tokens: [token]` | 올린 뒤 1시간 안, 한 번만 연결 가능. 잘못되면 문의도 저장하지 않음 |
+| 파손 사진 | `photo_labels: {token: "송장"·"파손 부위"}`, `damage_report`, `photos_later` | 제목·내용이 파손·불량·오배송 표현이거나 `damage_report=true`면 **송장·파손 부위 사진 두 장** 필요 (아니면 422 `PHOTO_REQUIRED`, `missing`). `photos_later=true`(지금은 사진이 없어요)면 사진 없이 등록하고 `photo_request='나중에'` → 추가 문의로 사진이 오면 풀림 (`services/photo_evidence.py`) |
 | 답변 평가 | `POST /api/inquiries/answers/{response_id}/rating?inquiry_number=` `{ customer_email, password, helpful }` | 본인 확인 후 `responses.rating` = 1 / -1 (다시 누르면 변경). 대시보드 "AI 자동 답변 만족도" |
 | 추가 문의 | `POST /api/inquiries/follow-up` `{ customer_email, password, inquiry_number, content, attachment_tokens }` | 같은 문의에 이어서. 자동 처리·완료된 문의는 `담당자 처리`로 다시 열고, 미배정이면 자동 배정. AI 재분석은 하지 않음. 문의당 10개까지, IP 1분 5회 |
 | 답변 시간 안내 | `/lookup` 응답의 `notice` | "영업일 기준 1일 이내에 답변드립니다 (평일 10:00~17:00)" |
