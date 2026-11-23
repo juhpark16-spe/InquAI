@@ -98,3 +98,18 @@ def verify_link(attachment_id: int, exp: int, sig: str) -> bool:
 def file_path(att: Attachment) -> Path:
     p = Path(att.path)
     return p if p.is_absolute() else PROJECT_ROOT / p
+
+
+def purge_unclaimed(db: Session) -> int:
+    """올렸지만 문의에 연결되지 않은 채 연결 가능 시간(1시간)이 지난 사진: 파일과 기록을 지움 (개인정보·디스크).
+    서버가 켜질 때 부름 (main.lifespan). 지운 수를 돌려줌, 커밋은 부르는 쪽에서"""
+    cutoff = utcnow() - CLAIM_WINDOW
+    rows = [a for a in db.scalars(select(Attachment).where(Attachment.inquiry_id.is_(None)))
+            if as_utc(a.created_at) < cutoff]
+    for a in rows:
+        try:
+            file_path(a).unlink(missing_ok=True)
+        except OSError:
+            continue   # 지우지 못한 파일은 기록을 남겨 다음에 다시
+        db.delete(a)
+    return len(rows)

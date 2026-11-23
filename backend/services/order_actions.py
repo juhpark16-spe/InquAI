@@ -43,19 +43,17 @@ COUPONS = {
 
 
 def duplicates(order: Order) -> list[Payment]:
-    """아직 정리되지 않은 중복 승인: 같은 금액 승인이 10분 안에 두 번 → 뒤 승인. 같은 금액의 '승인 취소'가 있으면 정리된 것으로
-    (주문 전체가 취소된 주문은 원래 승인 1건 몫의 취소를 빼고 셈. 부분 취소처럼 금액이 다른 취소는 세지 않음)"""
+    """아직 정리되지 않은 중복 승인: 같은 금액 승인이 10분 안에 두 번 있었고, 승인 합계 - 승인 취소 합계가
+    지금 내야 할 금액(주문 금액, 취소된 주문은 0)보다 많을 때 → 뒤 승인 1건.
+    (금액으로 따지므로 부분 취소 → 중복 승인 취소 → 전체 취소 순서여도 정리된 경고가 다시 뜨지 않음)"""
     approvals = [p for p in order.payments if p.kind == "승인"]
     dup = [b for a, b in zip(approvals, approvals[1:])
            if a.amount == b.amount and as_utc(b.at) - as_utc(a.at) <= DUPLICATE_WINDOW]
-    left = []
-    for d in dup:
-        cancels = sum(1 for p in order.payments if p.kind == "승인 취소" and p.amount == d.amount)
-        if order.order_status == "취소":
-            cancels -= 1
-        if cancels < len([x for x in dup if x.amount == d.amount]):
-            left.append(d)
-    return left[-1:] if left else []
+    if not dup:
+        return []
+    paid = sum(p.amount for p in approvals) - sum(p.amount for p in order.payments if p.kind == "승인 취소")
+    owed = 0 if order.order_status == "취소" else order.amount
+    return dup[-1:] if paid > owed else []
 
 
 def won(n: int) -> str:
@@ -137,7 +135,8 @@ def run(db: Session, request: Request, user: AdminUser, inquiry: Inquiry, action
         db.add(Payment(order_id=order.id, kind="승인 취소", method=order.payment_method, amount=unit * count, at=now,
                        memo=f"부분 취소 {count}개"))
         for t in db.scalars(select(Ticket).where(Ticket.inquiry_id == inquiry.id, Ticket.ticket_type == "취소",
-                                                 Ticket.status == "접수")):
+                                                 Ticket.status == "접수",
+                                                 (Ticket.order_id == order.id) | Ticket.order_id.is_(None))):
             t.status, t.memo, t.handled_by, t.handled_at = "승인", f"부분 취소 {count}개로 처리", user.id, now
         summary = f"부분 취소: {qty}개 → {qty - count}개 ({won(unit * count)} 승인 취소)"
 

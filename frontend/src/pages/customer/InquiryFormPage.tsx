@@ -45,7 +45,8 @@ export default function InquiryFormPage() {
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   // 파손·불량·오배송 문의: 송장·파손 부위 사진 두 칸 (지금 사진이 없으면 '나중에' 체크)
   const [evidence, setEvidence] = useState<Record<string, PickedPhoto | null>>({ "송장": null, "파손 부위": null });
-  const [damageReport, setDamageReport] = useState(false);
+  // '상품이 파손·불량이거나 잘못 왔어요' 체크: null = 내용으로 자동 판단, true/false = 고객이 직접 체크하거나 풂
+  const [damageChoice, setDamageChoice] = useState<boolean | null>(null);
   const [photosLater, setPhotosLater] = useState(false);
   const [photoTried, setPhotoTried] = useState(false);
   const [agreed, setAgreed] = useState(false);
@@ -66,10 +67,11 @@ export default function InquiryFormPage() {
   // 다 적기 전(8자리 미만)에는 재촉하지 않음
   const orderError = !customer && orderNumber === null && form.order_number.replace(/\s/g, "").length >= 8 ? ORDER_HELP : "";
   const damageWords = DAMAGE_WORDS.test(`${form.title} ${form.content}`);
-  const damageMode = damageReport || damageWords;
+  const damageMode = damageChoice ?? damageWords;
   const evidencePhotos = SLOTS.map((s) => evidence[s.label]).filter((p): p is PickedPhoto => !!p);
   const missingSlots = SLOTS.filter((s) => !evidence[s.label]).map((s) => s.label);
-  const allPhotos = [...evidencePhotos, ...photos];
+  // 파손 체크를 풀면 숨은 칸의 사진은 보내지 않음 (고객이 볼 수 없는 사진이 함께 등록되지 않게)
+  const allPhotos = [...(damageMode ? evidencePhotos : []), ...photos];
   const set = (key: keyof typeof EMPTY) => (e: { target: { value: string } }) => setForm({ ...form, [key]: e.target.value });
 
   async function submit(e: FormEvent) {
@@ -99,13 +101,14 @@ export default function InquiryFormPage() {
       const who = customer ? { customer_name: customer.name, customer_email: customer.email, password: null } : {};
       setResult(await customerApi.create({ ...body, ...who, order_number: orderNumber || null,
         privacy_agreed: agreed, attachment_tokens: allPhotos.map((p) => p.token),
-        photo_labels: Object.fromEntries(SLOTS.flatMap((s) => (evidence[s.label] ? [[evidence[s.label]!.token, s.label]] : []))),
-        damage_report: damageReport, photos_later: damageMode && photosLater }));
+        photo_labels: damageMode
+          ? Object.fromEntries(SLOTS.flatMap((s) => (evidence[s.label] ? [[evidence[s.label]!.token, s.label]] : []))) : {},
+        damage_report: damageChoice, photos_later: damageMode && photosLater }));
       setLookupEmail(form.customer_email);
       setSentAt(new Date().toISOString());
     } catch (err) {
       if (errorCode(err) === "PHOTO_REQUIRED") {   // 서버가 파손 문의로 판단 → 사진 두 칸을 보여 줌
-        setDamageReport(true);
+        setDamageChoice(true);
         setPhotoTried(true);
       }
       setError(errorMessage(err));
@@ -133,16 +136,16 @@ export default function InquiryFormPage() {
               : <Note>{result.message}</Note>}
           </div>
           {result.answer && <p className="mt-3 text-xs text-slate-500">{result.message}</p>}
-          {damageMode && photosLater && evidencePhotos.length === 0 && (
+          {damageMode && photosLater && missingSlots.length > 0 && (
             <p className="mt-3 rounded-lg bg-primary-soft px-3 py-2 text-sm text-ink">
-              사진은 {customer ? "내 쇼핑 > 내 문의" : "문의 조회"}의 <b>[추가 문의하기]</b>로 보내 주세요. 송장이 보이는 사진 1장과 파손 부위 사진 1장이 있으면 바로 확인해 드려요.
+              사진은 {customer ? "내 쇼핑 > 내 문의" : "문의 조회"}의 <b>[내용 보충 · 추가 문의]</b>로 보내 주세요. 송장이 보이는 사진 1장과 파손 부위 사진 1장이 있으면 바로 확인해 드려요.
             </p>
           )}
         </Card>
         <div className="flex gap-2">
           <Button variant="ghost" onClick={() => {
             setResult(null); setForm(EMPTY); setPhotos([]); setAgreed(false);
-            setEvidence({ "송장": null, "파손 부위": null }); setDamageReport(false); setPhotosLater(false); setPhotoTried(false);
+            setEvidence({ "송장": null, "파손 부위": null }); setDamageChoice(null); setPhotosLater(false); setPhotoTried(false);
           }}>새 문의 작성</Button>
           {/* 이메일은 주소(URL)에 남기지 않고 화면 이동 상태로만 넘김 */}
           <Link to={customer ? "/my" : "/inquiry/lookup"} state={customer ? undefined : { email: lookupEmail }}
@@ -210,47 +213,43 @@ export default function InquiryFormPage() {
             className={cx(orderError ? "border-rose-400 ring-2 ring-rose-100" : needsOrder && "border-amber-400 bg-amber-50/50 ring-2 ring-amber-100")} />
         </Field>
         )}
-        {damageMode ? (
-          <div className="space-y-2 rounded-xl border border-primary/20 bg-primary-soft/40 p-3">
-            <p className="text-sm font-semibold text-ink">
-              파손·불량·오배송 사진 {damageWords && !damageReport && <span className="font-normal text-muted">· 내용을 보니 파손·불량·오배송 문의 같아요</span>}
-            </p>
-            <p className="text-xs text-muted">사진이 있으면 다시 여쭙지 않고 바로 확인해 드려요. 두 장 모두 올려야 등록돼요.</p>
-            {SLOTS.map((s) => (
-              <PhotoSlot key={s.label} label={s.label} guide={s.guide} value={evidence[s.label]} disabled={sending || photosLater}
-                missing={photoTried && !photosLater && !evidence[s.label]}
-                onChange={(p) => setEvidence((prev) => ({ ...prev, [s.label]: p }))} />
-            ))}
-            <div className="space-y-1">
-              <span className="text-xs text-muted">다른 사진 (선택, {Math.max(0, 3 - evidencePhotos.length)}장까지)</span>
-              <PhotoPicker value={photos} onChange={setPhotos} disabled={sending} max={3 - evidencePhotos.length} />
-            </div>
-            <label className="flex items-start gap-2 text-sm text-ink">
-              <input type="checkbox" className="mt-0.5" checked={photosLater} disabled={sending} onChange={(e) => setPhotosLater(e.target.checked)} />
-              <span>지금은 사진이 없어요 <span className="text-xs text-muted">(등록 후 [추가 문의하기]로 보내 주세요. 사진이 와야 확인할 수 있어요)</span></span>
-            </label>
-            {damageReport && !damageWords && (
-              <button type="button" className="text-xs text-muted underline hover:text-primary" disabled={sending}
-                onClick={() => { setDamageReport(false); setPhotoTried(false); }}>파손·불량·오배송 문의가 아니에요</button>
-            )}
-          </div>
-        ) : (
+        {/* 파손·불량·오배송: 체크 하나로 (내용에 그런 표현이 보이면 자동으로 체크, 고객이 풀 수 있음) → 송장·파손 부위 사진 두 칸 */}
         <div className="space-y-2">
-          {/* 파손·불량·오배송이면 사진 두 칸으로 (내용에 표현이 없어도 고객이 직접 고를 수 있게, 눈에 띄는 버튼) */}
-          <button type="button" disabled={sending} onClick={() => setDamageReport(true)}
-            className="flex w-full items-center gap-3 rounded-xl border-2 border-primary/40 bg-primary-soft px-4 py-3 text-left hover:border-primary hover:bg-primary-soft/70 disabled:opacity-60">
-            <span className="text-2xl leading-none" aria-hidden>📦</span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-sm font-semibold text-primary">상품이 파손·불량이거나 잘못 왔나요?</span>
-              <span className="block text-xs text-muted">여기를 눌러 송장 사진과 파손 부위 사진을 올려 주세요. 다시 여쭙지 않고 바로 확인해 드려요.</span>
+          <label className={cx("flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm",
+            damageMode ? "border-primary/30 bg-primary-soft/50" : "border-hairline bg-white")}>
+            <input type="checkbox" className="mt-0.5" checked={damageMode} disabled={sending}
+              onChange={(e) => { setDamageChoice(e.target.checked); if (!e.target.checked) setPhotoTried(false); }} />
+            <span>
+              <span className="font-semibold text-ink">상품이 파손·불량이거나 잘못 왔어요</span>
+              {damageWords && damageChoice === null && <span className="ml-1 text-xs text-primary">· 내용을 보니 그런 문의 같아 체크했어요</span>}
+              <span className="block text-xs text-muted">체크하면 송장 사진과 파손 부위 사진을 올리는 칸이 열려요. 사진이 있으면 다시 여쭙지 않고 바로 확인해 드려요.</span>
             </span>
-            <span className="shrink-0 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white">사진 올리기</span>
-          </button>
-          <span className="text-sm font-medium text-slate-700">사진 첨부 (선택)</span>
-          <PhotoPicker value={photos} onChange={setPhotos} disabled={sending} />
-          <span className="block text-xs text-muted">3장, 한 장 5MB까지</span>
+          </label>
+          {damageMode ? (
+            <div className="space-y-2 rounded-xl border border-primary/20 bg-primary-soft/30 p-3">
+              <p className="text-xs text-muted">두 장 모두 올려야 등록돼요.</p>
+              {SLOTS.map((s) => (
+                <PhotoSlot key={s.label} label={s.label} guide={s.guide} value={evidence[s.label]} disabled={sending || photosLater}
+                  missing={photoTried && !photosLater && !evidence[s.label]}
+                  onChange={(p) => setEvidence((prev) => ({ ...prev, [s.label]: p }))} />
+              ))}
+              <div className="space-y-1">
+                <span className="text-xs text-muted">다른 사진 (선택, {Math.max(0, 3 - evidencePhotos.length)}장까지)</span>
+                <PhotoPicker value={photos} onChange={setPhotos} disabled={sending} max={3 - evidencePhotos.length} />
+              </div>
+              <label className="flex items-start gap-2 text-sm text-ink">
+                <input type="checkbox" className="mt-0.5" checked={photosLater} disabled={sending} onChange={(e) => setPhotosLater(e.target.checked)} />
+                <span>지금은 사진이 없어요 <span className="text-xs text-muted">(등록 후 [내용 보충 · 추가 문의]로 보내 주세요. 사진이 와야 확인할 수 있어요)</span></span>
+              </label>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <span className="text-sm font-medium text-slate-700">사진 첨부 (선택)</span>
+              <PhotoPicker value={photos} onChange={setPhotos} disabled={sending} />
+              <span className="block text-xs text-muted">3장, 한 장 5MB까지</span>
+            </div>
+          )}
         </div>
-        )}
         {!sending && <FaqSuggestions text={`${form.title} ${form.content}`} />}
 
         {/* 개인정보 수집·이용 동의 (비회원 문의라 이름·이메일을 받으므로 필수). 안내 내용은 '내용 보기'로 펼침 */}

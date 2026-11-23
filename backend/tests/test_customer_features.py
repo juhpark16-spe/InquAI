@@ -1,4 +1,4 @@
-"""실제 쇼핑몰 고객센터 기능 7가지: 개인정보 동의, 사진 첨부, 답변 평가, 추가 문의, 내부 메모, 답변 기한, 답변 알림."""
+"""실제 쇼핑몰 고객센터 기능 7가지: 개인정보 동의, 사진 첨부, 답변 평가, 추가 문의, 상담원 공유 메모, 답변 기한, 답변 알림."""
 
 from datetime import timedelta
 
@@ -145,7 +145,7 @@ def test_follow_up_requires_owner(client, ai):
     assert r.status_code == 404
 
 
-# ---- 5. 내부 메모 ----
+# ---- 5. 상담원 공유 메모 ----
 def test_internal_notes(client, db, ai):
     ai["analyzer"].next = {"confidence": 0.5}
     number = post(client).json()["inquiry_number"]
@@ -218,3 +218,35 @@ def test_customer_sees_own_photos_with_signed_link(client, db, ai):
     from backend.services import uploads as up
     old_exp = int(_t.time()) - 10
     assert client.get(f"/api/inquiries/attachments/{att_id}?exp={old_exp}&sig={up._sig(int(att_id), old_exp)}").status_code == 404  # 만료
+
+def test_reopened_inquiry_restarts_due_time(client, db, ai):
+    """3일 전에 답한 문의에 추가 문의가 오면 다시 연 시각부터 기한을 셈 (바로 '기한 초과'가 되지 않게)"""
+    auto_answer(ai)
+    number = post(client).json()["inquiry_number"]
+    inquiry = db.scalar(select(Inquiry).where(Inquiry.inquiry_number == number))
+    inquiry.created_at = sla.sub_weekday_time(utcnow(), timedelta(days=3))
+    db.commit()
+    r = client.post("/api/inquiries/follow-up", json={"inquiry_number": number, "customer_email": EMAIL, "password": PW,
+                                                     "content": "아직 해결이 안 됐어요"})
+    assert r.status_code == 201
+    admin_login(client)
+    item = next(i for i in client.get("/api/inquiries").json()["items"] if i["inquiry_number"] == number)
+    assert item["status"] == "담당자 처리" and item["overdue"] is False
+    assert client.get("/api/inquiries", params={"overdue": "true"}).json()["total"] == 0
+
+
+def test_purge_unclaimed_uploads(client, db):
+    """문의에 연결되지 않고 1시간이 지난 사진은 서버가 켜질 때 파일·기록을 지움 (방금 올린 사진은 남김)"""
+    from backend.services import uploads
+
+    old = upload(client).json()["token"]
+    fresh = upload(client).json()["token"]
+    a_old = db.scalar(select(Attachment).where(Attachment.token == old))
+    a_old.created_at = utcnow() - timedelta(hours=2)
+    db.commit()
+    path = uploads.file_path(a_old)
+    assert path.exists()
+    assert uploads.purge_unclaimed(db) == 1
+    db.commit()
+    assert not path.exists()
+    assert {a.token for a in db.scalars(select(Attachment))} == {fresh}

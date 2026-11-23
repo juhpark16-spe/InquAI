@@ -3,6 +3,7 @@
     긴급도 높음: 접수 후 4시간 / 그 외: 24시간 — **주말(한국 시간 토·일)은 세지 않음**
     예) 금요일 22:00 긴급 접수 → 금요일 2시간 + 월요일 2시간 → 월요일 02:00
         토요일 접수 → 월요일 00:00부터 셈
+    끝난(완료·자동 처리) 문의가 고객 추가 문의로 다시 열리면 그 시각부터 다시 셈 (inquiries.sla_started_at, started())
     평일은 하루 24시간을 모두 셉니다 (시연이라 평일 상담 시간·공휴일은 따지지 않음).
 고객에게는 "영업일 기준 1일 이내 답변" 으로 안내하고, 관리자 화면에서는 기한을 넘긴 미처리 문의를 빨갛게 표시합니다.
 """
@@ -57,6 +58,11 @@ def sub_weekday_time(end: datetime, delta: timedelta) -> datetime:
             return t - left
         left -= t - monday
         t = monday - WEEKEND                   # 지난주 토요일 00:00
+
+
+def started(inquiry) -> datetime:
+    """기한을 세기 시작한 시각: 다시 열린 문의면 다시 연 시각, 아니면 접수 시각"""
+    return inquiry.sla_started_at or inquiry.created_at
 
 
 def due_at(created_at: datetime, urgency: str | None) -> datetime:

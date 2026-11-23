@@ -16,6 +16,7 @@ const KIND: Record<NotificationItem["kind"], { label: string; dot: string }> = {
   due_soon: { label: "기한 임박", dot: "bg-amber-500" },
   bad_rating: { label: "👎 평가", dot: "bg-rose-500" },
   recheck: { label: "다시 안내", dot: "bg-blue-500" },
+  memo: { label: "상담원 공유 메모", dot: "bg-amber-500" },
 };
 
 function ago(iso: string) {

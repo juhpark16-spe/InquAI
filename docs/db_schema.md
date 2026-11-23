@@ -142,7 +142,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | 테이블 | 주요 컬럼 | 쓰임 |
 | --- | --- | --- |
 | customer_messages | inquiry_id, content | 고객 추가 문의 (같은 문의에 이어서) |
-| inquiry_notes | inquiry_id, author_id, text | 상담원 내부 메모 (고객에게 안 보임) |
+| inquiry_notes | inquiry_id, author_id, text | 상담원 공유 메모 (고객에게 안 보임) |
 | attachments | token(UNIQUE), inquiry_id NULL, message_id NULL, filename, content_type, size, path, label NULL | 고객 사진. 먼저 올려 token 을 받고 문의 등록 때 연결. 파일은 `data/uploads/`(Git 제외). label: 파손 문의의 사진 칸 (송장 / 파손 부위) |
 | notifications | inquiry_id, channel, recipient, subject, body, status, error, sent_at | 고객 답변 알림 메일 (`services/notify.py`). status: 기록(메일 꺼짐) / 대기 / 발송 / 실패 / 건너뜀(예시 주소) |
 
@@ -283,7 +283,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 개발 DB를 비우고 위 계정·고객·주문·FAQ와 **최근 2주치 시연 문의**를 한 번에 넣습니다. DB 칸이 바뀌었을 때도 이 명령으로 새로 만듭니다.
 
 - 지우기 전에 지금 DB와 첨부 사진을 `data/backups/`에 복사합니다 (GitHub에 올리지 않음).
-- 문의는 앱이 저장하는 형식 그대로 만듭니다: 분석 결과, AI 실행 기록, 자동 답변·초안·상담원 답변, 자동 배정·발송 작업 기록, 알림, 티켓, 고객 평가, 추가 문의, 내부 메모. AI 모델·OpenAI는 부르지 않습니다.
+- 문의는 앱이 저장하는 형식 그대로 만듭니다: 분석 결과, AI 실행 기록, 자동 답변·초안·상담원 답변, 자동 배정·발송 작업 기록, 알림, 티켓, 고객 평가, 추가 문의, 상담원 공유 메모. AI 모델·OpenAI는 부르지 않습니다.
 - 지난주보다 이번 주 문의가 많아 대시보드의 "지난 기간 대비"가 보이고, 가장 최근 문의 몇 건은 긴급·초안 문의로 남겨 "지금 처리할 일"이 채워집니다.
 - **실행 시각 기준 '살아 있는 장면'** (`LIVE`, 2026-11-19): 시연 녹화 때도 기한·알림이 보이도록 실행한 때를 기준으로 늘 만듭니다.
   **녹화 직전에 다시 실행**하면 됩니다 (하루만 지나도 기한이 지나 화면이 바뀜).

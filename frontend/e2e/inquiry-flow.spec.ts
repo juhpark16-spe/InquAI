@@ -13,6 +13,18 @@ async function staffLogin(page: Page, username: string) {
   await expect(page).toHaveURL(/\/admin/);
 }
 
+/** 비회원 문의 칸을 채우기만 함 (등록은 하지 않음) */
+async function createInquiryStart(page: Page, title: string, content: string) {
+  await page.goto("/inquiry");
+  await page.getByLabel("이름").fill("테스트 고객");
+  await page.getByLabel(/^이메일/).fill(`e2e-${Date.now()}@example.com`);
+  await page.getByLabel("조회 비밀번호").fill(LOOKUP_PASSWORD);
+  await page.getByLabel("비밀번호 확인").fill(LOOKUP_PASSWORD);
+  await page.getByLabel("제목").fill(title);
+  await page.getByLabel(/문의 내용/).fill(content);
+  await page.getByLabel(/개인정보 수집·이용에 동의합니다/).check();
+}
+
 async function createInquiry(page: Page, email: string, title: string, content: string) {
   await page.goto("/inquiry");
   await page.getByLabel("이름").fill("테스트 고객");
@@ -203,16 +215,16 @@ test("확인 후 다시 안내를 체크해 발송 → 다시 안내 표시·목
   await page.getByRole("button", { name: "조회", exact: true }).click();
   await expect(page.getByText("추가 안내 예정", { exact: true })).toBeVisible();          // 문의 카드의 상태
   await expect(page.getByText("추가 안내 예정 1")).toBeVisible();                          // 위쪽 요약 띠
-  await expect(page.getByText("공급사 재입고 일정")).toHaveCount(0);                     // 내부 메모는 고객에게 안 보임
+  await expect(page.getByText("공급사 재입고 일정")).toHaveCount(0);                     // 상담원 공유 메모는 고객에게 안 보임
 });
 
 test("파손 문의는 송장·파손 부위 사진 두 장이 있어야 등록 (없으면 '지금은 사진이 없어요')", async ({ page }) => {
   // 파손은 어느 주문인지 알아야 확인할 수 있으므로 주문번호를 함께 적음
   const png = { name: "photo.png", mimeType: "image/png", buffer: Buffer.from("89504e470d0a1a0a" + "00".repeat(64), "hex") };
-  const fill = async (title: string) => {
+  const fill = async (title: string, email = `e2e-damage-${Date.now()}@example.com`) => {
     await page.goto("/inquiry");
     await page.getByLabel("이름").fill("테스트 고객");
-    await page.getByLabel(/^이메일/).fill(`e2e-damage-${Date.now()}@example.com`);
+    await page.getByLabel(/^이메일/).fill(email);
     await page.getByLabel("조회 비밀번호").fill(LOOKUP_PASSWORD);
     await page.getByLabel("비밀번호 확인").fill(LOOKUP_PASSWORD);
     await page.getByLabel("제목").fill(title);
@@ -221,7 +233,8 @@ test("파손 문의는 송장·파손 부위 사진 두 장이 있어야 등록 
   };
 
   await fill("머그컵 파손 (자동 테스트)");
-  await expect(page.getByText("송장 사진", { exact: false }).first()).toBeVisible();          // 내용을 보고 사진 두 칸
+  await expect(page.getByLabel(/상품이 파손·불량이거나 잘못 왔어요/)).toBeChecked();         // 내용을 보고 자동 체크
+  await expect(page.getByText("송장 사진", { exact: false }).first()).toBeVisible();          // → 사진 두 칸
   await page.getByRole("button", { name: "문의 등록" }).click();
   await expect(page.getByText(/송장 · 파손 부위 사진이 필요해요/)).toBeVisible();              // 사진 없이는 등록 안 됨
   await page.getByLabel("송장 사진 올리기").setInputFiles(png);
@@ -230,11 +243,35 @@ test("파손 문의는 송장·파손 부위 사진 두 장이 있어야 등록 
   await page.getByRole("button", { name: "문의 등록" }).click();
   await expect(page.getByText("문의가 등록되었습니다")).toBeVisible();
 
-  await fill("머그컵 파손 사진 없음 (자동 테스트)");
+  const email = `e2e-damage-later-${Date.now()}@example.com`;
+  await fill("머그컵 파손 사진 없음 (자동 테스트)", email);
   await page.getByLabel(/지금은 사진이 없어요/).check();
   await page.getByRole("button", { name: "문의 등록" }).click();
   await expect(page.getByText("문의가 등록되었습니다")).toBeVisible();
-  await expect(page.getByText(/\[추가 문의하기\]로 보내 주세요/)).toBeVisible();
+  await expect(page.getByText(/\[내용 보충 · 추가 문의\]로 보내 주세요/)).toBeVisible();
+
+  // 문의 조회 → [내용 보충 · 추가 문의]: 사진 안내 + (처음 문의에 주문번호가 없으니) 주문번호 칸
+  await page.goto("/inquiry/lookup");
+  await page.getByLabel("문의할 때 쓴 이메일").fill(email);
+  await page.getByLabel("조회 비밀번호").fill(LOOKUP_PASSWORD);
+  await page.getByRole("button", { name: "조회", exact: true }).click();
+  await page.getByRole("button", { name: "내용 보충 · 추가 문의" }).click();
+  await expect(page.getByText(/송장이 보이는 사진 1장/)).toBeVisible();
+  await page.getByPlaceholder(/빠뜨린 내용/).fill("주문번호 보내 드려요");
+  await page.getByLabel(/주문번호/).fill("202611100001");
+  await page.getByRole("button", { name: "보내기", exact: true }).click();
+  await expect(page.getByText(/추가 문의가 접수되었습니다/)).toBeVisible();
+  await expect(page.getByText(/주문번호 추가: 20261110-0001/)).toBeVisible();   // 대화에 남음
+});
+
+test("일반 질문이면 파손 체크를 풀고 사진 없이 등록", async ({ page }) => {
+  await createInquiryStart(page, "파손 교환 규정 (자동 테스트)", "택배 상자가 파손되어 오면 교환되나요? 미리 알고 싶어요.");
+  const damage = page.getByLabel(/상품이 파손·불량이거나 잘못 왔어요/);
+  await expect(damage).toBeChecked();                                                     // '파손' 표현으로 자동 체크
+  await damage.uncheck();                                                                 // 일반 질문이라 풂
+  await expect(page.getByLabel("송장 사진 올리기")).toHaveCount(0);                           // 사진 두 칸이 닫힘
+  await page.getByRole("button", { name: "문의 등록" }).click();
+  await expect(page.getByText("문의가 등록되었습니다")).toBeVisible();
 });
 
 test("비회원 문의 표시 · 주문번호 형식이 틀리면 안내하고 등록하지 않음", async ({ page }) => {
@@ -247,6 +284,30 @@ test("비회원 문의 표시 · 주문번호 형식이 틀리면 안내하고 �
   await expect(page.getByText(/숫자 8자리-4자리예요/)).toHaveCount(0);
   await page.getByLabel("제목").click();
   await expect(page.getByLabel(/주문번호/)).toHaveValue("20261120-0022");
+});
+
+test("상담원 공유 메모는 고객 대화와 따로, 오른쪽 카드에 남고 [크게 보기]로 넓게 봄", async ({ page }) => {
+  const number = await createInquiry(page, `e2e-memo-${Date.now()}@example.com`, "쿠폰 사용 문의 (자동 테스트)", "쿠폰은 할인 상품에도 쓸 수 있나요?");
+  await staffLogin(page, "admin");
+  await page.getByLabel("문의 검색").focus();
+  await page.keyboard.type(number);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { name: "쿠폰 사용 문의 (자동 테스트)" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "상담원 공유 메모" })).toHaveCount(0);      // 답변 칸에 메모 탭이 없음
+
+  const notes = page.getByRole("region", { name: "상담원 공유 메모" });
+  await notes.getByRole("button", { name: "+ 메모 남기기" }).click();
+  await notes.getByLabel("상담원 공유 메모 내용").fill("쿠폰 조건 운영팀에 확인 중 (자동 테스트)");
+  await notes.getByRole("button", { name: "메모 남기기" }).click();
+  await expect(notes.getByText("쿠폰 조건 운영팀에 확인 중 (자동 테스트)")).toBeVisible();
+  await expect(page.getByText("쿠폰 조건 운영팀에 확인 중 (자동 테스트)")).toHaveCount(1);   // 대화에는 섞이지 않음
+
+  // [크게 보기] → 옆 패널에서 전체 메모, Esc 로 닫힘 (새 창 대신)
+  await notes.getByRole("button", { name: "크게 보기" }).click();
+  const wide = page.getByRole("dialog", { name: "상담원 공유 메모 크게 보기" });
+  await expect(wide.getByText("쿠폰 조건 운영팀에 확인 중 (자동 테스트)")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(wide).toHaveCount(0);
 });
 
 test("조회 비밀번호가 틀리면 문의가 보이지 않음", async ({ page }) => {

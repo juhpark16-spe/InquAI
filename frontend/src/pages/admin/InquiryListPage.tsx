@@ -138,7 +138,10 @@ export default function InquiryListPage() {
                     {i.inquiry_number}
                   </Link>
                 </td>
-                <td className="max-w-xs truncate px-3 py-3">{i.title}</td>
+                <td className="max-w-xs truncate px-3 py-3">
+                  {i.title}
+                  {!!i.note_count && <span className="ml-1.5 text-xs text-amber-800" title={`상담원 공유 메모 ${i.note_count}개`}>📝 {i.note_count}</span>}
+                </td>
                 <td className="whitespace-nowrap px-3 py-3">{i.customer_name}</td>
                 <td className="whitespace-nowrap px-3 py-3">{i.category ?? "-"}<LowConfidence value={i.confidence} /></td>
                 {/* 끝난 문의(자동 처리·완료)의 긴급도는 더 이상 급하지 않으니 회색 글자로 */}

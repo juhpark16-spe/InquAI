@@ -9,6 +9,7 @@
 | due_soon | 답변 기한 1시간 이내 (미처리) | 내 담당 문의 | 내 담당 + 미배정 문의 |
 | bad_rating | 고객 👎 '도움 안 됨' | 내가 보낸 답변 | 모든 답변 (AI 자동 답변 포함) |
 | recheck | '확인 후 다시 안내' 기한 1시간 전·지남 | 내 담당 문의 | 내 담당 + 미배정 문의 |
+| memo | 다른 사람이 남긴 상담원 공유 메모 | 내 담당 문의 | 내 담당 + 미배정 문의 |
 
 - 최근 7일, 최신순 20건. 내가 한 일(내가 나에게 배정 등)은 알리지 않음
 - 읽음: 계정의 notifications_seen_at 이후 알림이 '새 알림' (다른 PC에서 로그인해도 이어짐)
@@ -22,7 +23,8 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import selectinload
 
 from backend.core.dependencies import DB, LoginUser
-from backend.database.models import AdminAuditLog, CustomerMessage, Inquiry, Response, as_utc, utcnow
+from backend.database.models import (AdminAuditLog, AdminUser, CustomerMessage, Inquiry, InquiryNote, Response, as_utc,
+                                     utcnow)
 from backend.services import sla
 
 router = APIRouter(prefix="/notifications", tags=["알림"])
@@ -74,7 +76,7 @@ def build(db, user) -> list[dict]:
     open_rows = db.scalars(select(Inquiry).options(selectinload(Inquiry.analysis))
                            .where(Inquiry.status.in_(sla.OPEN_STATUSES), scope)).all()
     for i in open_rows:
-        due = sla.due_at(i.created_at, i.analysis.urgency if i.analysis else None)
+        due = sla.due_at(sla.started(i), i.analysis.urgency if i.analysis else None)
         if now < due <= now + DUE_SOON:
             items.append(_item("due_soon", due - DUE_SOON, i, f"답변 기한 {max(1, round((due - now).total_seconds() / 60))}분 남음"))
 
@@ -94,6 +96,13 @@ def build(db, user) -> list[dict]:
             left = round((due - now).total_seconds() / 60)
             when = f"{left}분 남음" if left > 0 else "기한 지남"
             items.append(_item("recheck", due - DUE_SOON, i, f"다시 안내 {when} · {i.recheck_note}"))
+
+    # 6. 다른 사람이 남긴 상담원 공유 메모 (내가 남긴 메모는 알리지 않음)
+    rows = db.execute(select(InquiryNote, Inquiry, AdminUser.display_name)
+                      .join(Inquiry, InquiryNote.inquiry_id == Inquiry.id)
+                      .join(AdminUser, InquiryNote.author_id == AdminUser.id)
+                      .where(InquiryNote.created_at >= since, InquiryNote.author_id != user.id, scope)).all()
+    items += [_item("memo", n.created_at, i, f"{name}님의 새 상담원 공유 메모: {n.text[:40]}") for n, i, name in rows]
 
     items.sort(key=lambda x: x["at"], reverse=True)
     return items[:LIMIT]

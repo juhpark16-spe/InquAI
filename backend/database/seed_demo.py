@@ -4,7 +4,7 @@
 
 - 지우기 전에 지금 DB와 첨부 사진을 data/backups/ 에 복사해 둡니다 (되돌릴 수 있게).
 - 문의는 앱이 실제로 저장하는 형식 그대로 만듭니다: 분석 결과, AI 실행 기록, 자동 답변·초안·상담원 답변,
-  자동 배정·발송 작업 기록, 알림 기록, 티켓, 고객 평가, 추가 문의, 내부 메모.
+  자동 배정·발송 작업 기록, 알림 기록, 티켓, 고객 평가, 추가 문의, 상담원 공유 메모.
   AI 모델·OpenAI는 부르지 않습니다 (빠르고, 돌릴 때마다 같은 결과).
 - 지난주보다 이번 주 문의가 조금 많게 만들어 대시보드의 "지난 기간 대비"가 보이게 합니다.
 - 오래된 문의는 대부분 답변 완료, 최근 문의는 미처리로 남겨 "지금 처리할 일"이 채워집니다.
@@ -265,7 +265,7 @@ LIVE_RECHECK = {
 REDRAFT_ASKS = ["더 짧게", "사과를 먼저", "더 정중하게", "회수·환불 일정 안내 추가"]  # AnswerComposer 의 요청 버튼과 같음
 FOLLOW_UPS = ["답변 감사합니다. 그런데 한 가지 더 여쭤봐도 될까요? 다른 색상으로도 교환이 되나요?",
               "알려주신 대로 했는데 아직 해결이 안 됐어요. 다시 확인 부탁드립니다."]
-# 긴급 문의의 내부 메모: 문의 내용과 맞는 것만 (시나리오 제목 → 메모)
+# 긴급 문의의 상담원 공유 메모: 문의 내용과 맞는 것만 (시나리오 제목 → 메모)
 NOTES = {
     "상품이 파손되어 왔어요": "택배사에 파손 사고 접수함. 회신 오면 고객에게 교환 일정 안내 예정",
     "환불이 아직 안 들어왔어요": "물류센터에 반품 검수 진행 상황 문의함 (내일 오전 회신)",
@@ -341,7 +341,8 @@ def seed_inquiries(db: Session, *, now: datetime | None = None, days: int = DAYS
         n = rng.randint(2, 4) if back >= 7 else rng.randint(3, 6)
         times = sorted(_kst_time(day, rng) for _ in range(n))
         plan += [t.astimezone(timezone.utc) for t in times if t.astimezone(timezone.utc) < now - timedelta(minutes=10)]
-    # 접수 시각은 '평일 기준 n분 전' (답변 기한이 주말을 세지 않으므로, 녹화하는 요일과 상관없이 남은 기한이 같게)
+    # 접수 시각은 '평일 기준 n분 전' (답변 기한이 주말을 세지 않으므로 평일 어느 날 녹화해도 남은 기한이 같게.
+    # 주말에 실행하면 기한이 월요일로 밀려 '기한 임박' 장면이 나오지 않음 → 녹화는 평일에, docs/demo_scenario.md)
     live_times = {sla.sub_weekday_time(now, timedelta(minutes=m)): title for m, title in LIVE}
     plan = sorted(plan + list(live_times))
 
@@ -503,7 +504,7 @@ def seed_inquiries(db: Session, *, now: datetime | None = None, days: int = DAYS
         if follow_ups < len(FOLLOW_UPS) and age > timedelta(days=2) and rng.random() < 0.15:
             at = sent_at + timedelta(hours=rng.randint(2, 20))
             db.add(CustomerMessage(inquiry_id=inquiry.id, content=FOLLOW_UPS[follow_ups], created_at=at))
-            inquiry.status, inquiry.updated_at = "담당자 처리", at
+            inquiry.status, inquiry.updated_at, inquiry.sla_started_at = "담당자 처리", at, at
             follow_ups += 1
 
     db.flush()
@@ -522,7 +523,7 @@ def _live_touches(db: Session, now: datetime) -> None:
         text, minutes = LIVE_FOLLOW_UP
         at = now - timedelta(minutes=minutes)
         db.add(CustomerMessage(inquiry_id=r.inquiry_id, content=text, created_at=at))
-        r.inquiry.status, r.inquiry.updated_at = "담당자 처리", at
+        r.inquiry.status, r.inquiry.updated_at, r.inquiry.sla_started_at = "담당자 처리", at, at
     if len(done) > 1:  # 그다음 답변에 고객이 '도움 안 됨'
         r = done[1]
         r.rating, r.rated_at = -1, now - timedelta(minutes=LIVE_BAD_RATING_MIN)

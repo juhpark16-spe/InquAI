@@ -116,6 +116,13 @@ def test_follow_up_and_rating_without_lookup_password(client, db, shop):
     r = client.post(f"/api/shop/inquiries/{number}/follow-up", json={"content": "주말에도 오나요?"},
                     headers=shop_csrf(client))
     assert r.status_code == 201
+    # 추가 문의로 붙이는 주문번호도 내 주문만 (다른 고객의 주문 20261110-0002 는 거절)
+    r = client.post(f"/api/shop/inquiries/{number}/follow-up", json={"content": "주문번호요", "order_number": "20261110-0002"},
+                    headers=shop_csrf(client))
+    assert r.status_code == 422 and r.json()["code"] == "ORDER_NOT_FOUND"
+    r = client.post(f"/api/shop/inquiries/{number}/follow-up", json={"content": "주문번호요", "order_number": "20261110-0001"},
+                    headers=shop_csrf(client))
+    assert r.status_code == 201
 
     # 다른 고객은 내 문의에 추가 문의를 쓸 수 없음
     client.post("/api/shop/logout")

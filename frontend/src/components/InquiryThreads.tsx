@@ -5,13 +5,13 @@ import { useState } from "react";
 
 import { Bubble, Note, Thumbs } from "./Chat";
 import PhotoPicker, { type PickedPhoto } from "./PhotoPicker";
-import { Alert, Button, Spinner, Textarea, cx, formatDate } from "./ui";
+import { Alert, Button, Input, Spinner, Textarea, cx, formatDate } from "./ui";
 import { errorMessage } from "../services/api";
 import type { InquiryPublic } from "../services/types";
 
 export interface ThreadActions {
   rate: (inquiryNumber: string, answerId: number, helpful: boolean) => Promise<unknown>;
-  followUp: (inquiryNumber: string, content: string, tokens: string[]) => Promise<unknown>;
+  followUp: (inquiryNumber: string, content: string, tokens: string[], orderNumber?: string | null) => Promise<unknown>;
 }
 
 function RateButtons({ answerId, rating, onRate }: { answerId: number; rating: number | null; onRate: (id: number, helpful: boolean) => void }) {
@@ -34,22 +34,38 @@ function RateButtons({ answerId, rating, onRate }: { answerId: number; rating: n
   );
 }
 
+/** 주문번호: 공백 제거, 12자리 숫자면 8-4 로 (문의하기 화면·서버와 같은 규칙). 형식이 맞으면 번호, 빈칸 "", 틀리면 null */
+function normalizeOrder(raw: string): string | null {
+  const v = raw.replace(/\s/g, "");
+  if (!v) return "";
+  const fixed = /^\d{12}$/.test(v) ? `${v.slice(0, 8)}-${v.slice(8)}` : v;
+  return /^\d{8}-\d{4}$/.test(fixed) ? fixed : null;
+}
+
+/** 내용 보충 · 추가 문의: 문의 수정 대신 빠뜨린 내용·사진·주문번호를 이어서 보냄 (처음 글은 그대로 남음) */
 function FollowUp({ inquiry, actions, onDone }: { inquiry: InquiryPublic; actions: ThreadActions; onDone: () => void }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
+  const [order, setOrder] = useState("");
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   if (!inquiry.can_follow_up) return <p className="text-xs text-slate-500">이 문의에는 더 이상 추가 문의를 남길 수 없어요. 새 문의로 남겨 주세요.</p>;
-  if (!open) return <Button variant="ghost" onClick={() => setOpen(true)}>추가 문의하기</Button>;
+  if (!open) return <Button variant="ghost" onClick={() => setOpen(true)}>내용 보충 · 추가 문의</Button>;
+  // 주문번호가 없거나, 적은 번호로 내 주문을 찾지 못했으면 다시 받음
+  const needsOrder = !inquiry.order_number || !!inquiry.order_needs_fix;
+  const orderNumber = needsOrder ? normalizeOrder(order) : "";
+  const orderError = needsOrder && orderNumber === null && order.replace(/\s/g, "").length >= 8
+    ? "주문번호는 20261103-0042처럼 숫자 8자리-4자리예요." : "";
 
   async function send() {
     setError("");
     setBusy(true);
     try {
-      await actions.followUp(inquiry.inquiry_number, text, photos.map((p) => p.token));
+      await actions.followUp(inquiry.inquiry_number, text, photos.map((p) => p.token), orderNumber || null);
       setText("");
+      setOrder("");
       setPhotos([]);
       setOpen(false);
       onDone();
@@ -62,13 +78,29 @@ function FollowUp({ inquiry, actions, onDone }: { inquiry: InquiryPublic; action
 
   return (
     <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+      <p className="text-xs text-muted">등록한 문의는 고칠 수 없어요. 빠뜨린 내용·사진은 여기에 이어서 보내 주세요.</p>
+      {inquiry.photos_requested && (
+        <p className="rounded-lg bg-primary-soft px-3 py-2 text-sm text-ink">📷 <b>송장이 보이는 사진 1장</b>과 <b>파손 부위 사진 1장</b>을 함께 올려 주세요. 사진이 오면 바로 확인해 드려요.</p>
+      )}
       <Textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={2000} className="min-h-24"
-        placeholder="답변을 보고 더 궁금한 점이나 해결되지 않은 내용을 적어 주세요." disabled={busy} />
+        placeholder="더 궁금한 점, 빠뜨린 내용, 해결되지 않은 내용을 적어 주세요." disabled={busy} />
+      {needsOrder && (
+        <label className="block space-y-1 text-sm">
+          <span className="font-semibold text-ink">주문번호 (선택)</span>
+          <Input value={order} onChange={(e) => setOrder(e.target.value)} maxLength={30} inputMode="numeric" placeholder="20261103-0042"
+            disabled={busy} aria-invalid={!!orderError} className={cx(orderError && "border-rose-400 ring-2 ring-rose-100")}
+            onBlur={() => { if (orderNumber) setOrder(orderNumber); }} />
+          {orderError ? <span role="alert" className="block text-xs font-medium text-rose-600">{orderError}</span>
+            : <span className="block text-xs text-muted">{inquiry.order_number
+              ? `처음 적은 주문번호(${inquiry.order_number})로 주문을 찾지 못했어요. 맞는 번호를 적어 주세요.`
+              : "처음 문의에 주문번호가 없어요. 주문 관련 문의라면 적어 주세요."} 바로 주문을 확인해 드려요.</span>}
+        </label>
+      )}
       <PhotoPicker value={photos} onChange={setPhotos} disabled={busy} />
       {error && <Alert>{error}</Alert>}
       <div className="flex justify-end gap-2">
         <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>취소</Button>
-        <Button onClick={send} disabled={busy || text.trim().length < 2}>{busy ? <Spinner /> : "추가 문의 보내기"}</Button>
+        <Button onClick={send} disabled={busy || text.trim().length < 2 || orderNumber === null}>{busy ? <Spinner /> : "보내기"}</Button>
       </div>
     </div>
   );

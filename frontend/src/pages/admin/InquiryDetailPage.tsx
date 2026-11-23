@@ -5,12 +5,13 @@
 //   오른쪽(판단 근거, 25rem 고정 폭 → 일하는 곳이 넓게): 처리할 티켓 → 주문 정보(취소·반품 가능 여부) → 고객(누구인지·불만 신호)
 //     → AI 분석 → 처리된 티켓 → AI 처리 상세(관리자, 접힘). 주문과 관계없는 문의(쿠폰·회원 등)는 고객을 먼저
 //   카드는 흰 바탕 + 연한 테두리로 가볍게. 글씨: 구역 제목 17 · 왼쪽 본문 15 · 오른쪽 참고 정보 14px
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 
 import { useAuth } from "../../auth/AuthProvider";
 import AnalysisEditor from "../../components/AnalysisEditor";
 import AnswerComposer from "../../components/AnswerComposer";
+import InternalNotes from "../../components/InternalNotes";
 import { confirmDialog } from "../../components/ConfirmDialog";
 import { TOOL_LABEL, byLabel, failReason, toolLabel } from "../../services/labels";
 import { Alert, Badge, Button, Input, Select, Spinner, cx, formatDate } from "../../components/ui";
@@ -477,11 +478,89 @@ function OrderHead({ o }: { o: OrderCard }) {
   );
 }
 
+/** 주문번호 입력·변경: 고객이 빠뜨렸거나 잘못 적은 번호를 상담원이 확인한 번호로 (추가 문의·전화로 받은 번호, 고객 글에 적힌 번호) */
+function OrderNumberFix({ inquiryId, current, hints, onDone, compact }: {
+  inquiryId: number; current: string | null; hints: NonNullable<InquiryDetail["order_hints"]>; onDone: (msg: string) => void; compact?: boolean;
+}) {
+  const [open, setOpen] = useState(!compact);
+  const [value, setValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function apply(number: string) {
+    const ok = await confirmDialog({
+      title: current ? "주문번호 변경" : "주문번호 지정",
+      message: `이 문의의 주문번호를 ${current ? `${current} → ` : ""}${number}(으)로 ${current ? "바꿀까요" : "지정할까요"}?\n주문 정보가 이 번호로 다시 확인되고, 처리 이력에 남아요.`,
+      confirmLabel: current ? "변경" : "지정",
+    });
+    if (!ok) return;
+    setError("");
+    setBusy(true);
+    try {
+      await inquiryApi.setOrderNumber(inquiryId, number);
+      setValue("");
+      onDone(`주문번호를 ${number}(으)로 ${current ? "바꿨어요" : "지정했어요"}. 주문 정보를 다시 확인했어요.`);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="mb-3 space-y-2">
+      {hints.map((h) => (
+        <div key={h.order_number} className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/30 bg-primary-soft/50 px-3 py-2 text-sm">
+          <span className="min-w-0 flex-1">
+            고객이 적은 주문번호 <b className="font-mono text-ink">{h.order_number}</b>
+            <span className="block text-xs text-muted">
+              {h.found ? `${h.product_name ?? "주문"} · ${h.email_match ? "본인 주문" : "주문자 이메일이 달라요 (본인 확인 필요)"}` : "이 번호의 주문이 없어요"}
+            </span>
+          </span>
+          {h.found && <Button className="min-h-9 px-3 py-1" disabled={busy} onClick={() => apply(h.order_number)}>이 번호로 확인</Button>}
+        </div>
+      ))}
+      {open ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder="20261103-0042" aria-label="주문번호 입력"
+            inputMode="numeric" maxLength={30} className="min-h-9! w-44! flex-none py-1.5 font-mono" disabled={busy}
+            onKeyDown={(e) => { if (e.key === "Enter" && value.trim()) apply(value.replace(/\s/g, "")); }} />
+          <Button variant="ghost" className="min-h-9 px-3 py-1" disabled={busy || !value.trim()} onClick={() => apply(value.replace(/\s/g, ""))}>
+            {busy ? <Spinner /> : current ? "주문번호 변경" : "주문번호 지정"}
+          </Button>
+          <span className="text-xs text-muted">고객에게 받은 번호를 넣으면 주문을 다시 확인해요</span>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setOpen(true)} className="text-xs font-semibold text-primary hover:underline">주문번호 변경</button>
+      )}
+      {error && <Alert>{error}</Alert>}
+    </div>
+  );
+}
+
 /** 주문 정보: 고객이 적은 주문(크게) + 문의 이메일로 찾은 다른 주문(핵심만 보이고 누르면 상세).
  *  category: 결제 문의면 결제·환불 내역, 배송 문의면 배송 추적을 펼쳐 둠. 주문이 필요한 유형인데 주문번호가 없으면 요청 버튼 */
-function OrderInfo({ o, others, category, needsOrder, inquiryId, onDone }: {
-  o: OrderCard | null; others: OrderCard[]; category: string | null; needsOrder: boolean; inquiryId: number; onDone: (msg: string) => void;
+function OrderInfo({ o, others, hints, category, needsOrder, inquiryId, onDone }: {
+  o: OrderCard | null; others: OrderCard[]; hints: NonNullable<InquiryDetail["order_hints"]>; category: string | null; needsOrder: boolean;
+  inquiryId: number; onDone: (msg: string) => void;
 }) {
+  const { user } = useAuth();
+  const canOpen = (assignedTo: number | null | undefined) => user?.role === "admin" || assignedTo === user?.id;   // 상담원은 맡은 문의만
+  const [assignError, setAssignError] = useState("");
+  // 주문을 확인하지 못한 문의(번호 없음·없는 주문·다른 사람 주문)는 주문번호 입력칸을 펼쳐 두고, 확인된 주문은 [주문번호 변경]만
+  const unresolved = !o || !o.found || o.email_match === false;
+  const showFix = unresolved ? (needsOrder || !!o || hints.length > 0 || others.length > 0) : true;
+  const assign = async (number: string) => {
+    if (!(await confirmDialog({ title: "이 주문으로 지정", confirmLabel: "지정",
+      message: `이메일로 찾은 주문 ${number}을(를) 이 문의의 주문으로 지정할까요?\n어떤 주문인지 고객에게 확인한 뒤 지정하세요.` }))) return;
+    setAssignError("");
+    try {
+      await inquiryApi.setOrderNumber(inquiryId, number);
+      onDone(`주문번호를 ${number}(으)로 지정했어요. 주문 정보를 다시 확인했어요.`);
+    } catch (err) {
+      setAssignError(errorMessage(err));   // 실패는 빨간 안내로 (성공 안내에 섞이지 않게)
+    }
+  };
   const payments = o?.payments ?? [];
   const steps = o?.shipment_events ?? [];
   const related = o?.related_inquiries ?? [];
@@ -499,8 +578,10 @@ function OrderInfo({ o, others, category, needsOrder, inquiryId, onDone }: {
       )}
       {!o && !needsOrder && <p className="text-sm text-muted">주문번호 없이 남긴 문의입니다{category ? ` (${category} 문의라 주문 확인이 꼭 필요하지는 않음)` : ""}.</p>}
       {o && !o.found && (
-        <Alert>주문번호 <b className="font-mono">{o.order_number}</b>를 찾을 수 없습니다. 고객에게 주문번호를 다시 확인해 주세요.</Alert>
+        <div className="mb-3"><Alert>주문번호 <b className="font-mono">{o.order_number}</b>를 찾을 수 없습니다. 고객에게 주문번호를 다시 확인해 주세요.</Alert></div>
       )}
+      {assignError && <div className="mb-3"><Alert>{assignError}</Alert></div>}
+      {showFix && unresolved && <OrderNumberFix inquiryId={inquiryId} current={o?.order_number ?? null} hints={hints} onDone={onDone} />}
       {o?.found && (
         <>
           {o.email_match === false && (
@@ -517,7 +598,9 @@ function OrderInfo({ o, others, category, needsOrder, inquiryId, onDone }: {
               <ul className="mt-1 space-y-0.5">
                 {related.map((r) => (
                   <li key={r.id} className="flex items-center justify-between gap-2">
-                    <Link to={`/admin/inquiries/${r.id}`} className="truncate text-primary hover:underline">{r.title}</Link>
+                    {canOpen(r.assigned_to)
+                      ? <Link to={`/admin/inquiries/${r.id}`} className="truncate text-primary hover:underline">{r.title}</Link>
+                      : <span className="truncate" title="다른 상담원이 맡은 문의예요">{r.title} <span className="text-xs text-muted">(다른 상담원 담당)</span></span>}
                     <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted"><Badge value={r.status} />{timeAgo(r.created_at)}</span>
                   </li>
                 ))}
@@ -581,6 +664,9 @@ function OrderInfo({ o, others, category, needsOrder, inquiryId, onDone }: {
                   <div className="border-t border-hairline px-3 py-2.5">
                     <OrderRows o={x} />
                     {(x.payments?.length ?? 0) > 0 && <SubFold title={`결제·환불 내역 (${x.payments!.length})`}><PaymentList o={x} /></SubFold>}
+                    {unresolved && (
+                      <Button variant="ghost" className="mt-2 min-h-9 px-3 py-1" onClick={() => assign(x.order_number)}>이 주문으로 지정</Button>
+                    )}
                   </div>
                 </details>
               </li>
@@ -589,6 +675,11 @@ function OrderInfo({ o, others, category, needsOrder, inquiryId, onDone }: {
         </details>
       ) : !o?.found && (
         <p className="mt-1 text-sm text-muted">이 이메일로 된 주문도 없습니다.</p>
+      )}
+      {!unresolved && o && (
+        <div className="mt-3 border-t border-hairline pt-2.5">
+          <OrderNumberFix inquiryId={inquiryId} current={o.order_number} hints={hints} onDone={onDone} compact />
+        </div>
       )}
     </Card>
   );
@@ -645,7 +736,7 @@ function Tickets({ data, onChanged }: { data: InquiryDetail; onChanged: (msg: st
                   )}
                   {t.ticket_type === "취소" && o?.found && !cancelBlocked && (o.quantity ?? 1) > 1 && (
                     <p className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-sm text-amber-900">
-                      ⚠ {o.quantity}개 주문이에요. 승인하면 <b>주문 전체</b>가 취소됩니다. 일부만 취소하려는 요청이면 반려하고 쇼핑몰 관리 화면에서 부분 취소해 주세요.
+                      ⚠ {o.quantity}개 주문이에요. 승인하면 <b>주문 전체</b>가 취소됩니다. 일부만 취소하려면 아래 주문 정보의 <b>[부분 취소]</b>를 쓰세요 (이 티켓도 함께 처리돼요).
                     </p>
                   )}
                   {rejecting === t.id ? (
@@ -731,8 +822,13 @@ export default function InquiryDetailPage() {
   const [queue, setQueue] = useState<{ total: number; position: number | null; prev_id: number | null; next_id: number | null } | null>(null);
   const navigate = useNavigate();
 
+  // 지금 보고 있는 문의 번호: 늦게 도착한 다른 문의의 응답(예: 발송 5초 뒤 다시 불러오기)이 화면을 덮지 않게
+  const currentId = useRef(id);
+  currentId.current = id;
   const load = useCallback(() => {
-    inquiryApi.get(id).then(setData).catch((err) => setError(errorMessage(err)));
+    inquiryApi.get(id)
+      .then((d) => { if (currentId.current === id) setData(d); })
+      .catch((err) => { if (currentId.current === id) setError(errorMessage(err)); });
   }, [id]);
   useEffect(load, [load]);
   // 다른 문의로 옮기면 안내 문구를 지움
@@ -869,7 +965,7 @@ export default function InquiryDetailPage() {
   );
   // 주문을 확인해야 하는 문의인데 주문을 못 찾음: 주문 관련 유형 + 사람이 처리 (FAQ로 자동 답변한 일반 질문은 제외)
   const needsOrder = !!a && ORDER_CATEGORIES.includes(a.category) && a.decision !== "자동 답변" && !data.order?.found;
-  const orderCard = <OrderInfo o={data.order} others={data.email_orders} category={a?.category ?? null} needsOrder={needsOrder}
+  const orderCard = <OrderInfo o={data.order} others={data.email_orders} hints={data.order_hints ?? []} category={a?.category ?? null} needsOrder={needsOrder}
     inquiryId={data.id} onDone={actionDone} />;
   // 주문 관련 문의(주문번호를 적었거나 이메일로 찾은 주문이 있음)는 주문 정보가 판단의 핵심 → 위에. 아니면 고객을 위에
   const orderFirst = !!data.order || needsOrder;
@@ -942,7 +1038,8 @@ export default function InquiryDetailPage() {
         {/* 왼쪽: 일하는 곳 */}
         <div className="space-y-4">
           <Card title="문의와 답변">
-            <AnswerComposer data={data} refFaqCodes={refFaqs.map(([code]) => code)} onChanged={load} />
+            {/* key: 다른 문의로 옮기면 쓰던 답변·다시 안내 체크·요청을 모두 비움 (A 문의에 쓴 글이 B 고객에게 가지 않게) */}
+            <AnswerComposer key={data.id} data={data} refFaqCodes={refFaqs.map(([code]) => code)} onChanged={load} />
           </Card>
 
           <details className="group rounded-2xl border border-hairline bg-white">
@@ -965,7 +1062,9 @@ export default function InquiryDetailPage() {
 
         {/* 오른쪽: 판단 근거 */}
         <div className="space-y-4">
-          {/* 처리할 티켓이 있으면 맨 위에 (상담원이 가장 먼저 할 일) */}
+          {/* 상담원 공유 메모: 상담원끼리 공유 (고객 대화와 따로, 답변을 쓰는 동안에도 보이게 맨 위) */}
+          <InternalNotes key={data.id} data={data} onChanged={load} />
+          {/* 처리할 티켓이 있으면 그 아래 (상담원이 가장 먼저 할 일) */}
           {pendingTickets && <Tickets data={data} onChanged={(m) => { setNotice(m); load(); }} />}
           {orderFirst ? <>{orderCard}{customerCard}</> : <>{customerCard}{orderCard}</>}
 

@@ -45,7 +45,7 @@ def test_send_with_recheck_then_answer_clears(client, db, inquiry_id):
     assert d["recheck"]["note"] == note and d["recheck"]["set_by"] and d["recheck"]["overdue"] is False
     assert any(e["kind"] == "recheck" and e["text"].startswith(f"다시 안내 예정 · {note}") for e in d["history"])
 
-    # 고객 조회: '추가 안내 예정'만 알리고, 확인할 내용(내부 메모)은 보내지 않음
+    # 고객 조회: '추가 안내 예정'만 알리고, 확인할 내용(상담원 공유 메모)은 보내지 않음
     lookup = client.post("/api/inquiries/lookup", json={"customer_email": "c@example.com", "password": LOOKUP_PW})
     assert lookup.json()["items"][0]["more_answer_coming"] is True and note not in lookup.text
 

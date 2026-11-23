@@ -35,13 +35,7 @@ ORDER_STATUSES = ("결제 완료", "상품 준비 중", "출고", "배송 중", 
 TICKET_TYPES = ("환불", "교환", "취소", "이관")
 TICKET_STATUSES = ("접수", "처리 중", "승인", "반려")
 TOOLS = ("FAQ 검색", "배송 조회", "티켓 접수", "상담원 이관")
-AUDIT_ACTIONS = (
-    "login", "login_failed", "logout", "status_change", "assign", "response_create", "response_edit",
-    "response_approve",
-    "ticket_approve", "ticket_reject", "label_correct", "faq_create", "faq_update", "faq_deactivate",
-    "user_create", "user_update", "user_password_reset", "auto_assign", "password_change", "note_create",
-    "draft_generate",
-)
+# 작업 기록(admin_audit_logs.action) 종류와 화면 이름은 backend/api/audit_logs.py 의 ACTIONS 에서 관리
 
 
 class TimestampMixin:
@@ -113,6 +107,8 @@ class Inquiry(TimestampMixin, Base):
     privacy_agreed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 개인정보 수집·이용 동의 시각
     assigned_to: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"))
     # 다시 안내 (backend/services/recheck.py): "확인 후 다시 안내드리겠습니다"를 먼저 보냈을 때 확인할 내용·기한
+    # 답변 기한을 세기 시작한 시각: 처음은 접수 시각(NULL), 끝난 문의가 추가 문의로 다시 열리면 그 시각 (services/sla.py)
+    sla_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # 파손·불량·오배송 문의인데 고객이 '지금은 사진이 없어요'를 고름 → '나중에' (추가 문의로 사진이 오면 풀림)
     photo_request: Mapped[str | None] = mapped_column(String(10))
     recheck_note: Mapped[str | None] = mapped_column(String(200))
@@ -220,7 +216,7 @@ class CustomerMessage(TimestampMixin, Base):
 
 
 class InquiryNote(TimestampMixin, Base):
-    """상담원 내부 메모 (고객에게는 보이지 않음)"""
+    """상담원 공유 메모 (고객에게는 보이지 않음)"""
     __tablename__ = "inquiry_notes"
 
     inquiry_id: Mapped[int] = mapped_column(ForeignKey("inquiries.id"), index=True)

@@ -44,6 +44,7 @@ class InquiryListItem(BaseModel):
     overdue: bool         # 미처리인데 기한을 넘김
     recheck_note: str | None = None          # '확인 후 다시 안내' 표시: 확인할 내용
     recheck_due_at: UTCDateTime | None = None  # 다시 안내할 기한
+    note_count: int = 0                        # 상담원 공유 메모 개수
 
 
 class NoteCreate(BaseModel):
@@ -53,6 +54,7 @@ class NoteCreate(BaseModel):
 class NoteOut(BaseModel):
     id: int
     author: str
+    author_id: int | None = None   # 화면에서 내 메모인지 가림 ('New' 배지는 다른 사람 메모에만)
     text: str
     created_at: UTCDateTime
 
@@ -262,6 +264,13 @@ class OptionChoice(BaseModel):
     current: bool
 
 
+class OrderHint(BaseModel):
+    order_number: str
+    found: bool          # 실제 주문이 있음
+    email_match: bool    # 주문자 이메일 = 문의 이메일
+    product_name: str | None = None
+
+
 class OrderCard(BaseModel):
     found: bool
     order_number: str
@@ -336,6 +345,7 @@ class InquiryDetail(BaseModel):
     corrections: list[CorrectionOut]
     order: OrderCard | None
     email_orders: list[OrderCard]  # 문의 이메일로 찾은 다른 주문 (본인 확인 필요)
+    order_hints: list[OrderHint] = []  # 고객 글·추가 문의에 적힌 다른 주문번호
     customer_history: list[HistoryItem]
     faq_titles: dict[str, str]
     history: list[Event]
@@ -344,6 +354,6 @@ class InquiryDetail(BaseModel):
     recheck: RecheckOut | None = None   # 확인 후 다시 안내 표시
     photo_request: str | None = None    # '나중에': 파손 문의인데 고객이 사진을 나중에 보내기로 함
     messages: list[MessageOut]          # 고객 추가 문의
-    notes: list[NoteOut]                # 상담원 내부 메모 (고객에게 안 보임)
+    notes: list[NoteOut]                # 상담원 공유 메모 (고객에게 안 보임)
     attachments: list[AttachmentOut]
     notifications: list[NotificationOut]  # 고객 알림 기록 (시연용)

@@ -1,7 +1,8 @@
 // 문의와 답변 + 답변 작성 영역 (문의 상세)
-// - 문의와 답변: 고객(왼쪽: 처음 문의·추가 문의·사진) / AI·상담원 답변(오른쪽, 고객 평가 표시) / 내부 메모(노란색, 고객에게 안 보임)
+// - 문의와 답변: 고객에게 보이는 것만 — 고객(왼쪽: 처음 문의·추가 문의·사진) / AI·상담원 답변(오른쪽, 고객 평가 표시)
+//   (상담원 공유 메모는 대화에 섞지 않고 오른쪽 맨 위 '상담원 공유 메모' 카드에서: components/InternalNotes.tsx)
 //         사이사이 티켓 처리·AI 오류 안내 (배정·상태 변경·알림은 '전체 처리 이력'에서)
-// - 입력: [답변] 탭 = 초안 저장·발송 (AI 초안이 있으면 채워 둠, [AI 초안 만들기], 참고 FAQ 넣기) / [내부 메모] 탭 = 상담원끼리 메모
+// - 입력: 답변만 = 초안 저장·발송 (AI 초안이 있으면 채워 둠, [AI 초안 만들기], 참고 FAQ 넣기). 여기 쓰는 글은 모두 고객에게 가는 글
 // - AI 초안의 [확인 필요: …] 표시와 확인할 것 목록을 보여 주고, 표시가 남은 채로 보내려 하면 한 번 더 물음
 // - [확인 후 다시 안내]: "확인 후 안내드리겠습니다"를 먼저 보낼 때 체크 → 확인할 내용·기한을 남겨 목록·대시보드·알림에 표시.
 //   다음 답변을 보내면 표시가 풀림 (backend/services/recheck.py)
@@ -86,10 +87,8 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
 }) {
   const sent = data.responses.filter((r) => r.status === "발송");
   const draft = data.responses.find((r) => r.status === "초안");
-  const [mode, setMode] = useState<"answer" | "memo">("answer");
   const [text, setText] = useState(draft ? draft.final_text ?? draft.draft_text : "");
-  const [memo, setMemo] = useState("");
-  const [busy, setBusy] = useState<"" | "save" | "send" | "memo" | "draft">("");
+  const [busy, setBusy] = useState<"" | "save" | "send" | "draft">("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [faqs, setFaqs] = useState<Record<string, FaqPublic>>({});
@@ -101,6 +100,8 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
     if (tools && templates === null) templateApi.list().then(setTemplates).catch(() => setTemplates([]));
   }, [tools, templates]);
   const box = useRef<HTMLTextAreaElement>(null);
+  const mailTimer = useRef<number | undefined>(undefined);
+  useEffect(() => () => window.clearTimeout(mailTimer.current), []);   // 화면을 떠나면(다른 문의) 예약한 다시 불러오기 취소
   // 확인 후 다시 안내 (발송할 때 함께 남김)
   const [recheckOn, setRecheckOn] = useState(false);
   const [recheckNote, setRecheckNote] = useState("");
@@ -121,7 +122,7 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
 
   const dirty = text.trim() !== (draft ? (draft.final_text ?? draft.draft_text) : "").trim();
 
-  async function run(kind: "save" | "send" | "memo" | "draft", action: () => Promise<unknown>, ok: string) {
+  async function run(kind: "save" | "send" | "draft", action: () => Promise<unknown>, ok: string) {
     setError("");
     setNotice("");
     setBusy(kind);
@@ -160,7 +161,9 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
       setRecheckNote("");
       setRecheckDue("");
       // 알림 메일은 답변 저장 뒤 따로 보내짐 → 몇 초 뒤 한 번 더 불러와 '메일 발송됨/실패'를 보여 줌
-      window.setTimeout(onChanged, 5000);
+      // (다른 문의로 옮기면 취소: 아래 useEffect 정리)
+      window.clearTimeout(mailTimer.current);
+      mailTimer.current = window.setTimeout(onChanged, 5000);
     }
   }, ok);
   };
@@ -190,14 +193,12 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
   const checks = draft?.generated_by === "llm" ? draft.check_points ?? [] : [];
   const marks = text.split(CHECK_MARK).length - 1;
 
-  const saveMemo = () => run("memo", async () => { await inquiryApi.addNote(data.id, memo); setMemo(""); }, "내부 메모를 남겼습니다.");
 
-  // 문의와 답변: 고객 글·보낸 답변·내부 메모·티켓 처리를 시간순으로.
+  // 문의와 답변: 고객 글·보낸 답변·티켓 처리를 시간순으로 (고객에게 보이는 흐름. 상담원 공유 메모는 오른쪽 카드).
   // 배정·상태 변경·알림 기록·AI 판단 같은 시스템 기록은 '전체 처리 이력'에서만 봄 (AI 오류만 여기에도 표시)
   type Item =
     | { type: "customer"; at: string; text: string; messageId: number | null; followUp: boolean }
     | { type: "note"; at: string; text: string; warn: boolean }
-    | { type: "memo"; at: string; text: string; author: string }
     | { type: "sent"; at: string; r: (typeof sent)[number]; who: string; mail: InquiryDetail["notifications"][number] | undefined };
   const sentEvents = data.history.filter((e) => e.kind === "sent");
   const thread: Item[] = [
@@ -206,7 +207,6 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
     ...data.history.filter((e) => e.kind === "ticket" || e.kind === "recheck" || (e.kind === "ai" && e.text.includes("오류"))).map((e) => ({
       type: "note" as const, at: e.at, warn: e.kind === "ai", text: `${e.actor} · ${e.text}`,
     })),
-    ...data.notes.map((n) => ({ type: "memo" as const, at: n.created_at, text: n.text, author: n.author })),
     ...sent.map((r, i) => ({ type: "sent" as const, at: r.approved_at ?? r.created_at, r, who: sentEvents[i]?.actor ?? "상담원",
       mail: data.notifications[i] })),
   ].sort((x, y) => new Date(x.at).getTime() - new Date(y.at).getTime());
@@ -233,7 +233,6 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
     const onInsert = (e: Event) => {
       const piece = (e as CustomEvent<string>).detail;
       if (!piece) return;
-      setMode("answer");
       insertAt(piece, true);
     };
     window.addEventListener("inquai:insert-reply", onInsert);
@@ -252,16 +251,9 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
     if (answer) setText((t) => (t.trim() ? `${t.trim()}\n\n${answer}` : answer));
   }
 
-  const tab = (m: "answer" | "memo", label: string) => (
-    <button type="button" onClick={() => setMode(m)}
-      className={cx("rounded-md px-3 py-1 text-base", mode === m ? (m === "memo" ? "bg-amber-100 font-medium text-amber-900" : "bg-indigo-50 font-medium text-indigo-700") : "text-slate-600 hover:text-slate-800")}>
-      {label}
-    </button>
-  );
-
   return (
     <div className="space-y-4">
-      {/* 대화: 고객(왼쪽) · AI와 상담원(오른쪽) · 내부 메모(노랑) · 사이사이 처리 안내 */}
+      {/* 대화: 고객(왼쪽) · AI와 상담원(오른쪽) · 사이사이 처리 안내 (고객에게 보이는 흐름) */}
       <div className="space-y-4 rounded-xl bg-slate-50 p-4">
         {thread.map((item, i) => {
           if (item.type === "note") return <Note key={i} tone={item.warn ? "warn" : "plain"}>{item.text} · {formatDate(item.at)}</Note>;
@@ -273,9 +265,6 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
                 {item.text}
               </Bubble>
             );
-          }
-          if (item.type === "memo") {
-            return <Bubble key={i} side="right" tone="memo" name={`내부 메모 · ${item.author} (고객에게 안 보임)`} at={item.at}>{item.text}</Bubble>;
           }
           return (
             <Bubble key={i} side="right" tone={item.r.approved_by === null ? "ai" : "agent"} at={item.at}
@@ -298,13 +287,12 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
       </div>
 
       <div className={cx("space-y-2 rounded-lg border p-3",
-        mode === "memo" ? "border-amber-300 bg-amber-50/50" : draft?.generated_by === "llm" ? "border-amber-200 bg-amber-50/40" : "border-slate-200")}>
+        draft?.generated_by === "llm" ? "border-amber-200 bg-amber-50/40" : "border-slate-200")}>
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex gap-1">
-            {tab("answer", draft ? (draft.generated_by === "llm" ? "AI 답변 초안" : "작성 중인 초안") : sent.length ? "추가 답변" : "답변 작성")}
-            {tab("memo", "내부 메모")}
-          </div>
-          {mode === "answer" && (
+          <span className="rounded-md bg-indigo-50 px-3 py-1 text-base font-medium text-indigo-700">
+            {draft ? (draft.generated_by === "llm" ? "AI 답변 초안" : "작성 중인 초안") : sent.length ? "추가 답변" : "답변 작성"}
+          </span>
+          {(
             <button type="button" onClick={aiDraft} disabled={!!busy}
               title="FAQ·주문 정보·대화를 근거로 AI가 초안을 씁니다. 모르는 내용은 [확인 필요]로 남깁니다."
               className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-1.5 text-base font-medium text-indigo-700 hover:bg-indigo-100 disabled:opacity-60">
@@ -313,15 +301,6 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
           )}
         </div>
 
-        {mode === "memo" ? (
-          <>
-            <Textarea value={memo} maxLength={2000} onChange={(e) => setMemo(e.target.value)} className="min-h-24 bg-white"
-              placeholder="상담원끼리 공유할 내용 (예: 택배사 확인 중, 내일 오전 재연락). 고객에게는 보이지 않습니다." disabled={!!busy} />
-            <div className="flex justify-end">
-              <Button disabled={!!busy || !memo.trim()} onClick={saveMemo}>{busy === "memo" ? <Spinner /> : "메모 남기기"}</Button>
-            </div>
-          </>
-        ) : (
           <>
             {data.recheck && (
               <div className={cx("flex flex-wrap items-start justify-between gap-2 rounded-lg border px-3 py-2 text-sm",
@@ -460,7 +439,6 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
               </div>
             </div>
           </>
-        )}
         {error && <Alert>{error}</Alert>}
         {notice && <Alert kind="success">{notice}</Alert>}
       </div>

@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.database.models import (AdminAuditLog, AdminUser, Coupon, Customer, Faq, Inquiry, Notification, Order,
-                                     PointHistory, Response, as_utc, utcnow)
+                                     PointHistory, Response, Ticket, as_utc, utcnow)
 from backend.services import inventory
 from backend.services.order_actions import duplicates
 
@@ -33,8 +33,55 @@ def order_card(db: Session, inquiry: Inquiry) -> dict | None:
     others = db.scalars(select(Inquiry).where(Inquiry.order_number == order.order_number, Inquiry.id != inquiry.id)
                         .order_by(Inquiry.created_at.desc())).all()
     card["related_inquiries"] = [{"id": i.id, "inquiry_number": i.inquiry_number, "title": i.title, "status": i.status,
-                                  "created_at": i.created_at} for i in others]
+                                  "created_at": i.created_at, "assigned_to": i.assigned_to} for i in others]
     return card
+
+
+ORDER_IN_TEXT = re.compile(r"(?<!\d)(\d{8})(\s*-\s*|)(\d{4})(?!\d)")
+SYSTEM_ORDER_NOTE = re.compile(r"\(주문번호 (추가|변경)[^)]*\)")
+
+
+def _looks_like_order(date8: str, hyphen: str) -> bool:
+    """하이픈이 있으면 주문번호로, 12자리가 붙어 있으면 앞 8자리가 날짜(20YYMMDD)일 때만 (12자리 운송장 번호와 구분)"""
+    if hyphen.strip():
+        return True
+    month, day = int(date8[4:6]), int(date8[6:8])
+    return date8.startswith("20") and 1 <= month <= 12 and 1 <= day <= 31
+
+
+def order_resolves(db: Session, inquiry: Inquiry) -> bool:
+    """문의의 주문번호가 실제 주문이고 주문자 이메일이 문의 이메일과 같은지 (아니면 고객·상담원이 고칠 수 있게)"""
+    if not inquiry.order_number:
+        return False
+    row = db.execute(select(Customer.email).join(Order).where(Order.order_number == inquiry.order_number)).first()
+    return row is not None and row[0].lower() == inquiry.customer_email.lower()
+
+
+def relink_open_tickets(db: Session, inquiry: Inquiry) -> None:
+    """문의의 주문번호가 바뀐 뒤: 아직 처리하지 않은 티켓(접수·처리 중)을 지금 주문번호의 주문으로 다시 연결 (없으면 연결을 뗌)"""
+    order_id = db.scalar(select(Order.id).where(Order.order_number == inquiry.order_number)) if inquiry.order_number else None
+    for t in db.scalars(select(Ticket).where(Ticket.inquiry_id == inquiry.id, Ticket.status.in_(("접수", "처리 중")))):
+        t.order_id = order_id
+
+
+def order_hints(db: Session, inquiry: Inquiry) -> list[dict]:
+    """고객이 처음 글·추가 문의에 적은 주문번호 중 지금 문의에 붙은 번호와 다른 것 (상담원이 [이 번호로 확인]으로 바로 적용)"""
+    texts = [inquiry.title, inquiry.content, *(m.content for m in inquiry.messages)]
+    seen: list[str] = []
+    for text in texts:
+        for a, hyphen, b in ORDER_IN_TEXT.findall(SYSTEM_ORDER_NOTE.sub("", text or "")):
+            if not _looks_like_order(a, hyphen):
+                continue
+            number = f"{a}-{b}"
+            if number != inquiry.order_number and number not in seen:
+                seen.append(number)
+    out = []
+    for number in seen[:3]:
+        row = db.execute(select(Order, Customer).join(Customer).where(Order.order_number == number)).first()
+        out.append({"order_number": number, "found": row is not None,
+                    "email_match": bool(row) and row[1].email.lower() == inquiry.customer_email.lower(),
+                    "product_name": row[0].product_name if row else None})
+    return out
 
 
 def email_orders(db: Session, inquiry: Inquiry) -> list[dict]:
@@ -228,8 +275,9 @@ def history(db: Session, inquiry: Inquiry) -> list[dict]:
         elif a.action == "response_edit":
             text = "답변 초안 수정"
         elif a.action == "label_correct":
-            names = {"category": "유형", "sentiment": "감정", "route": "처리 경로", "urgency": "긴급도"}
-            parts = [f"{names[f]} {b} → {c}" for f, (b, c) in {**d.get("changes", {}), **d.get("rule", {})}.items()]
+            # (사람 이름 목록 names 를 덮어쓰지 않도록 다른 이름으로: 덮어쓰면 이후 줄의 담당자 이름이 모두 깨짐)
+            fields = {"category": "유형", "sentiment": "감정", "route": "처리 경로", "urgency": "긴급도"}
+            parts = [f"{fields[f]} {b} → {c}" for f, (b, c) in {**d.get("changes", {}), **d.get("rule", {})}.items()]
             text, kind = "분류 수정: " + " · ".join(parts), "correct"
         elif a.action == "draft_generate":
             text = "AI 초안 다시 만들기" if d.get("replaced") else "AI 초안 만들기"
@@ -245,6 +293,10 @@ def history(db: Session, inquiry: Inquiry) -> list[dict]:
             kind = "ticket"
         elif a.action == "order_action":
             text, kind = f"바로 처리 · {d.get('summary', '')}", "ticket"
+        elif a.action == "note_create":
+            text = "상담원 공유 메모 남김"
+        elif a.action == "order_number_change":
+            text, kind = f"주문번호 {'지정' if not d.get('before') else '변경'}: {d.get('before') or '없음'} → {d.get('after') or '없음'}", "ticket"
         elif a.action == "recheck_set":
             text, kind = f"다시 안내 예정 · {d.get('summary', '')}", "recheck"
         elif a.action == "recheck_clear":

@@ -177,9 +177,9 @@
 | 개인정보 동의 | `POST /api/inquiries` 의 `privacy_agreed` | 반드시 `true` (빼거나 false 면 422). 동의 시각을 `inquiries.privacy_agreed_at`에 저장. 화면에 수집 항목·목적·보관 기간(3년, 전자상거래법)·외부 AI 처리 안내 |
 | 사진 올리기 | `POST /api/inquiries/uploads` (multipart `file`) → `{ token, filename, size }` | JPG·PNG·WEBP만 (파일 앞부분으로 형식 확인, 확장자는 믿지 않음), 1장 5MB, 문의당 3장, IP 1분 10회. 저장 이름은 무작위, `data/uploads/`(Git 제외) |
 | 사진 연결 | `POST /api/inquiries` 의 `attachment_tokens: [token]` | 올린 뒤 1시간 안, 한 번만 연결 가능. 잘못되면 문의도 저장하지 않음 |
-| 파손 사진 | `photo_labels: {token: "송장"·"파손 부위"}`, `damage_report`, `photos_later` | 제목·내용이 파손·불량·오배송 표현이거나 `damage_report=true`면 **송장·파손 부위 사진 두 장** 필요 (아니면 422 `PHOTO_REQUIRED`, `missing`). `photos_later=true`(지금은 사진이 없어요)면 사진 없이 등록하고 `photo_request='나중에'` → 추가 문의로 사진이 오면 풀림 (`services/photo_evidence.py`) |
+| 파손 사진 | `photo_labels: {token: "송장"·"파손 부위"}`, `damage_report`(화면의 '상품이 파손·불량이거나 잘못 왔어요' 체크: 생략 = 내용 표현으로 판단, true/false = 고객이 고른 그대로), `photos_later` | 제목·내용이 파손·불량·오배송 표현이거나 `damage_report=true`면 (고객이 체크를 풀면 `false` → 사진 없이 등록) **송장·파손 부위 사진 두 장** 필요 (아니면 422 `PHOTO_REQUIRED`, `missing`). `photos_later=true`(지금은 사진이 없어요)면 사진 없이 등록하고 `photo_request='나중에'` → 추가 문의로 사진이 오면 풀림 (`services/photo_evidence.py`) |
 | 답변 평가 | `POST /api/inquiries/answers/{response_id}/rating?inquiry_number=` `{ customer_email, password, helpful }` | 본인 확인 후 `responses.rating` = 1 / -1 (다시 누르면 변경). 대시보드 "AI 자동 답변 만족도" |
-| 추가 문의 | `POST /api/inquiries/follow-up` `{ customer_email, password, inquiry_number, content, attachment_tokens }` | 같은 문의에 이어서. 자동 처리·완료된 문의는 `담당자 처리`로 다시 열고, 미배정이면 자동 배정. AI 재분석은 하지 않음. 문의당 10개까지, IP 1분 5회 |
+| 추가 문의 (내용 보충) | `POST /api/inquiries/follow-up` `{ customer_email, password, inquiry_number, content, attachment_tokens, order_number? }` | 같은 문의에 이어서 (등록한 문의는 고칠 수 없어 빠뜨린 내용·사진·주문번호를 여기로). `order_number`는 처음 문의에 주문번호가 없거나 적은 번호로 내 주문을 찾지 못했을 때(없는 주문·주문자 이메일이 다름) 문의에 붙고 대화에 '(주문번호 추가: …)' 또는 '(주문번호 변경: A → B)'로 남음 (형식은 문의 등록과 같음, 맞는 번호가 이미 있으면 무시). 조회 응답에 `order_number`, `order_needs_fix`, `photos_requested`. 자동 처리·완료된 문의는 `담당자 처리`로 다시 열고, 미배정이면 자동 배정. AI 재분석은 하지 않음. 문의당 10개까지, IP 1분 5회 |
 | 답변 시간 안내 | `/lookup` 응답의 `notice` | "영업일 기준 1일 이내에 답변드립니다 (평일 10:00~17:00)" |
 | 답변 알림 | (자동) | 자동 답변·상담원 발송 때 "답변이 등록되었습니다" 메일 (`services/notify.py`). 본문에는 답변 내용 대신 문의 조회 링크만 |
 
@@ -208,7 +208,7 @@
 | GET | /api/shop/me | 로그인한 고객 `{name, email}` (없으면 401) |
 | GET | /api/shop/orders | 내 주문 (최신순) `[{order_number, product_name, amount, order_status, shipping_status, ordered_at, delivered_at, inquiry_count}]` |
 | GET | /api/shop/inquiries | 내 문의 (조회 비밀번호 없이, `/api/inquiries/lookup`과 같은 형식) |
-| POST | /api/shop/inquiries/{번호}/follow-up | `{ content, attachment_tokens }` 추가 문의 (내 문의가 아니면 404) |
+| POST | /api/shop/inquiries/{번호}/follow-up | `{ content, attachment_tokens, order_number? }` 추가 문의 (내 문의가 아니면 404, 주문번호는 내 주문만 422) |
 | POST | /api/shop/answers/{id}/rating?inquiry_number= | `{ helpful }` 답변 평가 |
 
 - **쿠키:** `shop_session`(HttpOnly, `Path=/api`, 8시간, 종류 `shop` JWT) + `shop_csrf`(`Path=/`). 관리자 로그인 쿠키와 따로라
@@ -280,12 +280,13 @@
   `orders`·`inquiries`=주문·문의 수, 불만 신호 `negative_ratings`(이전 답변에 👎 수)·`negative_inquiries`(부정 감정 문의 수).
   화면은 👎가 있거나 부정 문의가 2건 이상이면 "응대에 신경 쓸 고객"으로 표시
 - `history`: 접수 → AI 판단 → 자동 배정·답변 발송 → 사람의 배정·상태 변경 (시간순)
-- 추가 필드: `due_at`·`overdue`(답변 기한: 주말(한국 시간 토·일) 제외, 긴급 4시간, 그 외 24시간 — `backend/services/sla.py`), `messages`(고객 추가 문의), `notes`(내부 메모), `attachments`(사진 목록, token 은 내보내지 않음), `notifications`(알림 기록), `responses[].rating`
+- 추가 필드: `due_at`·`overdue`(답변 기한: 주말(한국 시간 토·일) 제외, 긴급 4시간, 그 외 24시간 — `backend/services/sla.py`), `messages`(고객 추가 문의), `notes`(상담원 공유 메모), `attachments`(사진 목록, token 은 내보내지 않음), `notifications`(알림 기록), `responses[].rating`
 
-### 내부 메모·첨부 사진·기한 (2주차 추가)
+### 상담원 공유 메모·첨부 사진·기한 (2주차 추가)
 | 메서드 | 경로 | 설명 |
 | --- | --- | --- |
-| POST | /api/inquiries/{id}/notes | `{ "text": "택배사 확인 중" }` 상담원 내부 메모. 고객 API에는 절대 나가지 않음. audit `note_create` |
+| PATCH | /api/inquiries/{id}/order-number | `{ "order_number": "20261110-0001" }` 주문번호 입력·변경 (고객이 빠뜨렸거나 잘못 적었을 때 상담원이 확인한 번호로, null 이면 뗌). 형식은 문의 등록과 같고, 없는 주문이면 409 `ORDER_NOT_FOUND`. audit `order_number_change`, 처리 이력 '주문번호 변경: A → B'. 상세 `order_hints[]`: 고객 글·추가 문의에 적힌 다른 주문번호(found·email_match·product_name) → 화면 [이 번호로 확인], 이메일로 찾은 주문은 [이 주문으로 지정] |
+| POST | /api/inquiries/{id}/notes | `{ "text": "택배사 확인 중" }` 상담원 공유 메모. 고객 API에는 절대 나가지 않음. audit `note_create`. 화면은 고객 대화에 섞지 않고 문의 상세 오른쪽 맨 위 '상담원 공유 메모' 카드에 (답변 칸에는 메모 탭 없음). 목록 항목에 `note_count`, 내가 맡은 문의에 다른 사람이 메모를 남기면 🔔 `memo`. 상세 `notes[].author_id`로 화면이 내 메모인지 가려 다른 사람의 새 메모에 'New' |
 | GET | /api/inquiries/{id}/attachments/{attachment_id} | 사진 보기 (로그인, 상담원은 배정된 문의만). 저장 때 확인한 형식으로만 응답, `nosniff` |
 | GET | /api/inquiries?overdue=true | 답변 기한을 넘긴 미처리만. 목록 항목에도 `due_at`, `overdue` |
 | GET | /api/inquiries?recheck=true | '확인 후 다시 안내' 표시가 남은 문의만 (다시 안내 기한 가까운 순). 목록 항목에도 `recheck_note`, `recheck_due_at` |
@@ -571,6 +572,7 @@
 | `followup` | 고객 추가 문의 | 내 담당 문의 | 내 담당 + 미배정 문의 |
 | `due_soon` | 답변 기한 1시간 이내 (미처리, 알림 시각 = 기한 1시간 전) | 내 담당 문의 | 내 담당 + 미배정 문의 |
 | `bad_rating` | 고객 👎 '도움 안 됨' | 내가 보낸 답변 | 모든 답변 (AI 자동 답변 포함) |
+| `memo` | 다른 사람이 남긴 상담원 공유 메모 (내가 남긴 메모는 제외) | 내 담당 문의 | 내 담당 + 미배정 문의 |
 | `recheck` | '확인 후 다시 안내' 기한 1시간 전부터 (지나도 풀 때까지, 알림 시각 = 기한 1시간 전) | 내 담당 문의 | 내 담당 + 미배정 문의 |
 
 ```json
@@ -621,7 +623,7 @@
 ### GET /api/admin/agent-logs — AI 실행 로그 (관리자, 상담원은 배정된 문의만)
 구현: `backend/api/agent_logs.py`, 화면 `/admin/agent-logs` (4주차)
 
-파라미터: `inquiry_id`, `decision`, `decided_by`(규칙 / LLM), `selected_tool`, `tool_success`, `problem`(true: 오류·도구 실패·확신도 0.8 미만만), `from`, `to` (KST 날짜, 최대 92일), `page`, `size`(1~100, 기본 30)
+파라미터: `inquiry_id`, `decision`, `decided_by`(규칙 / LLM), `selected_tool`, `tool_success`, `problem`(true: 오류·미완료(도구 실패)·확신도 0.8 미만만 = 화면 '검토 필요'), `from`, `to` (KST 날짜, 최대 92일), `page`, `size`(1~100, 기본 30)
 
 **화면 이름** (`frontend/src/services/labels.ts`, 처리 이력 문장도 같은 말): 값은 그대로 두고 관리자가 읽는 말로 보여 줍니다.
 `selected_tool`(도구) → 'AI 처리 작업': FAQ 검색 → **FAQ로 답변**, 티켓 접수 → **처리 요청 접수**, 배송 조회·상담원 이관은 그대로 · `decided_by` LLM → **AI가 판단**, 규칙 → **규칙으로 바로** · `tool_success=false` → **미완료 · 이유**(`tool_output.message`, 예: 주문번호 없음) · 확신도 0.8 미만 → **유형 판단 불확실** · 토큰 → **AI 사용량**. 화면 위쪽 '용어 설명'에 같은 설명이 있습니다.

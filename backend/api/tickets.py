@@ -15,14 +15,29 @@ from typing import Literal
 
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
 
 from backend.api.inquiry_admin import get_inquiry_for_user
 from backend.core.dependencies import DB, LoginUser
 from backend.core.errors import AppError
-from backend.database.models import Order, Payment, Ticket, utcnow
+from backend.database.models import AdminAuditLog, Order, Payment, Ticket, utcnow
 from backend.schemas.inquiry_admin import TicketOut
 from backend.services import inventory
 from backend.services.audit import add_audit
+
+RETURN_FEE = 6000   # 단순 변심 반품 왕복 배송비 (docs/shop_policy.md, services/order_actions.py 의 반품 접수 안내와 같음)
+
+
+def _return_reason(db, order_number: str) -> str | None:
+    """상담원이 [반품 회수 접수]로 남긴 반품 사유 (가장 최근 것, 작업 기록에서)"""
+    rows = db.scalars(select(AdminAuditLog).where(AdminAuditLog.action == "order_action")
+                      .order_by(AdminAuditLog.id.desc())).all()
+    for a in rows:
+        d = a.detail or {}
+        if d.get("kind") == "return" and d.get("order_number") == order_number:
+            return (d.get("after") or {}).get("reason")
+    return None
+
 
 router = APIRouter(prefix="/tickets", tags=["티켓 처리"])
 ACTIONABLE = ("취소", "교환", "환불")
@@ -53,6 +68,9 @@ def decide(ticket_id: int, body: TicketDecision, request: Request, user: LoginUs
         raise AppError(422, "반려 사유를 적어 주세요.", "VALIDATION_ERROR")
 
     order = db.get(Order, ticket.order_id) if ticket.order_id else None
+    if order is None and inquiry.order_number:   # 주문번호를 나중에 받은 문의 (예전 티켓)
+        order = db.scalar(select(Order).where(Order.order_number == inquiry.order_number))
+        ticket.order_id = order.id if order else None
     order_change = None
     if body.status == "승인" and ticket.ticket_type == "취소":
         if order is None:
@@ -68,8 +86,15 @@ def decide(ticket_id: int, body: TicketDecision, request: Request, user: LoginUs
                        at=utcnow(), memo="주문 취소 (티켓 승인)"))
     if body.status == "승인" and ticket.ticket_type == "환불" and order is not None:
         # 환불 예정 (실제 환불은 쇼핑몰 결제 시스템의 일. 상담원이 고객에게 예정일을 안내할 수 있게 기록)
-        db.add(Payment(order_id=order.id, kind="환불", status="예정", method=order.payment_method, amount=order.amount,
-                       at=utcnow() + timedelta(days=3), memo="반품 회수·검수 후 3영업일 이내 (티켓 승인)"))
+        if order.order_status == "취소":
+            raise AppError(409, "이미 취소된 주문이라 결제가 승인 취소로 처리됐어요. 환불 티켓은 반려해 주세요.", "INVALID_STATE")
+        if any(p.kind == "환불" for p in order.payments):
+            raise AppError(409, "이 주문에는 이미 환불(예정)이 있어요. 결제·환불 내역을 확인해 주세요.", "ALREADY_REFUNDED")
+        amount, memo = order.amount, "반품 회수·검수 후 3영업일 이내 (티켓 승인)"
+        if _return_reason(db, order.order_number) == "단순 변심":   # [반품 회수 접수]에서 안내한 대로 왕복 배송비 차감
+            amount, memo = max(order.amount - RETURN_FEE, 0), memo + f" · 단순 변심 왕복 배송비 {RETURN_FEE:,}원 차감"
+        db.add(Payment(order_id=order.id, kind="환불", status="예정", method=order.payment_method, amount=amount,
+                       at=utcnow() + timedelta(days=3), memo=memo))
 
     ticket.status, ticket.memo = body.status, body.memo
     ticket.handled_by, ticket.handled_at = user.id, utcnow()

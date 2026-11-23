@@ -155,3 +155,31 @@ def test_cancel_ticket_restocks_and_draft_sees_stock(client, db, ids):
     assert client.patch(f"/api/tickets/{ticket.id}", json={"status": "승인"}).status_code == 200
     assert order(db, "R-1").order_status == "취소"
     assert stock(db, "연청, 28") == 11                                                          # 2개 모두 재고로
+
+
+def test_refund_ticket_once_with_return_fee(client, db, ids):
+    """환불 티켓 승인: 단순 변심 반품이면 왕복 배송비 6,000원 차감, 두 번째 승인·취소된 주문은 409"""
+    login(client, "agent1")
+    assert act(client, ids["delivered"], action="return", reason="단순 변심").status_code == 200
+    d1 = db.query(Order).filter_by(order_number="D-1").one()
+    t1 = Ticket(inquiry_id=ids["delivered"], order_id=d1.id, ticket_type="환불", reason="환불", status="접수")
+    t2 = Ticket(inquiry_id=ids["delivered"], order_id=d1.id, ticket_type="환불", reason="또 환불", status="접수")
+    db.add_all([t1, t2])
+    db.commit()
+    assert client.patch(f"/api/tickets/{t1.id}", json={"status": "승인"}).status_code == 200
+    refund = db.query(Payment).filter_by(order_id=d1.id, kind="환불").one()
+    assert refund.amount == 79000 - 6000 and "6,000원 차감" in refund.memo
+    r = client.patch(f"/api/tickets/{t2.id}", json={"status": "승인"})
+    assert r.status_code == 409 and r.json()["code"] == "ALREADY_REFUNDED"
+
+
+def test_duplicate_warning_stays_cleared_after_partial_and_full_cancel(client, db, ids):
+    """부분 취소 → 중복 승인 취소 → 전체 취소 순서여도 정리된 중복 결제 경고가 다시 뜨지 않음"""
+    login(client, "agent1")
+    assert act(client, ids["ready"], action="partial_cancel", count=1).status_code == 200
+    assert act(client, ids["ready"], action="duplicate_cancel").status_code == 200
+    db.add(Ticket(inquiry_id=ids["ready"], order_id=order(db, "R-1").id, ticket_type="취소", reason="전부 취소", status="접수"))
+    db.commit()
+    t = db.query(Ticket).filter_by(status="접수").one()
+    assert client.patch(f"/api/tickets/{t.id}", json={"status": "승인"}).status_code == 200
+    assert client.get(f"/api/inquiries/{ids['ready']}").json()["order"]["duplicate_payment"] is False

@@ -7,13 +7,15 @@ from typing import Literal
 
 from fastapi import APIRouter, Query, Request
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from backend.core.dependencies import DB, AdminOnly, LoginUser
 from backend.core.errors import AppError
 from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminUser, AnalysisResult, Attachment,
-                                     Inquiry, InquiryNote, LabelCorrection, Notification, utcnow)
+                                     Inquiry, InquiryNote, LabelCorrection, Notification, Order, utcnow)
+from backend.schemas.inquiry import normalize_order_number
 from backend.schemas.inquiry_admin import (AnalysisCorrection, AnalysisOut, AssignRequest, InquiryDetail, InquiryListItem, InquiryState, NoteCreate,
                                            NoteOut, Page, StatusRequest)
 from backend.services import inquiry_context as ctx
@@ -79,7 +81,7 @@ def list_inquiries(
     if overdue:
         # 기한은 주말을 빼고 계산해서 DB 조건으로 쓸 수 없음 → 미처리 문의(많지 않음)의 기한을 계산해 번호로 거름
         now = utcnow()
-        rows = db.execute(select(Inquiry.id, Inquiry.created_at, AnalysisResult.urgency)
+        rows = db.execute(select(Inquiry.id, func.coalesce(Inquiry.sla_started_at, Inquiry.created_at), AnalysisResult.urgency)
                           .outerjoin(AnalysisResult, AnalysisResult.inquiry_id == Inquiry.id)
                           .where(Inquiry.status.in_(sla.OPEN_STATUSES))).all()
         stmt = stmt.where(Inquiry.id.in_([i for i, created, urgency in rows if now > sla.due_at(created, urgency)]))
@@ -100,7 +102,8 @@ def list_inquiries(
     order = [URGENCY_ORDER, Inquiry.created_at.desc()] if sort == "urgency" else [Inquiry.created_at.desc()]
     if recheck:
         order = [Inquiry.recheck_due_at]
-    rows = db.execute(stmt.options(selectinload(Inquiry.assignee)).order_by(*order, Inquiry.id.desc())
+    rows = db.execute(stmt.options(selectinload(Inquiry.assignee), selectinload(Inquiry.notes))
+                      .order_by(*order, Inquiry.id.desc())
                       .offset((page - 1) * size).limit(size)).all()
 
     items = [{
@@ -109,9 +112,10 @@ def list_inquiries(
         "sentiment": a.sentiment if a else None, "decision": a.decision if a else None,
         "confidence": a.confidence if a else None,
         "assigned_to": _assignee(i.assignee), "created_at": i.created_at,
-        "due_at": sla.due_at(i.created_at, a.urgency if a else None),
-        "overdue": sla.is_overdue(i.status, i.created_at, a.urgency if a else None),
+        "due_at": sla.due_at(sla.started(i), a.urgency if a else None),
+        "overdue": sla.is_overdue(i.status, sla.started(i), a.urgency if a else None),
         "recheck_note": i.recheck_note, "recheck_due_at": i.recheck_due_at,
+        "note_count": len(i.notes),   # 상담원 공유 메모 개수 (목록 제목 옆 📝)
     } for i, a in rows]
     return {"items": items, "total": total, "page": page, "size": size}
 
@@ -150,6 +154,8 @@ def change_status(inquiry_id: int, body: StatusRequest, request: Request, user: 
         raise AppError(400, f"이미 '{body.status}' 상태입니다.", "INVALID_STATE")
     before = inquiry.status
     inquiry.status = body.status
+    if before in ("완료", "자동 처리") and body.status in sla.OPEN_STATUSES:
+        inquiry.sla_started_at = utcnow()   # 다시 열기: 답변 기한을 지금부터 다시 셈
     add_audit(db, request, "status_change", user, "inquiry", inquiry.id, before=before, after=body.status)
     db.commit()
     db.refresh(inquiry)
@@ -214,16 +220,18 @@ def get_inquiry(inquiry_id: int, user: LoginUser, db: DB):
         # 한 화면에서 판단·처리할 수 있도록 함께 보내는 업무 정보
         "order": ctx.order_card(db, inquiry),
         "email_orders": ctx.email_orders(db, inquiry),
+        "order_hints": ctx.order_hints(db, inquiry),   # 고객 글에 적힌 다른 주문번호 ([이 번호로 확인])
         "customer_history": ctx.customer_history(db, inquiry, user),
         "customer_profile": ctx.customer_profile(db, inquiry),
         "faq_titles": ctx.faq_titles(db, inquiry),
         "history": ctx.history(db, inquiry),
-        "due_at": sla.due_at(inquiry.created_at, urgency),
-        "overdue": sla.is_overdue(inquiry.status, inquiry.created_at, urgency),
+        "due_at": sla.due_at(sla.started(inquiry), urgency),
+        "overdue": sla.is_overdue(inquiry.status, sla.started(inquiry), urgency),
         "recheck": recheck_svc.info(inquiry, names),
         "photo_request": inquiry.photo_request,
         "messages": [{"id": m.id, "text": m.content, "created_at": m.created_at} for m in inquiry.messages],
-        "notes": [{"id": n.id, "author": names.get(n.author_id, "?"), "text": n.text, "created_at": n.created_at}
+        "notes": [{"id": n.id, "author": names.get(n.author_id, "?"), "author_id": n.author_id, "text": n.text,
+                   "created_at": n.created_at}
                   for n in inquiry.notes],
         "attachments": inquiry.attachments,
         "notifications": db.scalars(select(Notification).where(Notification.inquiry_id == inquiry.id)
@@ -231,7 +239,33 @@ def get_inquiry(inquiry_id: int, user: LoginUser, db: DB):
     }
 
 
-@router.post("/{inquiry_id}/notes", response_model=NoteOut, status_code=201, summary="내부 메모 남기기 (로그인)")
+class OrderNumberBody(BaseModel):
+    order_number: str | None = Field(default=None, max_length=30)   # 빈칸·null 이면 주문번호를 뗌
+
+    @field_validator("order_number", mode="before")
+    @classmethod
+    def _order_number(cls, v):
+        return normalize_order_number(v) if isinstance(v, str) else v
+
+
+@router.patch("/{inquiry_id}/order-number", summary="주문번호 입력·변경 (로그인)")
+def set_order_number(inquiry_id: int, body: OrderNumberBody, request: Request, user: LoginUser, db: DB):
+    """고객이 주문번호를 빠뜨렸거나 잘못 적었을 때 상담원이 확인한 번호로 고침 (추가 문의·전화로 받은 번호, 이메일로 찾은 주문).
+    없는 주문이면 409 (오타 방지). 문의 이메일과 주문자가 달라도 지정은 되지만 화면에 '본인 확인 필요'가 그대로 보임"""
+    inquiry = get_inquiry_for_user(db, inquiry_id, user)
+    new = body.order_number
+    if new and db.scalar(select(Order.id).where(Order.order_number == new)) is None:
+        raise AppError(409, f"주문번호 {new}에 해당하는 주문이 없습니다. 번호를 다시 확인해 주세요.", "ORDER_NOT_FOUND")
+    before = inquiry.order_number
+    if new != before:
+        inquiry.order_number = new
+        ctx.relink_open_tickets(db, inquiry)   # 처리 전 티켓도 새 주문으로
+        add_audit(db, request, "order_number_change", user, "inquiry", inquiry.id, before=before, after=new)
+        db.commit()
+    return {"order_number": inquiry.order_number}
+
+
+@router.post("/{inquiry_id}/notes", response_model=NoteOut, status_code=201, summary="상담원 공유 메모 남기기 (로그인)")
 def add_note(inquiry_id: int, body: NoteCreate, request: Request, user: LoginUser, db: DB):
     """고객에게는 보이지 않는 상담원끼리의 메모 (인계 사항, 확인 중인 내용 등)"""
     inquiry = get_inquiry_for_user(db, inquiry_id, user)
@@ -240,7 +274,7 @@ def add_note(inquiry_id: int, body: NoteCreate, request: Request, user: LoginUse
     db.flush()
     add_audit(db, request, "note_create", user, "inquiry", inquiry.id, note_id=note.id)
     db.commit()
-    return {"id": note.id, "author": user.display_name, "text": note.text, "created_at": note.created_at}
+    return {"id": note.id, "author": user.display_name, "author_id": user.id, "text": note.text, "created_at": note.created_at}
 
 
 @router.get("/{inquiry_id}/attachments/{attachment_id}", summary="첨부 사진 보기 (로그인)")

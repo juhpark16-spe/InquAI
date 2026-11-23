@@ -84,9 +84,10 @@ export const customerApi = {
     form.append("file", file);
     return http.post<{ token: string; filename: string; size: number }>("/inquiries/uploads", form).then((r) => r.data);
   },
-  followUp: (customer_email: string, password: string, inquiry_number: string, content: string, attachment_tokens: string[]) =>
+  followUp: (customer_email: string, password: string, inquiry_number: string, content: string, attachment_tokens: string[],
+    order_number?: string | null) =>
     http.post<{ status: string; message: string }>("/inquiries/follow-up",
-      { customer_email, password, inquiry_number, content, attachment_tokens }).then((r) => r.data),
+      { customer_email, password, inquiry_number, content, attachment_tokens, order_number: order_number || null }).then((r) => r.data),
   rate: (answerId: number, inquiry_number: string, customer_email: string, password: string, helpful: boolean) =>
     http.post<{ rating: number }>(`/inquiries/answers/${answerId}/rating`, { customer_email, password, helpful },
       { params: { inquiry_number } }).then((r) => r.data),
@@ -113,7 +114,7 @@ export interface InquiryFilters {
 
 /** 알림 (🔔): 나에게 배정 · 고객 추가 문의 · 답변 기한 1시간 이내 · 고객 👎 (backend/api/notifications.py) */
 export interface NotificationItem {
-  kind: "assigned" | "followup" | "due_soon" | "bad_rating" | "recheck";
+  kind: "assigned" | "followup" | "due_soon" | "bad_rating" | "recheck" | "memo";
   at: string;
   inquiry_id: number;
   inquiry_number: string;
@@ -187,6 +188,9 @@ export const inquiryApi = {
   // 티켓 승인·반려 (취소 승인은 출고 전 주문만 → 주문 취소). 반려는 사유 필수
   decideTicket: (ticketId: number, status: "승인" | "반려", memo?: string) =>
     http.patch(`/tickets/${ticketId}`, { status, memo: memo || null }).then((r) => r.data),
+  // 주문번호 입력·변경 (고객이 빠뜨렸거나 잘못 적었을 때, 없는 주문이면 409)
+  setOrderNumber: (id: number, order_number: string | null) =>
+    http.patch<{ order_number: string | null }>(`/inquiries/${id}/order-number`, { order_number }).then((r) => r.data),
   // 확인 후 다시 안내 표시: 정하기·바꾸기 / 답변 없이 풀기 (다음 답변을 보내면 자동으로 풀림)
   setRecheck: (id: number, recheck: RecheckInput) => http.put(`/inquiries/${id}/recheck`, recheck).then((r) => r.data),
   clearRecheck: (id: number) => http.delete(`/inquiries/${id}/recheck`).then((r) => r.data),
@@ -334,9 +338,9 @@ export const shopApi = {
   me: () => http.get<ShopCustomer>("/shop/me").then((r) => r.data),
   orders: () => http.get<ShopOrder[]>("/shop/orders").then((r) => r.data),
   inquiries: () => http.get<{ items: InquiryPublic[]; notice: string }>("/shop/inquiries").then((r) => r.data),
-  followUp: (inquiry_number: string, content: string, attachment_tokens: string[]) =>
-    http.post<{ status: string; message: string }>(`/shop/inquiries/${inquiry_number}/follow-up`, { content, attachment_tokens })
-      .then((r) => r.data),
+  followUp: (inquiry_number: string, content: string, attachment_tokens: string[], order_number?: string | null) =>
+    http.post<{ status: string; message: string }>(`/shop/inquiries/${inquiry_number}/follow-up`,
+      { content, attachment_tokens, order_number: order_number || null }).then((r) => r.data),
   rate: (answerId: number, inquiry_number: string, helpful: boolean) =>
     http.post<{ rating: number }>(`/shop/answers/${answerId}/rating`, { helpful }, { params: { inquiry_number } }).then((r) => r.data),
 };

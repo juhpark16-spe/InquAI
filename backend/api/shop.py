@@ -26,7 +26,7 @@ from backend.core.rate_limit import FailureLock, rate_limit
 from backend.core.security import clear_shop_cookies, create_shop_token, set_shop_cookies, verify_password
 from backend.database.models import Customer, Inquiry
 from backend.schemas.common import UTCDateTime
-from backend.schemas.inquiry import InquiryLookupResult
+from backend.schemas.inquiry import InquiryLookupResult, normalize_order_number
 from backend.services import sla
 from backend.services.inquiries import add_follow_up, find_customer_inquiries, public_view, rate_answer
 
@@ -66,6 +66,12 @@ class ShopOrder(BaseModel):
 class FollowUpBody(BaseModel):
     content: str = Field(min_length=2, max_length=2000)
     attachment_tokens: list[str] = Field(default_factory=list, max_length=3)
+    order_number: str | None = Field(default=None, max_length=30)   # 처음 문의에 주문번호가 없을 때만
+
+    @field_validator("order_number", mode="before")
+    @classmethod
+    def _order_number(cls, v):
+        return normalize_order_number(v) if isinstance(v, str) else v
 
     @field_validator("content", mode="before")
     @classmethod
@@ -133,7 +139,9 @@ def my_inquiries(customer: ShopCustomer, db: DB):
              dependencies=[Depends(rate_limit("follow_up", 5, 60))])
 def follow_up(inquiry_number: str, body: FollowUpBody, customer: ShopCustomer, db: DB):
     inquiry = _my_inquiry(db, customer, inquiry_number)
-    add_follow_up(db, inquiry, body.content, body.attachment_tokens)
+    if body.order_number and not any(o.order_number == body.order_number for o in customer.orders):
+        raise AppError(422, "내 주문 목록에 없는 주문번호입니다.", "ORDER_NOT_FOUND")
+    add_follow_up(db, inquiry, body.content, body.attachment_tokens, body.order_number)
     return {"inquiry_number": inquiry.inquiry_number, "status": inquiry.status,
             "message": "추가 문의가 접수되었습니다. " + sla.CUSTOMER_NOTICE}
 

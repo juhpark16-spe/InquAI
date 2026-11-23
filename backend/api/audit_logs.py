@@ -23,9 +23,10 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "user_create": ("계정 만들기", "계정"), "user_update": ("계정 수정", "계정"),
     "user_password_reset": ("임시 비밀번호 발급", "계정"),
     "auto_assign": ("자동 배정", "문의 처리"), "assign": ("배정 변경", "문의 처리"),
-    "status_change": ("상태 변경", "문의 처리"), "note_create": ("내부 메모", "문의 처리"),
+    "status_change": ("상태 변경", "문의 처리"), "note_create": ("상담원 공유 메모", "문의 처리"),
     "label_correct": ("분류 수정", "문의 처리"), "ticket_approve": ("티켓 승인", "문의 처리"),
     "ticket_reject": ("티켓 반려", "문의 처리"), "order_action": ("바로 처리", "문의 처리"),
+    "order_number_change": ("주문번호 변경", "문의 처리"),
     "recheck_set": ("다시 안내 예정", "답변"), "recheck_clear": ("다시 안내 완료", "답변"),
     "draft_generate": ("AI 초안 만들기", "답변"), "response_create": ("답변 작성", "답변"),
     "response_edit": ("초안 수정", "답변"), "response_approve": ("답변 발송", "답변"),
@@ -47,6 +48,8 @@ def _summary(a: AdminAuditLog, names: dict[int, str]) -> str:
         return f"{reason} · 시도한 아이디 '{d['username']}'" if d.get("username") else reason
     if a.action in ("order_action", "recheck_set", "recheck_clear"):
         return d.get("summary", "")
+    if a.action == "order_number_change":
+        return f"{d.get('before') or '없음'} → {d.get('after') or '없음'}"
     if a.action == "auto_assign":
         return f"→ {name(d.get('assigned_to'))}" + (f" ({d['rule']})" if d.get("rule") else "")
     if a.action == "assign":

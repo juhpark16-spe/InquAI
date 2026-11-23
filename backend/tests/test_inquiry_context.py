@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from backend.database.models import (AdminAuditLog, AgentLog, Customer, Faq, Inquiry, Order, Response, utcnow)
+from backend.database.models import (AdminAuditLog, AgentLog, Customer, Faq, Inquiry, Order, Response, Ticket, utcnow)
 from backend.tests.conftest import TEST_PASSWORD
 
 EMAIL = "kim@example.com"
@@ -136,3 +136,51 @@ def test_ai_history_reads_plainly():
     labels_ts = (Path(__file__).resolve().parents[2] / "frontend/src/services/labels.ts").read_text(encoding="utf-8")
     for name in [*TOOL_LABEL.values(), *BY_LABEL.values()]:
         assert f'"{name}"' in labels_ts, name
+
+
+def test_agent_fixes_order_number_and_hints(client, db, setup):
+    """주문번호를 빠뜨렸거나 잘못 적은 문의: 고객 글에 적힌 번호 힌트, 상담원이 입력·변경 (없는 주문은 409), 처리 이력"""
+    login(client)
+    client.headers["X-CSRF-Token"] = client.cookies.get("csrf_token")
+    inquiry = db.get(Inquiry, setup["main"])
+    c = db.query(Customer).filter_by(email=EMAIL).one()
+    order = Order(customer_id=c.id, order_number="20261110-0007", product_name="머그컵", amount=12000, order_status="배송 완료",
+                  ordered_at=utcnow())
+    db.add(order)
+    inquiry.order_number = "20261120-0222"                                       # 없는 주문
+    inquiry.content = (f"주문번호를 잘못 적었어요. 맞는 번호는 {order.order_number.replace('-', '')} 입니다. "
+                       "운송장 123456789012")                                     # 운송장 번호는 힌트에서 빠짐
+    ticket = Ticket(inquiry_id=inquiry.id, order_id=None, ticket_type="취소", reason="취소해 주세요", status="접수")
+    db.add(ticket)
+    db.commit()
+
+    d = client.get(f"/api/inquiries/{inquiry.id}").json()
+    assert d["order"]["found"] is False
+    assert [h["order_number"] for h in d["order_hints"]] == [order.order_number] and d["order_hints"][0]["found"] is True
+
+    url = f"/api/inquiries/{inquiry.id}/order-number"
+    assert client.patch(url, json={"order_number": "29991231-9999"}).status_code == 409   # 없는 주문
+    assert client.patch(url, json={"order_number": "1234"}).status_code == 422            # 형식
+    assert client.patch(url, json={"order_number": order.order_number}).status_code == 200
+    d = client.get(f"/api/inquiries/{inquiry.id}").json()
+    assert d["order"]["found"] is True and d["order_hints"] == []
+    db.expire_all()
+    assert db.get(Ticket, ticket.id).order_id == order.id                          # 처리 전 티켓도 새 주문으로
+    assert any(e["text"] == f"주문번호 변경: 20261120-0222 → {order.order_number}" for e in d["history"])
+
+
+def test_history_names_survive_label_correction(client, db, setup):
+    """분류를 고친 뒤에도 처리 이력의 사람 이름이 그대로 (예전에는 이름 목록이 덮어써져 '시스템'으로 보였음), 메모는 한국어로"""
+    login(client)
+    client.headers["X-CSRF-Token"] = client.cookies.get("csrf_token")
+    iid = setup["main"]
+    db.add(AdminAuditLog(admin_id=1, action="label_correct", target_type="inquiry", target_id=iid,
+                         detail={"changes": {"category": ["배송", "교환"]}}))
+    db.commit()
+    client.post(f"/api/inquiries/{iid}/notes", json={"text": "확인 중"})
+    client.post(f"/api/inquiries/{iid}/responses", json={"text": "안내드립니다.", "send": True})
+    h = client.get(f"/api/inquiries/{iid}").json()["history"]
+    by_text = {e["text"]: e["actor"] for e in h}
+    assert by_text["상담원 공유 메모 남김"] == "관리자"
+    assert by_text["직접 작성한 답변 발송"] == "관리자"
+    assert "note_create" not in by_text

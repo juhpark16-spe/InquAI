@@ -158,7 +158,7 @@ def summary(
             "review_waiting": sum(1 for i in open_rows if i.status == "검토 대기"),
             "unassigned_open": sum(1 for i in open_rows if i.assigned_to is None),
             "overdue_open": sum(1 for i in open_rows
-                                if sla.is_overdue(i.status, i.created_at, i.analysis.urgency if i.analysis else None)),
+                                if sla.is_overdue(i.status, sla.started(i), i.analysis.urgency if i.analysis else None)),
         },
         "daily": [{"date": d.isoformat(), "total": v["total"], "open": v["open"], "done": v["done"], "auto": v["auto"],
                    "by_category": {c: v["by_category"].get(c, 0) for c in CATEGORY_LABELS}}
@@ -194,8 +194,8 @@ def _priority_item(i: Inquiry) -> dict:
             "preview": re.sub(r"\s+", " ", i.content).strip()[:90], "status": i.status,
             "category": a.category if a else None, "urgency": urgency,
             "assigned_to": i.assignee.display_name if i.assignee else None,
-            "created_at": i.created_at, "due_at": sla.due_at(i.created_at, urgency),
-            "overdue": sla.is_overdue(i.status, i.created_at, urgency)}
+            "created_at": i.created_at, "due_at": sla.due_at(sla.started(i), urgency),
+            "overdue": sla.is_overdue(i.status, sla.started(i), urgency)}
 
 
 @router.get("/priorities", summary="지금 가장 급한 문의 + 기한 임박 문의 (관리자)")
@@ -211,8 +211,8 @@ def priorities(_: AdminOnly, db: DB, limit: int = Query(5, ge=1, le=20)):
     rank = lambda i: URGENCY_RANK.get(i.analysis.urgency if i.analysis else "", 3)  # noqa: E731
     queue = sorted(rows, key=lambda i: (rank(i), as_utc(i.created_at), i.id))
     now = utcnow()
-    upcoming = sorted((i for i in rows if sla.due_at(i.created_at, i.analysis.urgency if i.analysis else None) > now),
-                      key=lambda i: (sla.due_at(i.created_at, i.analysis.urgency if i.analysis else None), i.id))
+    upcoming = sorted((i for i in rows if sla.due_at(sla.started(i), i.analysis.urgency if i.analysis else None) > now),
+                      key=lambda i: (sla.due_at(sla.started(i), i.analysis.urgency if i.analysis else None), i.id))
     rechecks = db.scalars(select(Inquiry).where(Inquiry.recheck_due_at.is_not(None))
                           .options(selectinload(Inquiry.analysis), selectinload(Inquiry.assignee))
                           .order_by(Inquiry.recheck_due_at, Inquiry.id)).all()

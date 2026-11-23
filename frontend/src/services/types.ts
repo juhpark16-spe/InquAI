@@ -56,7 +56,7 @@ export interface InquiryCreate {
   attachment_tokens: string[];
   // 파손·불량·오배송 문의: 사진 칸 이름(token → 송장/파손 부위), 고객이 고른 '파손 문의예요', '지금은 사진이 없어요'
   photo_labels?: Record<string, "송장" | "파손 부위">;
-  damage_report?: boolean;
+  damage_report?: boolean | null;   // 파손 체크: null = 내용으로 자동 판단
   photos_later?: boolean;
 }
 
@@ -81,6 +81,9 @@ export interface InquiryPublic {
   attachments: { url: string; filename: string; message_id: number | null }[]; // 30분짜리 사진 주소
   can_follow_up: boolean;
   more_answer_coming?: boolean; // 상담원이 확인 후 다시 안내하기로 함 → '추가 안내 예정'
+  order_number?: string | null;  // 내 문의의 주문번호 (없으면 추가 문의에서 받음)
+  order_needs_fix?: boolean;     // 적은 주문번호로 내 주문을 찾지 못함 → 추가 문의에서 다시 받음
+  photos_requested?: boolean;    // 파손 사진을 나중에 보내기로 함 → 추가 문의에 안내
 }
 
 // ---- 관리 ----
@@ -101,6 +104,7 @@ export interface InquiryListItem {
   overdue: boolean;
   recheck_note?: string | null;   // '확인 후 다시 안내' 표시: 확인할 내용
   recheck_due_at?: string | null; // 다시 안내할 기한
+  note_count?: number;            // 상담원 공유 메모 개수
 }
 
 /** 확인 후 다시 안내 표시 (backend/services/recheck.py) */
@@ -198,6 +202,8 @@ export interface InquiryDetail {
   corrections: { id: number; field: string; before_label: string; after_label: string; created_at: string }[];
   order: OrderCard | null;
   email_orders: OrderCard[]; // 문의 이메일로 찾은 다른 주문 (본인 확인 필요)
+  // 고객이 처음 글·추가 문의에 적은 다른 주문번호 (상담원이 [이 번호로 확인]으로 바로 적용)
+  order_hints?: { order_number: string; found: boolean; email_match: boolean; product_name: string | null }[];
   customer_history: { id: number; inquiry_number: string; title: string; status: string; created_at: string }[];
   faq_titles: Record<string, string>;
   history: { at: string; actor: string; text: string; kind: "received" | "followup" | "ai" | "assign" | "status" | "draft" | "sent" | "correct" | "ticket" | "recheck" | "mail" }[];
@@ -206,7 +212,7 @@ export interface InquiryDetail {
   recheck?: Recheck | null;
   photo_request?: string | null; // '나중에': 파손 문의인데 고객이 사진을 나중에 보내기로 함
   messages: { id: number; text: string; created_at: string }[];
-  notes: { id: number; author: string; text: string; created_at: string }[];
+  notes: { id: number; author: string; author_id?: number | null; text: string; created_at: string }[];
   attachments: { id: number; filename: string; content_type: string; size: number; message_id: number | null; label?: string | null; created_at: string }[];
   // 고객 답변 알림 메일: 기록(메일 꺼짐) / 대기 / 발송 / 실패 / 건너뜀(예시 주소)
   notifications: { channel: string; recipient: string; subject: string; status: string; error?: string | null; sent_at?: string | null; created_at: string }[];
@@ -240,7 +246,7 @@ export interface OrderCard {
   shipment_events?: { at: string; status: string; location: string | null }[];
   return_requested_at?: string | null;
   picked_up_at?: string | null;
-  related_inquiries?: { id: number; inquiry_number: string; title: string; status: string; created_at: string }[];
+  related_inquiries?: { id: number; inquiry_number: string; title: string; status: string; created_at: string; assigned_to?: number | null }[];
   shipping_address?: string | null;
   // 같은 상품의 옵션별 재고 (옵션 변경·교환 안내). low = 3개 이하, restock_at = 품절일 때 재입고 예정일
   option_choices?: { option: string; stock: number; sold_out: boolean; low: boolean; restock_at: string | null; current: boolean }[];

@@ -71,3 +71,51 @@ def test_customer_marked_damage_and_label_check(client, db, ai):
     assert r.status_code == 422 and r.json()["code"] == "PHOTO_REQUIRED"
     r = post(client, "상품 상태가 이상해요", photo_labels={"없는토큰": "송장"})    # 올리지 않은 사진에 이름표
     assert r.status_code == 422 and r.json()["code"] == "INVALID_FILE"
+
+
+def test_customer_can_untick_damage_and_add_order_later(client, db, ai):
+    """체크를 풀면(파손 문의 아님) 사진 없이 등록 · 추가 문의로 빠뜨린 주문번호를 붙임"""
+    r = post(client, "상품이 파손되면 교환되나요?", damage_report=False)                 # 일반 질문: 고객이 자동 체크를 풂
+    assert r.status_code == 201
+    inquiry = db.scalar(select(Inquiry).where(Inquiry.inquiry_number == r.json()["inquiry_number"]))
+    assert inquiry.photo_request is None and inquiry.order_number is None
+
+    body = {"inquiry_number": inquiry.inquiry_number, "customer_email": "customer01@example.com", "password": PW,
+            "content": "주문번호 보내 드려요"}
+    assert client.post("/api/inquiries/follow-up", json={**body, "order_number": "2026111-0001"}).status_code == 422
+    assert client.post("/api/inquiries/follow-up", json={**body, "order_number": "202611100001"}).status_code == 201
+    db.expire_all()
+    inquiry = db.get(Inquiry, inquiry.id)
+    assert inquiry.order_number == "20261110-0001"
+    assert inquiry.messages[-1].content.endswith("(주문번호 추가: 20261110-0001)")
+    found = client.post("/api/inquiries/lookup", json={"customer_email": "customer01@example.com", "password": PW}).json()
+    assert {i["inquiry_number"]: i["order_number"] for i in found["items"]}[inquiry.inquiry_number] == "20261110-0001"
+
+    # 이미 주문번호가 있으면 바꾸지 않음
+    client.post("/api/inquiries/follow-up", json={**body, "content": "다른 번호요", "order_number": "20261110-0002"})
+    db.expire_all()
+    assert db.get(Inquiry, inquiry.id).order_number == "20261110-0001"
+
+
+def test_follow_up_fixes_wrong_order_number(client, db, ai):
+    """처음에 없는 주문번호를 적었으면 고객 조회에 order_needs_fix, 추가 문의로 맞는 번호로 바뀜"""
+    r = post(client, "배송이 언제 오나요?", order_number="20261120-0222")           # 없는 주문
+    number = r.json()["inquiry_number"]
+    found = client.post("/api/inquiries/lookup", json={"customer_email": "customer01@example.com", "password": PW}).json()
+    assert {i["inquiry_number"]: i["order_needs_fix"] for i in found["items"]}[number] is True
+
+    body = {"inquiry_number": number, "customer_email": "customer01@example.com", "password": PW, "content": "번호를 잘못 적었어요"}
+    assert client.post("/api/inquiries/follow-up", json={**body, "order_number": "20261110-0001"}).status_code == 201
+    db.expire_all()
+    inquiry = db.scalar(select(Inquiry).where(Inquiry.inquiry_number == number))
+    assert inquiry.order_number == "20261110-0001"
+    assert inquiry.messages[-1].content.endswith("(주문번호 변경: 20261120-0222 → 20261110-0001)")
+
+
+def test_one_photo_and_later_keeps_photo_request(client, db, ai):
+    """송장 사진만 올리고 '지금은 사진이 없어요' → 나머지 사진을 나중에 받음 (상담원·고객 안내가 사라지지 않게)"""
+    one = token(client)
+    r = post(client, DAMAGE, attachment_tokens=[one], photo_labels={one: "송장"}, photos_later=True)
+    assert r.status_code == 201
+    inquiry = db.scalar(select(Inquiry).where(Inquiry.inquiry_number == r.json()["inquiry_number"]))
+    assert inquiry.photo_request == "나중에"

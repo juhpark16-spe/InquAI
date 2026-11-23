@@ -95,3 +95,27 @@ def test_seen_clears_unread_and_new_ones_count_again(client, db):
                            created_at=datetime.now(timezone.utc) + timedelta(seconds=1)))
     db.commit()
     assert client.get("/api/notifications").json()["unread"] == 1
+
+
+def test_internal_memo_notifies_assignee_not_writer(client, db):
+    """내가 맡은 문의에 다른 사람이 남긴 상담원 공유 메모 → 🔔 'memo'. 내가 남긴 메모는 알리지 않음. 목록에 메모 개수"""
+    a = inquiry(db, 1, assigned=AGENT)
+    db.commit()
+
+    login(client, "admin")
+    client.headers["X-CSRF-Token"] = client.cookies.get("csrf_token")
+    assert client.post(f"/api/inquiries/{a.id}/notes", json={"text": "택배사에 분실 조사 요청함. 내일 오전 회신"}).status_code == 201
+    assert ("memo", "INQ-N-0001") not in set(kinds(client))                 # 쓴 사람(관리자)에게는 알리지 않음
+
+    client.cookies.clear()
+    login(client, "agent1")
+    r = client.get("/api/notifications").json()["items"]
+    memo = [x for x in r if x["kind"] == "memo"]
+    assert len(memo) == 1 and memo[0]["inquiry_number"] == "INQ-N-0001" and "택배사에 분실 조사" in memo[0]["text"]
+    assert client.get("/api/inquiries").json()["items"][0]["note_count"] == 1
+    note = client.get(f"/api/inquiries/{a.id}").json()["notes"][0]
+    assert note["author_id"] == ADMIN and note["author"] == "관리자"          # 화면이 내 메모인지 가려 'New' 배지
+
+    client.headers["X-CSRF-Token"] = client.cookies.get("csrf_token")
+    client.post(f"/api/inquiries/{a.id}/notes", json={"text": "고객에게 안내 완료"})   # 내가 남긴 메모
+    assert len([x for x in kinds(client) if x[0] == "memo"]) == 1
