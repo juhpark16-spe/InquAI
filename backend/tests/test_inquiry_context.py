@@ -1,6 +1,7 @@
 """문의 상세의 업무 정보: 주문 카드(취소·반품 가능 여부), 같은 고객의 다른 문의, 근거 FAQ 제목, 처리 이력."""
 
 from datetime import timedelta
+from pathlib import Path
 
 import pytest
 
@@ -91,7 +92,7 @@ def test_agent_history_only_assigned(client, setup):
 def test_history_timeline(client, setup):
     login(client)
     texts = [(e["actor"], e["text"]) for e in client.get(f"/api/inquiries/{setup['main']}").json()["history"]]
-    assert texts == [("고객", "문의 접수"), ("AI", "담당자 연결 판단 (규칙) · 상담원 이관"),
+    assert texts == [("고객", "문의 접수"), ("AI", "담당자 연결 판단 (규칙으로 바로) · 상담원 이관"),
                      ("시스템", "자동 배정 → 상담원1 (전체 담당)"), ("관리자", "상태 변경: 검토 대기 → 담당자 처리")]
 
 
@@ -123,3 +124,15 @@ def test_customer_profile(client, db, setup):
     assert p["points_balance"] == 0 and p["coupons"] == []            # 적립금·쿠폰 내역이 없는 고객
     other = client.get(f"/api/inquiries/{setup['other']}").json()["customer_profile"]
     assert other["phone"] is None and other["orders"] == 0 and other["inquiries"] == 1   # 쇼핑몰 고객 정보 없음
+
+
+def test_ai_history_reads_plainly():
+    """처리 이력의 AI 줄은 관리자가 읽는 말로 ('미완료: 이유', 화면 services/labels.ts 와 같은 이름)"""
+    from backend.services.inquiry_context import BY_LABEL, TOOL_LABEL, _fail_reason
+
+    assert _fail_reason({"message": "주문번호 없음 (상담원이 고객에게 확인)"}) == "주문번호 없음"
+    assert _fail_reason(None) == "이유 기록 없음"
+    assert TOOL_LABEL["티켓 접수"] == "처리 요청 접수" and BY_LABEL["규칙"] == "규칙으로 바로"
+    labels_ts = (Path(__file__).resolve().parents[2] / "frontend/src/services/labels.ts").read_text(encoding="utf-8")
+    for name in [*TOOL_LABEL.values(), *BY_LABEL.values()]:
+        assert f'"{name}"' in labels_ts, name

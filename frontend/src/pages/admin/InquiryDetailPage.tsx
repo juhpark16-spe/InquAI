@@ -12,6 +12,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import AnalysisEditor from "../../components/AnalysisEditor";
 import AnswerComposer from "../../components/AnswerComposer";
 import { confirmDialog } from "../../components/ConfirmDialog";
+import { TOOL_LABEL, byLabel, failReason, toolLabel } from "../../services/labels";
 import { Alert, Badge, Button, Input, Select, Spinner, cx, formatDate } from "../../components/ui";
 import { errorMessage, inquiryApi, type QuickAction } from "../../services/api";
 import type { AgentLog, InquiryDetail, OrderCard, User } from "../../services/types";
@@ -692,7 +693,11 @@ function AiDetails({ log, faqTitles }: { log: AgentLog | undefined; faqTitles: R
             </a>
           </Row>
         )}
-        <Row label="사용한 도구">{log.selected_tool ?? "-"} {log.tool_success === false && <span className="text-rose-700">(실패)</span>}</Row>
+        <Row label="AI 처리 작업">
+          <span title={log.selected_tool ? TOOL_LABEL[log.selected_tool]?.help : undefined}>{toolLabel(log.selected_tool)}</span>{" "}
+          <span className="text-muted">({byLabel(log.decided_by)})</span>{" "}
+          {log.tool_success === false && <span className="text-rose-700">· 미완료: {failReason(log.tool_output)}</span>}
+        </Row>
         <Row label="검색된 FAQ">
           {log.retrieved_faqs.length ? (
             <ul className="space-y-0.5">
@@ -702,11 +707,11 @@ function AiDetails({ log, faqTitles }: { log: AgentLog | undefined; faqTitles: R
             </ul>
           ) : "-"}
         </Row>
-        <Row label="LLM">{log.llm_model ?? "사용 안 함 (규칙 판단)"}</Row>
-        <Row label="토큰">{log.tokens?.calls ? `입력 ${log.tokens.input} · 출력 ${log.tokens.output} (${log.tokens.calls}회)` : "-"}</Row>
+        <Row label="AI 모델">{log.llm_model ?? "사용 안 함 (규칙으로 바로)"}</Row>
+        <Row label="AI 사용량">{log.tokens?.calls ? `입력 ${log.tokens.input} · 출력 ${log.tokens.output} (${log.tokens.calls}회)` : "-"}</Row>
         <Row label="처리 시간">{log.latency_ms !== null ? `${(log.latency_ms / 1000).toFixed(1)}초` : "-"}</Row>
         {log.error && <Row label="오류"><span className="break-all text-rose-700">{log.error}</span></Row>}
-        <Row label="도구 원본">
+        <Row label="결과 원본">
           {log.tool_output ? <pre className="overflow-x-auto rounded bg-slate-50 p-2 text-sm">{JSON.stringify(log.tool_output, null, 2)}</pre> : "-"}
         </Row>
       </dl>
@@ -965,14 +970,14 @@ export default function InquiryDetailPage() {
           {orderFirst ? <>{orderCard}{customerCard}</> : <>{customerCard}{orderCard}</>}
 
           {/* 요약 줄(유형·확신도·감정·긴급도)만으로 충분해 접어 둠. 확신도가 낮으면 유형을 확인해야 하니 펼침 */}
-          <Fold id="analysis" title="AI 분석" defaultOpen={lowConf} summary={a ? `${a.category} ${(a.confidence * 100).toFixed(0)}%${lowConf ? " ⚠ 유형 확인 필요" : ""} · ${a.sentiment} · 긴급도 ${a.urgency}` : "분석 전"}>
+          <Fold id="analysis" title="AI 분석" defaultOpen={lowConf} summary={a ? `${a.category} (AI 확신 ${(a.confidence * 100).toFixed(0)}%)${lowConf ? " ⚠ 유형 판단 불확실" : ""} · ${a.sentiment} · 긴급도 ${a.urgency}` : "분석 전"}>
             {!a ? <p className="text-sm text-muted">분석 전</p> : (
               <>
                 <dl className="grid grid-cols-[3.5rem_1fr] items-center gap-x-3 gap-y-1.5 text-sm">
                   <Row label="유형">
                     <span className="font-semibold">{a.category}</span>{" "}
                     <span className={cx(lowConf ? "font-semibold text-rose-700" : "text-muted")}>
-                      확신도 {(a.confidence * 100).toFixed(0)}%{lowConf && " · 낮음, 유형 확인 필요"}
+                      AI 확신 {(a.confidence * 100).toFixed(0)}%{lowConf && " · 유형 판단 불확실, 유형이 맞는지 확인해 주세요"}
                     </span>
                   </Row>
                   <Row label="감정"><Badge value={a.sentiment} /></Row>

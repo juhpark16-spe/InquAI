@@ -504,8 +504,8 @@ export default function DashboardPage() {
             ))}
           </div>
           <dl className="grid grid-cols-2 gap-y-2.5 text-sm">
-            <dt className="text-muted">확신도 0.8 미만 → 담당자 연결</dt><dd className="text-right tabular-nums text-ink">{data.ai.low_confidence}건</dd>
-            <dt className="text-muted">LLM 오류·시간 초과</dt>
+            <dt className="text-muted" title="AI가 문의 유형을 80% 미만으로 확신해 자동 답변하지 않고 상담원에게 넘김">유형 판단 불확실 (80% 미만) → 상담원</dt><dd className="text-right tabular-nums text-ink">{data.ai.low_confidence}건</dd>
+            <dt className="text-muted">AI 오류·시간 초과</dt>
             <dd className={cx("text-right tabular-nums", data.ai.errors ? "font-semibold text-rose-700" : "text-ink")}>{data.ai.errors}건</dd>
             <dt className="text-muted" title="상담원이 고친 유형·감정. 재학습 데이터로 모읍니다">분류 수정 (재학습 데이터)</dt>
             <dd className="text-right tabular-nums text-ink">

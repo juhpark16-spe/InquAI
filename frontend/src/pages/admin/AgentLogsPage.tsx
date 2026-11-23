@@ -1,4 +1,5 @@
-// AI 실행 로그 (/admin/agent-logs): 문의마다 에이전트가 무엇을 판단했고 어떤 도구를 썼는지, 성공했는지
+// AI 실행 로그 (/admin/agent-logs): 문의마다 AI가 무엇을 판단했고 무슨 일을 했는지(도구), 해냈는지
+// 화면 말은 관리자가 읽는 말로 (services/labels.ts): 도구 → 'AI 처리 작업', 티켓 접수 → '처리 요청 접수', 도구 실패 → 미완료 · 이유
 // 관리자는 전체, 상담원은 자신에게 배정된 문의만 봅니다. 줄을 누르면 처리 경로·근거 FAQ·답변·도구 원본이 펼쳐집니다.
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -6,16 +7,18 @@ import { Link, useSearchParams } from "react-router";
 import { useAuth } from "../../auth/AuthProvider";
 import { Alert, Badge, Button, Select, Spinner, cx, formatDate } from "../../components/ui";
 import { agentLogApi, errorMessage, kstDate, type AgentLogFilters } from "../../services/api";
+import { BY_LABEL, LOW_CONFIDENCE, LOW_CONFIDENCE_HELP, LOW_CONFIDENCE_TEXT, TOOL_LABEL, byLabel, failReason, toolLabel } from "../../services/labels";
 import { DECISIONS, type AgentLogPage, type AgentLogRow } from "../../services/types";
 
-const TOOLS = ["FAQ 검색", "배송 조회", "티켓 접수", "상담원 이관"];
+const TOOLS = Object.keys(TOOL_LABEL);   // 서버 값 (화면에는 TOOL_LABEL 의 이름)
 const PERIODS: Record<string, number | null> = { "오늘": 1, "최근 7일": 7, "최근 30일": 30, "전체": null };
 const SIZE = 30;
 const sec = (ms: number | null | undefined) => (ms === null || ms === undefined ? "-" : `${(ms / 1000).toFixed(1)}초`);
 
-function Stat({ label, value, sub, warn }: { label: string; value: ReactNode; sub?: ReactNode; warn?: boolean }) {
+function Stat({ label, value, sub, warn, onClick }: { label: string; value: ReactNode; sub?: ReactNode; warn?: boolean; onClick?: () => void }) {
   return (
-    <div className="rounded-2xl border border-hairline bg-white px-4 py-3">
+    <div className={cx("rounded-2xl border border-hairline bg-white px-4 py-3", onClick && "cursor-pointer hover:border-primary/40")} onClick={onClick}
+      role={onClick ? "button" : undefined} title={onClick ? "누르면 이 목록만 봅니다" : undefined}>
       <div className="text-xs text-muted">{label}</div>
       <div className={cx("mt-1 text-xl font-semibold tabular-nums", warn ? "text-rose-600" : "text-ink")}>{value}</div>
       {sub && <div className="mt-0.5 text-xs text-slate-500">{sub}</div>}
@@ -23,29 +26,31 @@ function Stat({ label, value, sub, warn }: { label: string; value: ReactNode; su
   );
 }
 
-function Summary({ s }: { s: AgentLogPage["summary"] }) {
+function Summary({ s, onProblems }: { s: AgentLogPage["summary"]; onProblems: () => void }) {
   const pct = (n: number) => (s.count ? `${Math.round((n / s.count) * 100)}%` : "-");
   const problems = s.errors + s.tool_failures + s.low_confidence;
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="실행 수" value={s.count} sub={`LLM 판단 ${s.by_decided_by.LLM ?? 0} · 규칙 판단 ${s.by_decided_by["규칙"] ?? 0}`} />
+        <Stat label="실행 수" value={s.count} sub={`${BY_LABEL.LLM} ${s.by_decided_by.LLM ?? 0} · ${BY_LABEL["규칙"]} ${s.by_decided_by["규칙"] ?? 0}`} />
         <Stat label="자동 답변 비율" value={pct(s.by_decision["자동 답변"] ?? 0)}
           sub={`초안 ${s.by_decision["답변 초안"] ?? 0} · 담당자 연결 ${s.by_decision["담당자 연결"] ?? 0}`} />
-        <Stat label="처리 시간 (LLM 판단)" value={sec(s.avg_latency_ms)} sub={`최대 ${sec(s.max_latency_ms)}`} />
-        <Stat label="확인이 필요한 실행" value={problems} warn={problems > 0}
-          sub={`오류 ${s.errors} · 도구 실패 ${s.tool_failures} · 확신도 0.8 미만 ${s.low_confidence}`} />
+        <Stat label="처리 시간 (AI가 판단한 문의)" value={sec(s.avg_latency_ms)} sub={`최대 ${sec(s.max_latency_ms)}`} />
+        <Stat label="검토 필요" value={problems} warn={problems > 0} onClick={problems > 0 ? onProblems : undefined}
+          sub={`오류 ${s.errors} · 미완료 ${s.tool_failures} · ${LOW_CONFIDENCE_TEXT} ${s.low_confidence}`} />
       </div>
       {Object.keys(s.by_tool).length > 0 && (
         <div className="flex flex-wrap gap-2 text-xs">
-          <span className="py-1 text-muted">도구별</span>
+          <span className="py-1 text-muted">AI 처리 작업</span>
           {Object.entries(s.by_tool).map(([tool, t]) => (
-            <span key={tool} className="rounded-full border border-hairline bg-white px-3 py-1 text-body">
-              {tool} <b className="tabular-nums text-ink">{t.count}</b>
-              {t.failed > 0 && <span className="ml-1 text-rose-600">실패 {t.failed}</span>}
+            <span key={tool} className="rounded-full border border-hairline bg-white px-3 py-1 text-body" title={TOOL_LABEL[tool]?.help}>
+              {toolLabel(tool)} <b className="tabular-nums text-ink">{t.count}</b>
+              {t.failed > 0 && <span className="ml-1 text-rose-600">미완료 {t.failed}</span>}
             </span>
           ))}
-          <span className="py-1 text-muted">· 토큰 입력 {s.tokens.input.toLocaleString()} / 출력 {s.tokens.output.toLocaleString()} ({s.tokens.calls}회 호출)</span>
+          <span className="py-1 text-muted" title="AI(OpenAI) 사용량. 비용 계산 기준 (토큰)">
+            · AI 사용량 입력 {s.tokens.input.toLocaleString()} · 출력 {s.tokens.output.toLocaleString()} ({s.tokens.calls}회 호출)
+          </span>
         </div>
       )}
     </div>
@@ -75,10 +80,10 @@ function Detail({ log, titles }: { log: AgentLogRow; titles: Record<string, stri
         </ul>
       ) : "-")}
       {log.response_text && row(log.decision === "자동 답변" ? "고객에게 보낸 답" : "AI가 쓴 답 (상담원 검토용)", <p className="whitespace-pre-line rounded-lg bg-slate-50 p-2 text-sm">{log.response_text}</p>)}
-      {row("LLM", log.llm_model ?? "사용 안 함 (규칙 판단)")}
-      {row("토큰", log.tokens?.calls ? `입력 ${log.tokens.input} · 출력 ${log.tokens.output} (${log.tokens.calls}회)` : "-")}
+      {row("AI 모델", log.llm_model ?? "사용 안 함 (규칙으로 바로)")}
+      {row("AI 사용량", log.tokens?.calls ? `입력 ${log.tokens.input} · 출력 ${log.tokens.output} (${log.tokens.calls}회)` : "-")}
       {log.error && row("오류", <span className="break-all text-rose-700">{log.error}</span>)}
-      {row("도구 원본", log.tool_output
+      {row("결과 원본", log.tool_output
         ? <pre className="max-h-48 overflow-auto rounded-lg bg-slate-50 p-2 text-xs">{JSON.stringify(log.tool_output, null, 2)}</pre> : "-")}
       {log.trace_url && row("추적", (
         <a href={log.trace_url} target="_blank" rel="noreferrer" className="text-primary hover:underline">LangSmith에서 단계별로 보기 ↗</a>
@@ -87,14 +92,51 @@ function Detail({ log, titles }: { log: AgentLogRow; titles: Record<string, stri
   );
 }
 
+/** 검토 필요: 오류 · 미완료(이유) · 유형 판단 불확실 (미완료면 [문의 열기]) */
 function Flags({ log }: { log: AgentLogRow }) {
-  const flags = [
-    log.error && "오류",
-    log.tool_success === false && "도구 실패",
-    log.confidence < 0.8 && "확신도 낮음",
-  ].filter(Boolean) as string[];
+  const flags: [string, string][] = [];
+  if (log.error) flags.push(["오류", log.error]);
+  if (log.tool_success === false) {
+    flags.push([`미완료 · ${failReason(log.tool_output)}`, "AI가 이 작업을 끝내지 못하고 상담원에게 남겼어요. 대부분 상담원이 고객에게 주문번호를 받아야 하는 문의예요."]);
+  }
+  if (log.confidence < LOW_CONFIDENCE) flags.push([LOW_CONFIDENCE_TEXT, LOW_CONFIDENCE_HELP]);
   if (!flags.length) return null;
-  return <>{flags.map((f) => <span key={f} className="ml-1 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700">{f}</span>)}</>;
+  return (
+    <>
+      {flags.map(([f, help]) => <span key={f} title={help} className="ml-1 rounded-full bg-rose-100 px-2 py-0.5 text-xs font-medium text-rose-700">{f}</span>)}
+      {log.tool_success === false && (
+        <Link to={`/admin/inquiries/${log.inquiry_id}`} onClick={(e) => e.stopPropagation()}
+          className="ml-1 whitespace-nowrap text-xs font-semibold text-primary hover:underline">문의 열기 →</Link>
+      )}
+    </>
+  );
+}
+
+/** 처음 보는 관리자를 위한 용어 설명 (접어 둠) */
+function Glossary() {
+  const items: [string, string][] = [
+    ["AI 처리 작업", "AI가 판단한 뒤 실제로 한 일이에요. " + Object.values(TOOL_LABEL).map((t) => `${t.label}: ${t.help}`).join(" · ")],
+    ["처리 요청(티켓)", "취소·교환·환불처럼 사람이 승인해야 하는 일을 적은 요청서예요. 문의 상세 오른쪽 '접수된 티켓'에서 승인·반려해요."],
+    ["미완료", "AI가 작업을 끝내지 못하고 상담원에게 남긴 경우예요. 고장이 아니라 대부분 주문번호가 없어서예요 → 상담원이 고객에게 주문번호를 받아 주세요."],
+    [LOW_CONFIDENCE_TEXT, LOW_CONFIDENCE_HELP],
+    ["AI가 판단 / 규칙으로 바로", "AI(GPT)가 내용을 읽고 정했는지, 긴급·확신 낮음처럼 정해 둔 규칙으로 AI를 기다리지 않고 바로 정했는지예요."],
+    ["AI 사용량", "AI에 보낸 글(입력)과 받은 글(출력)의 양(토큰)이에요. 비용 계산 기준이에요."],
+  ];
+  return (
+    <details className="group rounded-2xl border border-hairline bg-white px-4 py-2.5 text-sm">
+      <summary className="cursor-pointer list-none font-semibold text-body hover:text-primary">
+        용어 설명 <span className="font-normal text-muted"><span className="group-open:hidden">펼치기 ▾</span><span className="hidden group-open:inline">접기 ▴</span></span>
+      </summary>
+      <dl className="mt-2 grid gap-x-4 gap-y-1.5 sm:grid-cols-[9rem_1fr]">
+        {items.map(([term, text]) => (
+          <Fragment key={term}>
+            <dt className="font-semibold text-ink">{term}</dt>
+            <dd className="text-body">{text}</dd>
+          </Fragment>
+        ))}
+      </dl>
+    </details>
+  );
 }
 
 export default function AgentLogsPage() {
@@ -133,7 +175,7 @@ export default function AgentLogsPage() {
       <div>
         <h1 className="page-title">AI 실행 로그</h1>
         <p className="text-sm text-slate-500">
-          문의마다 AI가 고른 처리 방식, 사용한 도구와 성공 여부, 근거 FAQ, 처리 시간을 봅니다. 줄을 누르면 자세한 기록이 펼쳐집니다.
+          문의마다 AI가 고른 처리 방식, AI 처리 작업과 결과, 근거 FAQ, 처리 시간을 봅니다. 줄을 누르면 자세한 기록이 펼쳐집니다.
           {user?.role !== "admin" && " 상담원은 자신에게 배정된 문의만 보입니다."}
         </p>
       </div>
@@ -146,18 +188,17 @@ export default function AgentLogsPage() {
           <option value="">처리 방식 전체</option>
           {DECISIONS.map((d) => <option key={d}>{d}</option>)}
         </Select>
-        <Select aria-label="도구" value={params.get("tool") ?? ""} onChange={(e) => set("tool", e.target.value)}>
-          <option value="">도구 전체</option>
-          {TOOLS.map((t) => <option key={t}>{t}</option>)}
+        <Select aria-label="AI 처리 작업" value={params.get("tool") ?? ""} onChange={(e) => set("tool", e.target.value)}>
+          <option value="">AI 처리 작업 전체</option>
+          {TOOLS.map((t) => <option key={t} value={t}>{toolLabel(t)}</option>)}
         </Select>
         <Select aria-label="판단 주체" value={params.get("by") ?? ""} onChange={(e) => set("by", e.target.value)}>
           <option value="">판단 전체</option>
-          <option value="LLM">LLM 판단</option>
-          <option value="규칙">규칙 판단</option>
+          {Object.entries(BY_LABEL).map(([v, label]) => <option key={v} value={v}>{label}</option>)}
         </Select>
         <label className="flex items-center gap-2 rounded-xl border border-hairline bg-white px-3 py-2.5 text-sm text-body">
           <input type="checkbox" checked={params.get("problem") === "true"} onChange={(e) => set("problem", e.target.checked ? "true" : "")} />
-          확인이 필요한 것만
+          검토 필요만
         </label>
         {params.get("inquiry") && (
           <Button variant="ghost" onClick={() => set("inquiry", "")}>문의 #{params.get("inquiry")} 필터 해제</Button>
@@ -165,12 +206,13 @@ export default function AgentLogsPage() {
       </div>
 
       {error && <Alert>{error}</Alert>}
-      {data && <Summary s={data.summary} />}
+      <Glossary />
+      {data && <Summary s={data.summary} onProblems={() => set("problem", "true")} />}
 
       <div className="overflow-x-auto rounded-2xl border border-hairline bg-white">
         <table className="w-full min-w-[56rem] text-left text-sm">
           <thead className="border-b border-hairline bg-surface-card text-sm text-muted">
-            <tr>{["시각", "문의", "유형 · 확신도", "처리 방식", "도구", "처리 시간"].map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr>
+            <tr>{["시각", "문의", "유형 · AI 확신", "처리 방식", "AI 처리 작업", "처리 시간"].map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr>
           </thead>
           <tbody className="divide-y divide-hairline">
             {data?.items.map((log) => (
@@ -185,19 +227,20 @@ export default function AgentLogsPage() {
                   </td>
                   <td className="whitespace-nowrap px-3 py-3">
                     {log.category}{" "}
-                    <span className={cx("tabular-nums", log.confidence < 0.8 ? "font-semibold text-amber-700" : "text-slate-500")}>
-                      {Math.round(log.confidence * 100)}
+                    <span className={cx("tabular-nums", log.confidence < LOW_CONFIDENCE ? "font-semibold text-amber-700" : "text-slate-500")}
+                      title={log.confidence < LOW_CONFIDENCE ? LOW_CONFIDENCE_HELP : "AI가 이 유형이라고 확신한 정도"}>
+                      {Math.round(log.confidence * 100)}%
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-3 py-3">
-                    <Badge value={log.decision} /> <span className="text-xs text-slate-500">{log.decided_by}</span>
+                    <Badge value={log.decision} /> <span className="text-xs text-slate-500">{byLabel(log.decided_by)}</span>
                   </td>
                   <td className="px-3 py-3">
-                    <span className="whitespace-nowrap">{log.selected_tool ?? "-"}</span>
-                    {log.tool_success === true && <span className="ml-1 text-xs text-emerald-700">성공</span>}
+                    <span className="whitespace-nowrap" title={log.selected_tool ? TOOL_LABEL[log.selected_tool]?.help : undefined}>{toolLabel(log.selected_tool)}</span>
+                    {log.tool_success === true && <span className="ml-1 text-xs text-emerald-700">완료</span>}
                     <Flags log={log} />
                   </td>
-                  <td className="whitespace-nowrap px-3 py-3 tabular-nums text-slate-600">{log.decided_by === "규칙" ? "규칙 (즉시)" : sec(log.latency_ms)}</td>
+                  <td className="whitespace-nowrap px-3 py-3 tabular-nums text-slate-600">{log.decided_by === "규칙" ? "바로" : sec(log.latency_ms)}</td>
                 </tr>
                 {open === log.id && (
                   <tr className="bg-surface-card/40">

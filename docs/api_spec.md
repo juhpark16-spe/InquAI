@@ -622,6 +622,9 @@
 구현: `backend/api/agent_logs.py`, 화면 `/admin/agent-logs` (4주차)
 
 파라미터: `inquiry_id`, `decision`, `decided_by`(규칙 / LLM), `selected_tool`, `tool_success`, `problem`(true: 오류·도구 실패·확신도 0.8 미만만), `from`, `to` (KST 날짜, 최대 92일), `page`, `size`(1~100, 기본 30)
+
+**화면 이름** (`frontend/src/services/labels.ts`, 처리 이력 문장도 같은 말): 값은 그대로 두고 관리자가 읽는 말로 보여 줍니다.
+`selected_tool`(도구) → 'AI 처리 작업': FAQ 검색 → **FAQ로 답변**, 티켓 접수 → **처리 요청 접수**, 배송 조회·상담원 이관은 그대로 · `decided_by` LLM → **AI가 판단**, 규칙 → **규칙으로 바로** · `tool_success=false` → **미완료 · 이유**(`tool_output.message`, 예: 주문번호 없음) · 확신도 0.8 미만 → **유형 판단 불확실** · 토큰 → **AI 사용량**. 화면 위쪽 '용어 설명'에 같은 설명이 있습니다.
 - `decision`: 자동 답변 / 답변 초안 / 담당자 연결
 - `selected_tool`: FAQ 검색 / 배송 조회 / 티켓 접수 / 상담원 이관 (값은 `backend/ai/prompts.py`의 `DECISIONS`, `TOOLS`와 같음)
 ```json

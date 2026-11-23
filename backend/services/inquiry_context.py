@@ -181,15 +181,26 @@ def faq_titles(db: Session, inquiry: Inquiry) -> dict[str, str]:
     return {f.code: f.question for f in db.scalars(select(Faq).where(Faq.code.in_(codes)))}
 
 
+# AI 처리 기록을 관리자가 읽는 말로 (화면 frontend/src/services/labels.ts 와 같은 이름)
+TOOL_LABEL = {"FAQ 검색": "FAQ로 답변", "티켓 접수": "처리 요청 접수"}
+BY_LABEL = {"LLM": "AI가 판단", "규칙": "규칙으로 바로"}
+
+
+def _fail_reason(output: dict | None) -> str:
+    """도구 결과의 message: '주문번호 없음 (상담원이 고객에게 확인)' → '주문번호 없음'"""
+    message = (output or {}).get("message") or ""
+    return re.sub(r"\s*\(.*\)\s*$", "", message) or "이유 기록 없음"
+
+
 def history(db: Session, inquiry: Inquiry) -> list[dict]:
     """처리 이력: 접수 → AI 판단 → 자동 배정·답변 발송 → 사람의 배정·상태 변경 (시간순)"""
     events = [{"at": inquiry.created_at, "actor": "고객", "text": "문의 접수", "kind": "received"}]
     events += [{"at": m.created_at, "actor": "고객", "text": "추가 문의", "kind": "followup"} for m in inquiry.messages]
     for log in inquiry.agent_logs:
-        tool = f" · {log.selected_tool}" if log.selected_tool else ""
-        fail = " (실패)" if log.tool_success is False else ""
+        tool = f" · {TOOL_LABEL.get(log.selected_tool, log.selected_tool)}" if log.selected_tool else ""
+        fail = f" (미완료: {_fail_reason(log.tool_output)})" if log.tool_success is False else ""
         events.append({"at": log.created_at, "actor": "AI",
-                       "text": f"{log.decision} 판단 ({log.decided_by}){tool}{fail}"
+                       "text": f"{log.decision} 판단 ({BY_LABEL.get(log.decided_by, log.decided_by)}){tool}{fail}"
                                + ((" · 초안 작성 실패" if log.error.startswith("초안 작성 실패") else " · 오류로 상담원 검토")
                                   if log.error else ""), "kind": "ai"})
     names = {u.id: u.display_name for u in db.scalars(select(AdminUser))}
