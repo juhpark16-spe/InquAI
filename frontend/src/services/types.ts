@@ -344,6 +344,8 @@ export interface ModelVersion {
 }
 export interface RetrainingStatus {
   model: ModelVersion;
+  // 재학습 권장: 새 수정 50건 이상 또는 같은 패턴의 새 수정 10건 이상 (backend/api/retraining.py)
+  recommend?: { needed: boolean; reasons: string[]; pending_threshold: number; pattern_threshold: number };
   corrections: { total: number; by_field: Record<string, number>; pending: number };
   patterns: { field: string; before: string; after: string; count: number; pending: number;
     examples: { inquiry_id: number; text: string }[] }[];

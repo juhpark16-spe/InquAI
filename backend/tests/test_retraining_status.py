@@ -57,3 +57,12 @@ def test_real_history_file_is_valid():
     versions = retraining.load_history(retraining.HISTORY)
     assert sum(v["current"] for v in versions) == 1
     assert all({"version", "scores", "note"} <= set(v) for v in versions)
+
+
+def test_recommendation_thresholds():
+    """재학습 권장: 새 수정 50건 이상 또는 같은 패턴의 새 수정 10건 이상"""
+    few = [{"before": "배송", "after": "교환", "pending": 3}]
+    assert retraining.recommendation(10, few) == {"needed": False, "reasons": [], "pending_threshold": 50, "pattern_threshold": 10}
+    r = retraining.recommendation(12, [{"before": "배송", "after": "교환", "pending": 10}])
+    assert r["needed"] and r["reasons"] == ["'배송 → 교환' 수정이 새로 10건 반복됐어요 (기준 10건)"]
+    assert retraining.recommendation(50, few)["reasons"][0].startswith("새 분류 수정이 50건")

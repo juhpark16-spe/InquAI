@@ -6,6 +6,7 @@
 - "새 수정"은 지금 모델을 학습한 뒤에 쌓인 수정 = 다음 재학습에 쓸 데이터입니다.
 - 모델 버전·점수는 evaluation/model_history.json 에서 읽습니다 (docs/model_card.md 와 같은 값).
 - 재학습 자체는 GPU가 필요하고 15분쯤 걸려 화면 버튼 대신 명령으로 합니다 (docs/retraining.md).
+- recommend: 새 수정 50건 이상 또는 같은 패턴의 새 수정 10건 이상이면 '재학습 권장'과 이유.
 """
 
 import json
@@ -25,6 +26,20 @@ from backend.database.models import LabelCorrection, as_utc
 router = APIRouter(prefix="/admin", tags=["재학습 현황"])
 HISTORY = Path(__file__).resolve().parents[2] / "evaluation" / "model_history.json"
 FIELD_LABEL = {"category": "유형", "sentiment": "감정"}
+# 재학습 권장 기준: 새 수정이 이만큼 쌓였거나, 같은 패턴(예: 배송 → 교환)의 새 수정이 이만큼 반복되면
+RECOMMEND_PENDING = 50
+RECOMMEND_PATTERN = 10
+
+
+def recommendation(pending: int, patterns: list[dict]) -> dict:
+    """재학습을 권장할지와 이유 (관리자가 숫자를 보고 따로 판단하지 않아도 되게)"""
+    reasons = []
+    if pending >= RECOMMEND_PENDING:
+        reasons.append(f"새 분류 수정이 {pending}건 쌓였어요 (기준 {RECOMMEND_PENDING}건)")
+    reasons += [f"'{p['before']} → {p['after']}' 수정이 새로 {p['pending']}건 반복됐어요 (기준 {RECOMMEND_PATTERN}건)"
+                for p in patterns if p["pending"] >= RECOMMEND_PATTERN]
+    return {"needed": bool(reasons), "reasons": reasons, "pending_threshold": RECOMMEND_PENDING,
+            "pattern_threshold": RECOMMEND_PATTERN}
 
 
 def load_history(path: Path = HISTORY) -> list[dict]:
@@ -53,15 +68,18 @@ def retraining_status(_: AdminOnly, db: DB):
         if len(p["examples"]) < 3:
             p["examples"].append({"inquiry_id": c.inquiry_id, "text": c.text[:120]})
 
+    pattern_list = sorted(({"field": FIELD_LABEL.get(f, f), "before": b, "after": a, **v}
+                           for (f, b, a), v in patterns.items()), key=lambda x: -x["count"])
+    pending_total = sum(pending(c) for c in rows)
     return {
         "model": {**current, "version": version},
+        "recommend": recommendation(pending_total, pattern_list),
         "corrections": {
             "total": len(rows),
             "by_field": {FIELD_LABEL.get(f, f): sum(c.field == f for c in rows) for f in ("category", "sentiment")},
-            "pending": sum(pending(c) for c in rows),   # 지금 모델 학습 뒤에 쌓인 수정 (다음 재학습 대상)
+            "pending": pending_total,   # 지금 모델 학습 뒤에 쌓인 수정 (다음 재학습 대상)
         },
-        "patterns": sorted(({"field": FIELD_LABEL.get(f, f), "before": b, "after": a, **v}
-                            for (f, b, a), v in patterns.items()), key=lambda x: -x["count"]),
+        "patterns": pattern_list,
         "recent": [{"id": c.id, "inquiry_id": c.inquiry_id,
                     "inquiry_number": c.inquiry.inquiry_number if c.inquiry else None,
                     "field": FIELD_LABEL.get(c.field, c.field), "before": c.before_label, "after": c.after_label,
