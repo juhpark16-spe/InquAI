@@ -22,6 +22,11 @@ const PATHS = {
   edit: <><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></>,
   bell: <><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" /><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" /></>,
   swap: <><polyline points="17 1 21 5 17 9" /><path d="M3 11V9a4 4 0 0 1 4-4h14" /><polyline points="7 23 3 19 7 15" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></>,
+  ticket: <><path d="M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4z" /><line x1="13" y1="5" x2="13" y2="19" strokeDasharray="2 2" /></>,
+  person: <><circle cx="12" cy="8" r="4" /><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1" /></>,
+  box: <><path d="M21 8 12 3 3 8v8l9 5 9-5z" /><polyline points="3 8 12 13 21 8" /><line x1="12" y1="13" x2="12" y2="21" /></>,
+  truck: <><path d="M1 4h14v12H1z" /><path d="M15 9h4l4 4v3h-8z" /><circle cx="6" cy="18.5" r="2" /><circle cx="18" cy="18.5" r="2" /></>,
+  external: <><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></>,
 } as const;
 
 export type IconName = keyof typeof PATHS;

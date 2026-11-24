@@ -132,6 +132,10 @@ test("회원 주문 취소 요청 → 상담원이 취소 티켓 승인·문구 
   await expect(staff.getByRole("heading", { name: title })).toBeVisible();
   await expect(staff.getByText("가능 (출고 전)")).toBeVisible();                 // 주문 정보: 출고 전이라 취소 가능
   await staff.getByRole("button", { name: "취소 승인" }).click();
+  // 승인 전 확인창: 주문·전액 환불 안내 → [취소 승인]
+  const approve = staff.getByRole("alertdialog");
+  await expect(approve).toContainText("전액 환불");
+  await approve.getByRole("button", { name: "취소 승인" }).click();
   await expect(staff.getByText(/티켓을 승인했습니다/)).toBeVisible();
   await expect(staff.getByText("이미 취소된 주문")).toBeVisible();               // 승인하면 주문이 바로 취소됨
 
@@ -141,6 +145,13 @@ test("회원 주문 취소 요청 → 상담원이 취소 티켓 승인·문구 
   await expect(staff.getByPlaceholder(/고객에게 보낼 답변/)).toHaveValue(/주문 취소가 완료되었습니다/);
   await staff.getByRole("button", { name: "발송", exact: true }).click();
   await expect(staff.getByText(/답변을 보냈습니다/)).toBeVisible();
+  // 답변한 문의를 다시 열었다가 완료: 바로 끝나지 않고 창에서 '답변으로 해결'(기본 선택)을 확인
+  await staff.getByRole("button", { name: "다시 열기" }).click();
+  await staff.getByRole("button", { name: "완료 처리" }).click();
+  const done = staff.getByRole("dialog", { name: "완료 처리" });
+  await expect(done.getByRole("radio", { name: "답변으로 해결" })).toBeChecked();
+  await done.getByRole("button", { name: "완료 처리" }).click();
+  await expect(staff.getByRole("button", { name: "다시 열기" })).toBeVisible();
 
   // 고객: 내 쇼핑에서 주문 '취소', 문의 '답변 완료'
   await page.goto("/my");
@@ -369,4 +380,56 @@ test("답변 없이 완료할 때 사유를 고름 → 고객 조회에 '종료�
   await page.getByRole("button", { name: "조회", exact: true }).click();
   await expect(page.getByText("종료됨 1")).toBeVisible();
   await expect(page.getByText(/답변 없이 종료되었어요/)).toBeVisible();
+});
+
+test("조회 메뉴: 취소·교환·반품(환불 진행) · 주문·배송 · 고객 조회 · 재고 현황", async ({ page }) => {
+  const shots = process.env.E2E_SHOTS;   // 화면 확인용 캡처 폴더 (없으면 캡처하지 않음)
+  await staffLogin(page, "admin");
+
+  // 취소·교환·반품: 승인 대기 탭이 기본, 승인 탭에는 앞 테스트에서 승인한 취소 요청
+  await page.getByRole("link", { name: "취소·교환·반품" }).click();
+  await expect(page.getByRole("heading", { name: "취소·교환·반품" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /승인 대기/ })).toHaveAttribute("aria-selected", "true");
+  const approved = page.getByRole("tab", { name: /^승인\s*\d+$/ });
+  await approved.click();
+  await expect(approved).toHaveAttribute("aria-selected", "true");
+  // 앞 테스트에서 승인한 취소 요청이 있으면 줄이, 없으면(이 테스트만 돌릴 때) 빈 안내가 보임
+  await expect(page.locator("tbody tr").first().or(page.getByText("이 조건의 요청이 없어요."))).toBeVisible();
+  if (shots) await page.screenshot({ path: `${shots}/tickets.png`, fullPage: true });
+  // 환불 진행: 승인 뒤 환불 예정·완료 (위쪽 요약 + 상태 버튼)
+  await page.getByRole("tab", { name: /환불 진행/ }).click();
+  await expect(page.getByText("예정일 지남").first()).toBeVisible();
+  await page.getByRole("button", { name: "전체", exact: true }).click();
+  await expect(page.locator("tbody tr").first().or(page.getByText("이 조건의 환불 내역이 없어요."))).toBeVisible();
+  if (shots) await page.screenshot({ path: `${shots}/refunds.png`, fullPage: true });
+
+  // 주문·배송: 주문부터 찾기 → 줄을 누르면 결제·배송이 바로 아래에 펼쳐짐
+  await page.getByRole("link", { name: "주문·배송" }).click();
+  await expect(page.getByRole("heading", { name: "주문·배송" })).toBeVisible();
+  await page.getByRole("tab", { name: /배송 완료/ }).click();
+  // 탭 조건이 목록에 적용됨 (빨리 눌러도 앞 요청 결과가 덮어쓰지 않음)
+  await expect(page.locator("tbody tr").first()).toContainText("배송 완료");
+  await expect(page.locator("tbody tr").filter({ hasText: "상품 준비 중" })).toHaveCount(0);
+  await page.locator("tbody tr").first().click();
+  await expect(page.getByText("이 주문의 문의", { exact: false })).toBeVisible();
+  await expect(page.getByText("고객 정보 전체 보기 →")).toBeVisible();
+  if (shots) await page.screenshot({ path: `${shots}/orders.png`, fullPage: true });
+
+  // 고객 조회: 이메일로 찾기 → 한 명 열기 → 주문·문의가 한 화면에
+  await page.getByRole("link", { name: "고객 조회" }).click();
+  await page.getByLabel("고객 검색").fill("customer08@example.com");
+  await page.getByRole("button", { name: "찾기" }).click();
+  await expect(page.getByText("총 1명")).toBeVisible();
+  if (shots) await page.screenshot({ path: `${shots}/customers.png`, fullPage: true });
+  await page.locator("tbody tr").first().click();
+  await expect(page).toHaveURL(/\/admin\/customers\/\d+$/);
+  await expect(page.getByRole("heading", { name: /주문 \d+건/ })).toBeVisible();
+  await expect(page.getByText("쓸 수 있는 쿠폰")).toBeVisible();
+  if (shots) await page.screenshot({ path: `${shots}/customer.png`, fullPage: true });
+
+  // 재고 현황: 품절 탭
+  await page.getByRole("link", { name: "재고 현황" }).click();
+  await page.getByRole("tab", { name: /품절/ }).click();
+  await expect(page.locator("tbody tr").filter({ hasText: /품절/ }).first()).toBeVisible();   // 품절 옵션 줄
+  if (shots) await page.screenshot({ path: `${shots}/inventory.png`, fullPage: true });
 });

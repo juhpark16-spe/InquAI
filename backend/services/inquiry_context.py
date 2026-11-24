@@ -28,7 +28,7 @@ def order_card(db: Session, inquiry: Inquiry) -> dict | None:
     if row is None:
         return {"order_number": inquiry.order_number, "found": False}
     order, customer = row
-    card = _card(order, customer, inquiry.customer_email)
+    card = order_detail(order, customer, inquiry.customer_email)
     # 같은 주문으로 들어온 다른 문의: 같은 일을 두 번 처리하거나 서로 다르게 안내하지 않게
     others = db.scalars(select(Inquiry).where(Inquiry.order_number == order.order_number, Inquiry.id != inquiry.id)
                         .order_by(Inquiry.created_at.desc())).all()
@@ -95,7 +95,7 @@ def email_orders(db: Session, inquiry: Inquiry) -> list[dict]:
     if inquiry.order_number:
         stmt = stmt.where(Order.order_number != inquiry.order_number)
     rows = db.execute(stmt.order_by(Order.ordered_at.desc()).limit(HISTORY_LIMIT)).all()
-    return [_card(o, c, inquiry.customer_email) for o, c in rows]
+    return [order_detail(o, c, inquiry.customer_email) for o, c in rows]
 
 
 def _payments(order: Order) -> tuple[list[dict], bool]:
@@ -111,7 +111,7 @@ def _option(product_name: str) -> str | None:
     return m.group(1) if m else None
 
 
-def _card(order: Order, customer: Customer, inquiry_email: str) -> dict:
+def order_detail(order: Order, customer: Customer, inquiry_email: str) -> dict:
     delivered = as_utc(order.delivered_at)
     now = utcnow()
     return_until = delivered + timedelta(days=RETURN_DAYS) if delivered else None
@@ -181,9 +181,10 @@ def customer_profile(db: Session, inquiry: Inquiry) -> dict:
     negative_ratings = db.scalar(select(func.count()).select_from(Response)
                                  .where(Response.inquiry_id.in_(ids), Response.rating == -1)) if ids else 0
     negative = sum(1 for i in inquiries if i.analysis and i.analysis.sentiment == "부정")
-    points, coupons = _points_and_coupons(db, customer)
+    points, coupons = points_and_coupons(db, customer)
     return {
         **points, "coupons": coupons,
+        "customer_id": customer.id if customer else None,   # 고객 조회 화면으로 가는 링크 (주소에 이메일을 넣지 않게 번호로)
         "member": bool(customer and customer.password_hash),
         "phone": mask_phone(customer.phone) if customer else None,
         "orders": len(customer.orders) if customer else 0,
@@ -193,7 +194,7 @@ def customer_profile(db: Session, inquiry: Inquiry) -> dict:
     }
 
 
-def _points_and_coupons(db: Session, customer: Customer | None) -> tuple[dict, list[dict]]:
+def points_and_coupons(db: Session, customer: Customer | None) -> tuple[dict, list[dict]]:
     """적립금 잔액·적립 예정·최근 내역(5건)과 쿠폰(사용 가능한 것 먼저)"""
     if customer is None:
         return {"points_balance": None, "points_pending": 0, "point_history": []}, []

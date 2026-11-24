@@ -5,6 +5,8 @@
     2. 문의 상세의 [AI 초안 만들기] 버튼: 담당자 연결 문의나 추가 문의에도 상담원이 원할 때 (POST /api/inquiries/{id}/draft)
 
 근거로 넘기는 것: 검색된 FAQ(KURE) + 본인 확인된 주문 정보 + 티켓(처리 기록) + 대화(처음 문의·추가 문의·보낸 답변).
+대화에는 글마다 함께 온 사진 수와 [답변 상황](첫 답변인지)을 붙여, 고객이 추가 문의로 보낸 주문번호·사진을 AI가 알아보게 함.
+첫 답변(아직 보낸 답변 없음)은 맨 앞에 '첫인사' 문구(관리자 '답변 문구'의 첫인사)를 꼭 붙임 (2026-11-24).
 고객 이름·이메일은 넘기지 않습니다. 모르는 내용은 [확인 필요: …]로 남겨 상담원이 채우게 합니다.
 """
 
@@ -18,15 +20,38 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.ai.prompts import DRAFT_PROMPT, DRAFT_SCHEMA, customer_text, find_promises
-from backend.database.models import AdminAuditLog, Attachment, CustomerMessage, Inquiry, Response, Ticket, as_utc
+from backend.database.models import (AdminAuditLog, Attachment, CustomerMessage, Inquiry, ReplyTemplate, Response, Ticket,
+                                     as_utc)
 from backend.services import inventory
 from backend.services.inquiry_context import order_card
+from backend.services.reply_templates import DEFAULTS as TEMPLATE_DEFAULTS
 
 KST = timezone(timedelta(hours=9))
 MAX_LEN = 4000
 CHECK_MARK = "[확인 필요"
 # 답변에 FAQ 번호가 섞여 나오면 지움: "(F27)", "[F05, F06]", "(FAQ F27)"
 FAQ_REF = re.compile(r"\s?[(\[](?:FAQ\s*)?F\d{2}(?:\s*[,·/]\s*F\d{2})*[)\]]")
+# AI가 스스로 쓴 인사 (첫 답변에는 정해진 첫인사를 붙이므로 겹치지 않게 지움): "안녕하세요(, 고객님)." + "…고객센터입니다."
+GREETING = re.compile(r"^\s*안녕하세요[^.!?\n]*[.!?]?\s*(?:[^.!?\n]{0,30}고객센터입니다[.!]?\s*)?")
+DEFAULT_GREETING = dict(TEMPLATE_DEFAULTS)["첫인사"]
+
+
+def greeting_text(db: Session) -> str:
+    """관리자가 '답변 문구'에서 고친 첫인사 (숨겼거나 없으면 기본 문구)"""
+    t = db.scalar(select(ReplyTemplate).where(ReplyTemplate.label == "첫인사", ReplyTemplate.is_active.is_(True))
+                  .order_by(ReplyTemplate.sort_order, ReplyTemplate.id).limit(1))
+    return t.text.strip() if t and t.text.strip() else DEFAULT_GREETING
+
+
+def with_greeting(answer: str, greeting: str) -> str:
+    """첫 답변: AI가 쓴 인사는 지우고 정해진 첫인사를 맨 앞에"""
+    body = GREETING.sub("", answer, count=1).lstrip()
+    return f"{greeting}\n\n{body}" if body else greeting
+
+
+def is_first_answer(db: Session, inquiry: Inquiry) -> bool:
+    """이 문의에 고객에게 보낸 답변이 아직 없음 (자동 답변 포함)"""
+    return db.scalar(select(Response.id).where(Response.inquiry_id == inquiry.id, Response.status == "발송").limit(1)) is None
 
 
 @dataclass
@@ -100,11 +125,24 @@ def build_input(db: Session, inquiry: Inquiry, faqs: list[dict], analysis: dict 
                           .order_by(CustomerMessage.id)).all()
     sent = db.scalars(select(Response).where(Response.inquiry_id == inquiry.id, Response.status == "발송")
                       .order_by(Response.id)).all()
-    talk = [(as_utc(inquiry.created_at), "고객 (처음 문의)", customer_text(f"제목: {inquiry.title}\n{inquiry.content}"))]
-    talk += [(as_utc(m.created_at), "고객 (추가 문의)", customer_text(m.content)) for m in messages]
+    # 글마다 함께 온 사진 수 (처음 문의 = message_id 없음): 추가 문의로 사진을 보냈다는 걸 AI가 알게
+    per_msg: dict[int | None, int] = {}
+    for a in photos:
+        per_msg[a.message_id] = per_msg.get(a.message_id, 0) + 1
+
+    def who(label: str, key: int | None) -> str:
+        return label + (f" [사진 {per_msg[key]}장 함께 보냄]" if per_msg.get(key) else "")
+
+    talk = [(as_utc(inquiry.created_at), who("고객 (처음 문의)", None), customer_text(f"제목: {inquiry.title}\n{inquiry.content}"))]
+    talk += [(as_utc(m.created_at), who("고객 (추가 문의)", m.id), customer_text(m.content)) for m in messages]
     talk += [(as_utc(r.approved_at or r.created_at), "고객센터 (보낸 답변)", r.final_text or r.draft_text) for r in sent]
     talk.sort(key=lambda t: t[0])
-    parts.append("[대화] (시간순, 마지막 고객 글에 답할 것)\n" + "\n\n".join(f"{who} {_kst(at)}\n{text}" for at, who, text in talk))
+    if not sent:
+        parts.append("[답변 상황] 첫 답변 (아직 보낸 답변 없음): 처음 문의의 요청 전체에 답하고, 추가 문의로 보낸 정보"
+                     "(주문번호·사진 등)를 반영할 것. 인사말은 쓰지 말 것 (정해진 첫인사가 자동으로 붙음)")
+    else:
+        parts.append(f"[답변 상황] 이어지는 답변 (보낸 답변 {len(sent)}건): 가장 최근 고객 글에 답할 것. 인사는 생략")
+    parts.append("[대화] (시간순)\n" + "\n\n".join(f"{w} {_kst(at)}\n{text}" for at, w, text in talk))
     return "\n\n".join(parts)
 
 
@@ -139,7 +177,10 @@ def generate_draft(db: Session, inquiry: Inquiry, faq_search, llm, timeout: floa
     if instruction and instruction.strip():
         user_input += f"\n\n[상담원 요청]\n{instruction.strip()[:200]}"
     data, usage = llm.json(DRAFT_PROMPT, user_input, DRAFT_SCHEMA, "draft", timeout=timeout)
-    answer = FAQ_REF.sub("", data["answer"]).strip()[:MAX_LEN]
+    answer = FAQ_REF.sub("", data["answer"]).strip()
+    if is_first_answer(db, inquiry):   # 고객에게 가는 첫 답변은 첫인사로 시작 (AI가 빠뜨려도)
+        answer = with_greeting(answer, greeting_text(db))
+    answer = answer[:MAX_LEN]
     known = {f["id"] for f in faqs}
     checks = [c.strip() for c in data["check_points"] if c.strip()][:10]
     # 안전장치: 지급·승인을 확정하는 말이 있으면 상담원이 꼭 보도록 확인할 것에 올림 (프롬프트를 어겨도 걸러지게)

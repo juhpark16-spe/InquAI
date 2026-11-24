@@ -108,12 +108,13 @@ class AssignRequest(BaseModel):
 MANUAL_STATUSES = ("검토 대기", "담당자 처리", "완료")
 
 
-CLOSE_REASONS = ("중복 문의", "스팸·광고", "고객 철회", "전화로 안내", "기타")
+# 완료 사유. "답변으로 해결"은 답변을 보낸 문의 (고객 화면은 그대로 '답변 완료'), 나머지는 '종료됨'과 안내가 보임
+CLOSE_REASONS = ("답변으로 해결", "중복 문의", "스팸·광고", "고객 철회", "전화로 안내", "기타")
 
 
 class StatusRequest(BaseModel):
     status: Literal[MANUAL_STATUSES]
-    reason: Literal[CLOSE_REASONS] | None = None   # 답변 없이 '완료'로 바꿀 때 사유 (화면은 꼭 받음)
+    reason: Literal[CLOSE_REASONS] | None = None   # '완료'로 바꿀 때 사유 (화면은 꼭 받음)
 
 
 class InquiryState(BaseModel):
@@ -149,6 +150,7 @@ class CouponRow(BaseModel):
 
 
 class CustomerProfile(BaseModel):
+    customer_id: int | None = None   # 쇼핑몰 고객 번호 (고객 조회 화면 링크, 주문한 적 없는 이메일이면 None)
     member: bool              # 쇼핑몰 회원 (로그인 연동 시연 고객)
     phone: str | None         # 가운데를 가린 번호
     orders: int

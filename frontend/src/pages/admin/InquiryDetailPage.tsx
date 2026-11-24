@@ -14,7 +14,8 @@ import AnswerComposer from "../../components/AnswerComposer";
 import InternalNotes from "../../components/InternalNotes";
 import { confirmDialog } from "../../components/ConfirmDialog";
 import Modal from "../../components/Modal";
-import { TOOL_LABEL, byLabel, failReason, toolLabel } from "../../services/labels";
+import { OrderHead, OrderRows, PaymentList, Row, ShipmentList, StockList, SubFold, stockText, won } from "../../components/OrderParts";
+import { TICKET_KIND, TOOL_LABEL, byLabel, failReason, ticketKind, toolLabel } from "../../services/labels";
 import { Alert, Badge, Button, Input, Select, Spinner, cx, formatDate } from "../../components/ui";
 import { errorMessage, inquiryApi, type QuickAction } from "../../services/api";
 import type { AgentLog, InquiryDetail, OrderCard, User } from "../../services/types";
@@ -31,12 +32,7 @@ function timeAgo(iso: string) {
   return `${Math.floor(min / 1440)}일 전`;
 }
 
-function daysLeft(iso: string) {
-  const d = Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000);
-  return d >= 0 ? `D-${d}` : `${-d}일 지남`;
-}
 
-const won = (n: number | null) => (n === null ? "-" : `${n.toLocaleString()}원`);
 
 /** 남은 답변 기한: 1시간 넘게 남으면 보통, 1시간 이내 주황, 지나면 빨강 (1분마다 다시 계산) */
 function DueTime({ due, overdue, open }: { due: string; overdue: boolean; open: boolean }) {
@@ -105,25 +101,6 @@ function Fold({ id, title, summary, children, defaultOpen = true }: {
   );
 }
 
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <>
-      <dt className="text-muted">{label}</dt>
-      <dd className="min-w-0 text-ink">{children}</dd>
-    </>
-  );
-}
-
-/** 가능/불가를 색 있는 표시로 (초록 = 가능, 회색 = 불가) */
-function YesNo({ ok, yes, no }: { ok: boolean | null; yes: string; no: string }) {
-  if (ok === null) return <span className="text-slate-500">-</span>;
-  return (
-    <span className={cx("inline-block rounded-md px-2 py-0.5 text-sm font-semibold",
-      ok ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-700")}>
-      {ok ? `✓ ${yes}` : `✕ ${no}`}
-    </span>
-  );
-}
 
 /** AI가 이 문의를 사람에게 넘긴 이유 (또는 자동 답변 완료) */
 function DecisionBanner({ d }: { d: InquiryDetail }) {
@@ -152,70 +129,6 @@ const ORDER_NUMBER_ASK = "정확한 확인을 위해 주문번호(예: 20261103-
 /** 답변 칸에 문장 넣기 (주문 정보 카드의 버튼 → AnswerComposer 가 받아 커서 자리에 넣음) */
 export function insertIntoReply(text: string) {
   window.dispatchEvent(new CustomEvent("inquai:insert-reply", { detail: text }));
-}
-
-const shortDate = (iso: string | null | undefined) => (iso ? formatDate(iso) : "-");
-
-/** 환불 진행: 결제 내역의 환불 줄 (예정이면 날짜, 예정일이 지났으면 빨강) */
-function RefundLine({ o }: { o: OrderCard }) {
-  const refunds = (o.payments ?? []).filter((p) => p.kind === "환불");
-  if (!o.return_requested_at && refunds.length === 0) return null;
-  const now = Date.now();
-  return (
-    <>
-      {o.return_requested_at && (
-        <Row label="반품 진행">
-          접수 {shortDate(o.return_requested_at)}
-          {o.picked_up_at ? <> → 회수 완료 {shortDate(o.picked_up_at)}</> : <span className="text-amber-700"> → 회수 전</span>}
-        </Row>
-      )}
-      {refunds.map((r, i) => {
-        const late = r.status === "예정" && new Date(r.at).getTime() < now;
-        return (
-          <Row key={i} label="환불">
-            <span className={cx("font-semibold", r.status === "완료" ? "text-emerald-700" : late ? "text-rose-700" : "text-amber-700")}>
-              {r.status === "완료" ? "완료" : late ? "예정일 지남" : "예정"} {won(r.amount)}
-            </span>
-            <span className="text-muted"> · {shortDate(r.at)}</span>
-            {r.memo && <span className="block text-xs text-muted">{r.memo}</span>}
-          </Row>
-        );
-      })}
-    </>
-  );
-}
-
-/** 주문 한 건의 상세: 상태·결제·배송·반품·환불·취소/반품 가능 기한 */
-function OrderRows({ o }: { o: OrderCard }) {
-  return (
-    <dl className="grid grid-cols-[5.5rem_1fr] items-center gap-x-3 gap-y-1.5 text-sm">
-      <Row label="주문 상태"><Badge value={o.order_status} /></Row>
-      <Row label="배송">
-        {o.shipping_status ?? "-"}
-        {o.carrier && <span className="text-muted"> · {o.carrier}</span>}
-      </Row>
-      {o.tracking_number && <Row label="송장번호"><span className="font-mono font-semibold">{o.tracking_number}</span></Row>}
-      {o.payment_method && <Row label="결제">{o.payment_method} <span className="text-muted">· {shortDate(o.paid_at)}</span></Row>}
-      <Row label="주문일">{formatDate(o.ordered_at)}</Row>
-      {o.delivered_at && <Row label="배송 완료">{formatDate(o.delivered_at)}</Row>}
-      <RefundLine o={o} />
-      <Row label="취소">
-        {o.order_status === "취소" ? <span className="font-semibold text-slate-700">이미 취소된 주문</span>
-          : <YesNo ok={o.cancellable} yes="가능 (출고 전)" no="불가 (출고됨)" />}
-      </Row>
-      <Row label="반품·교환">
-        {/* 기한은 쇼핑몰 정책 기준 (단순 변심 7일, 불량·오배송 30일) */}
-        {o.return_until ? (
-          <span>
-            <YesNo ok={o.returnable} yes={`가능 ${daysLeft(o.return_until)}`} no="단순 변심 기한 지남" />
-            {!o.returnable && o.defect_return_until && (
-              <span className="mt-1 block text-xs text-muted">불량·오배송은 {daysLeft(o.defect_return_until)}</span>
-            )}
-          </span>
-        ) : <span className="text-slate-600">배송 완료 후 판단</span>}
-      </Row>
-    </dl>
-  );
 }
 
 const RETURN_FEE = { "단순 변심": "왕복 배송비 6,000원은 환불 금액에서 차감", "불량·오배송": "배송비는 쇼핑몰 부담" } as const;
@@ -393,106 +306,31 @@ function CustomerActions({ inquiryId, isAdmin, onDone }: { inquiryId: number; is
   );
 }
 
-/** 접는 소제목 (결제·환불 내역, 배송 추적 등) */
-function SubFold({ title, open, children }: { title: string; open?: boolean; children: ReactNode }) {
-  return (
-    <details className="group/sub mt-3 border-t border-hairline pt-2.5" open={open}>
-      <summary className="flex cursor-pointer list-none items-center justify-between text-sm font-semibold text-body hover:text-primary">
-        {title}
-        <span className="font-normal text-muted"><span className="group-open/sub:hidden">펼치기 ▾</span><span className="hidden group-open/sub:inline">접기 ▴</span></span>
-      </summary>
-      <div className="mt-2">{children}</div>
-    </details>
-  );
-}
-
-/** 재고 한 줄: '재고 8개' / '재고 2개 (적음)' / '품절 · 재입고 11/26' */
-function stockText(c: NonNullable<OrderCard["option_choices"]>[number]) {
-  if (c.sold_out) {
-    if (!c.restock_at) return "품절 · 재입고 미정";
-    const d = new Date(c.restock_at);
-    return `품절 · 재입고 ${d.getMonth() + 1}/${d.getDate()} 예정`;
-  }
-  return `재고 ${c.stock}개${c.low ? " (적음)" : ""}`;
-}
-
-/** 같은 상품의 옵션별 재고 (교환·옵션 변경 문의에 바로 안내할 수 있게) */
-function StockList({ o }: { o: OrderCard }) {
-  return (
-    <ul className="space-y-1 text-sm">
-      {(o.option_choices ?? []).map((c) => (
-        <li key={c.option} className="flex items-center justify-between gap-2">
-          <span className={cx(c.current && "font-semibold text-ink")}>{c.option}{c.current && <span className="ml-1 text-xs font-normal text-muted">(주문한 옵션)</span>}</span>
-          <span className={cx("shrink-0 text-xs", c.sold_out ? "font-semibold text-rose-700" : c.low ? "font-semibold text-amber-700" : "text-muted")}>{stockText(c)}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/** 결제·취소·환불 내역 (중복 승인 확인용: 승인 번호·시각까지) */
-function PaymentList({ o }: { o: OrderCard }) {
-  const rows = o.payments ?? [];
-  return (
-    <ul className="space-y-1.5 text-sm">
-      {rows.map((p, i) => (
-        <li key={i} className="flex flex-wrap items-baseline gap-x-2">
-          <span className={cx("rounded px-1.5 py-0.5 text-xs font-semibold",
-            p.kind === "승인" ? "bg-primary-soft text-primary" : "bg-slate-100 text-slate-700")}>{p.kind}{p.status === "예정" ? " 예정" : ""}</span>
-          <span className="font-semibold tabular-nums text-ink">{won(p.amount)}</span>
-          <span className="text-xs text-muted">{p.method ?? ""}{p.approval_no ? ` · 승인번호 ${p.approval_no}` : ""} · {formatDate(p.at)}</span>
-          {p.memo && <span className="w-full text-xs text-muted">{p.memo}</span>}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/** 배송 추적 단계 (택배사 조회 결과) */
-function ShipmentList({ o }: { o: OrderCard }) {
-  const steps = o.shipment_events ?? [];
-  return (
-    <ol className="relative space-y-2 border-l border-hairline pl-4 text-sm">
-      {steps.map((e, i) => (
-        <li key={i}>
-          <span className={cx("absolute -left-[5px] mt-1.5 h-2.5 w-2.5 rounded-full", i === steps.length - 1 ? "bg-primary" : "bg-slate-300")} />
-          <span className={cx(i === steps.length - 1 ? "font-semibold text-ink" : "text-body")}>{e.status}</span>
-          {e.location && <span className="text-muted"> · {e.location}</span>}
-          <span className="block text-xs text-muted">{formatDate(e.at)}</span>
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-/** 상품명(옵션) + 주문번호·금액·수량 (주문 정보의 머리글) */
-function OrderHead({ o }: { o: OrderCard }) {
-  const qty = o.quantity ?? 1;
-  return (
-    <div className="min-w-0">
-      <p className="truncate text-base font-semibold text-ink">{o.product_name}</p>
-      <p className="text-sm text-muted">
-        <span className="font-mono text-body">{o.order_number}</span> · {won(o.amount)}
-        {qty > 1 && <span className="font-semibold text-ink"> · {qty}개 ({won(o.unit_price ?? null)} × {qty})</span>}
-      </p>
-    </div>
-  );
-}
-
 const CLOSE_REASONS = ["중복 문의", "스팸·광고", "고객 철회", "전화로 안내", "기타"] as const;
+const ANSWERED = "답변으로 해결";
 
-/** 답변 없이 완료: 사유를 고름 (고객 화면에 '종료됨'과 사유에 맞는 안내가 보임, 처리 이력에도 남음) */
-function CloseDialog({ onClose, onDone }: { onClose: () => void; onDone: (reason: string) => void }) {
-  const [reason, setReason] = useState<string>("");
+/** 완료 처리: 언제나 이 창을 거침 (사유는 처리 이력에 남음)
+ *  - 답변을 보낸 문의: '답변으로 해결'이 기본 선택 (고객 화면은 그대로 '답변 완료')
+ *  - 답변 없이 끝내는 문의: 사유를 꼭 고름 (고객 화면에 '종료됨'과 사유에 맞는 안내) */
+function CloseDialog({ answered, onClose, onDone }: { answered: boolean; onClose: () => void; onDone: (reason: string) => void }) {
+  const [reason, setReason] = useState<string>(answered ? ANSWERED : "");
+  const reasons = answered ? [ANSWERED, ...CLOSE_REASONS] : CLOSE_REASONS;
   return (
-    <Modal title="답변 없이 완료 처리" onClose={onClose}
+    <Modal title={answered ? "완료 처리" : "답변 없이 완료 처리"} onClose={onClose}
       footer={<>
         <Button variant="ghost" onClick={onClose}>취소</Button>
         <Button disabled={!reason} onClick={() => onDone(reason)}>완료 처리</Button>
       </>}>
-      <p>고객에게 답변을 보내지 않고 끝내는 이유를 골라 주세요. 고객 화면에는 '종료됨'으로 보여요.</p>
+      <p>
+        {answered
+          ? "이 문의를 완료로 바꿀까요? 어떻게 끝났는지 골라 주세요. 고객이 추가 문의를 남기면 다시 열려요."
+          : "고객에게 답변을 보내지 않고 끝내는 이유를 골라 주세요. 고객 화면에는 '종료됨'으로 보여요."}
+      </p>
+      {answered && reason !== ANSWERED && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">이 사유를 고르면 고객 화면에 '종료됨'과 안내가 보여요.</p>
+      )}
       <div className="grid grid-cols-2 gap-2">
-        {CLOSE_REASONS.map((r) => (
+        {reasons.map((r) => (
           <label key={r} className={cx("flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2",
             reason === r ? "border-primary bg-primary-soft" : "border-hairline hover:bg-surface-soft")}>
             <input type="radio" name="close-reason" checked={reason === r} onChange={() => setReason(r)} />{r}
@@ -751,6 +589,19 @@ function Tickets({ data, onChanged }: { data: InquiryDetail; onChanged: (msg: st
   const [error, setError] = useState("");
 
   async function decide(id: number, status: "승인" | "반려", note?: string) {
+    const t = data.tickets.find((x) => x.id === id);
+    // 승인은 주문·결제를 바로 바꾸므로 한 번 더 확인 (반려는 사유 입력칸이 확인 단계)
+    if (status === "승인" && t) {
+      const order = data.order?.found ? data.order : null;
+      const what = order ? `${order.order_number}${order.product_name ? ` · ${order.product_name}` : ""}` : "연결된 주문";
+      const message = t.ticket_type === "취소"
+        ? `${what}\n주문을 취소하고 결제 금액${order?.amount != null ? ` ${won(order.amount)}` : ""}을 전액 환불(카드 승인 취소)해요.\n되돌릴 수 없어요.`
+        : t.ticket_type === "환불"
+          ? `${what}\n반품 환불을 승인해요. 회수·검수 뒤 3영업일 안에 환불돼요 (단순 변심이면 왕복 배송비 6,000원 차감).`
+          : `${what}\n교환을 승인해요. 새 상품 발송은 쇼핑몰에서 진행돼요.`;
+      if (!(await confirmDialog({ title: `${ticketKind(t.ticket_type)} 승인`, message,
+        confirmLabel: `${ticketKind(t.ticket_type)} 승인`, tone: t.ticket_type === "교환" ? "primary" : "danger" }))) return;
+    }
     setError("");
     setBusy(id);
     try {
@@ -777,7 +628,8 @@ function Tickets({ data, onChanged }: { data: InquiryDetail; onChanged: (msg: st
           return (
             <li key={t.id} className={cx("rounded-xl border p-3", actionable ? "border-amber-300 bg-amber-50/60" : "border-hairline")}>
               <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold text-ink">#{t.id} {t.ticket_type}</span>
+                <span className="font-semibold text-ink">#{t.id} {ticketKind(t.ticket_type)}
+                  {TICKET_KIND[t.ticket_type] && <span className="ml-1.5 text-xs font-normal text-muted">{TICKET_KIND[t.ticket_type].refund}</span>}</span>
                 <Badge value={t.status} />
               </div>
               {t.memo && <p className="mt-1 text-sm text-slate-600">메모: {t.memo}</p>}
@@ -808,7 +660,7 @@ function Tickets({ data, onChanged }: { data: InquiryDetail; onChanged: (msg: st
                   ) : (
                     <div className="flex gap-2">
                       <Button className="min-h-9 flex-1 px-3 py-1" disabled={busy === t.id || !!cancelBlocked}
-                        onClick={() => decide(t.id, "승인")}>{busy === t.id ? <Spinner /> : `${t.ticket_type} 승인`}</Button>
+                        onClick={() => decide(t.id, "승인")}>{busy === t.id ? <Spinner /> : `${ticketKind(t.ticket_type)} 승인`}</Button>
                       <Button variant="ghost" className="min-h-9 flex-1 px-3 py-1" disabled={busy === t.id}
                         onClick={() => setRejecting(t.id)}>반려</Button>
                     </div>
@@ -968,6 +820,9 @@ export default function InquiryDetailPage() {
         <span className={cx("rounded-full px-2 py-0.5 text-xs font-medium", p?.member ? "bg-primary-soft text-primary" : "bg-slate-100 text-slate-600")}>
           {p?.member ? "쇼핑몰 회원" : "비회원 문의"}
         </span>
+        {p?.customer_id && (
+          <Link to={`/admin/customers/${p.customer_id}`} className="ml-auto text-xs font-semibold text-primary hover:underline">고객 정보 전체 보기 →</Link>
+        )}
       </div>
       <dl className="mt-2 grid grid-cols-[3.5rem_1fr] gap-x-3 gap-y-1 text-sm">
         <Row label="이메일"><span className="break-all">{data.customer.email}</span></Row>
@@ -1095,8 +950,7 @@ export default function InquiryDetailPage() {
             )}
             {isOpen ? (
               <Button disabled={busy || (user?.role !== "admin" && data.assigned_to?.id !== user?.id)}
-                onClick={() => (data.responses.some((r) => r.status === "발송") && !data.messages.length
-                  ? run(() => inquiryApi.setStatus(id, "완료")) : setDialog("close"))}>완료 처리</Button>
+                onClick={() => setDialog("close")}>완료 처리</Button>
             ) : (
               <Button variant="ghost" disabled={busy} onClick={() => run(() => inquiryApi.setStatus(id, "담당자 처리"))}>다시 열기</Button>
             )}
@@ -1107,7 +961,7 @@ export default function InquiryDetailPage() {
           <div className="mt-2"><Alert kind="info">아직 담당자가 없는 문의예요. [내가 맡기]를 누르면 답변·처리할 수 있어요.</Alert></div>
         )}
         {dialog === "close" && (
-          <CloseDialog onClose={() => setDialog(null)}
+          <CloseDialog answered={data.responses.some((r) => r.status === "발송")} onClose={() => setDialog(null)}
             onDone={(reason) => { setDialog(null); run(() => inquiryApi.setStatus(id, "완료", reason)); }} />
         )}
         {dialog === "handover" && user && (

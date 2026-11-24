@@ -7,6 +7,7 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 import type {
   AgentLogPage, DraftStats, RetrainingStatus, FaqSuggestResult, ShopCustomer, ShopOrder, FaqAdmin, FaqPublic, FaqSearchTest, InquiryCreate, ResponseItem, InquiryCreated, InquiryDetail, InquiryListItem, InquiryPublic, InquiryState, Page, Role, User,
   UserDetail,
+  OrderCard,
 } from "./types";
 
 export const http = axios.create({ baseURL: "/api", withCredentials: true });
@@ -352,4 +353,67 @@ export const shopApi = {
 // ---- 재학습 현황 (관리자) ----
 export const retrainingApi = {
   status: () => http.get<RetrainingStatus>("/admin/retraining").then((r) => r.data),
+};
+
+/** 처리 요청(티켓) 목록 · 고객 조회 · 재고 현황 (조회 전용, backend/api/tickets.py · customers.py) */
+/** 환불 진행 (승인 뒤 결제 내역의 환불·승인 취소 줄) */
+export interface RefundRow {
+  id: number; kind: string; status: string; amount: number; method: string | null; at: string; memo: string | null; overdue: boolean;
+  order: { order_number: string; product_name: string; amount: number; order_status: string };
+  customer_name: string | null; inquiry: { id: number; inquiry_number: string } | null;
+}
+
+export interface TicketRow {
+  id: number; ticket_type: string; status: string; reason: string; memo: string | null;
+  created_at: string; handled_at: string | null; handled_by: string | null;
+  inquiry: { id: number; inquiry_number: string; title: string; customer_name: string; status: string; assigned_to: string | null };
+  order: { order_number: string; product_name: string; amount: number; order_status: string; shipping_status: string | null } | null;
+}
+/** 주문·배송 (조회 전용, backend/api/customers.py list_orders) */
+export interface OrderRow {
+  order_number: string; product_name: string; amount: number; quantity: number; order_status: string; shipping_status: string | null;
+  carrier: string | null; tracking_number: string | null; ordered_at: string; delivered_at: string | null;
+  delayed: boolean; returning: boolean; picked_up: boolean; customer: { id: number; name: string };
+  inquiries: number; latest_inquiry: { id: number; inquiry_number: string; status: string } | null;
+}
+
+export interface CustomerRow {
+  id: number; name: string; email: string; phone: string | null; member: boolean;
+  orders: number; last_order_at: string | null; inquiries: number; open_inquiries: number;
+}
+export interface CustomerDetail {
+  id: number; name: string; email: string; phone: string | null; member: boolean; since: string;
+  points_balance: number | null; points_pending: number;
+  point_history: { at: string; amount: number; reason: string; status: string; order_number: string | null }[];
+  coupons: { name: string; benefit: string; min_amount: number; expires_at: string; used_at: string | null; state: string }[];
+  negative_ratings: number; negative_inquiries: number; inquiry_total: number;
+  orders: OrderCard[];
+  inquiries: { id: number; inquiry_number: string; title: string; status: string; order_number: string | null; created_at: string; assigned_to: string | null }[];
+}
+export interface StockOption { option: string; stock: number; sold_out: boolean; low: boolean; restock_at: string | null }
+
+const clean = (params: Record<string, string | number | undefined>) =>
+  Object.fromEntries(Object.entries(params).filter(([, v]) => v !== "" && v !== undefined));
+
+export const opsApi = {
+  tickets: (params: { status?: string; ticket_type?: string; page?: number }) =>
+    http.get<{ items: TicketRow[]; total: number; counts: Record<string, number>; page: number; size: number }>(
+      "/tickets", { params: clean(params) }).then((r) => r.data),
+  refunds: (params: { state?: string; page?: number }) =>
+    http.get<{ items: RefundRow[]; total: number; page: number; size: number;
+      summary: { pending: number; pending_amount: number; overdue: number; done: number } }>(
+      "/tickets/refunds", { params: clean(params) }).then((r) => r.data),
+  customers: (params: { q?: string; page?: number }) =>
+    http.get<{ items: CustomerRow[]; total: number; page: number; size: number }>("/customers", { params: clean(params) }).then((r) => r.data),
+  customer: (id: number) => http.get<CustomerDetail>(`/customers/${id}`).then((r) => r.data),
+  orders: (params: { q?: string; group?: string; page?: number }) =>
+    http.get<{ items: OrderRow[]; total: number; counts: Record<string, number>; page: number; size: number; delay_days: number }>(
+      "/orders", { params: clean(params) }).then((r) => r.data),
+  order: (orderNumber: string) =>
+    http.get<{ order: OrderCard; customer: { id: number; name: string; member: boolean };
+      inquiries: { id: number; inquiry_number: string; title: string; status: string; created_at: string; assigned_to: string | null }[] }>(
+      `/orders/${encodeURIComponent(orderNumber)}`).then((r) => r.data),
+  inventory: (params: { only?: string; q?: string }) =>
+    http.get<{ products: { product: string; options: StockOption[] }[]; summary: { options: number; sold_out: number; low: number }; low_stock: number }>(
+      "/inventory", { params: clean(params) }).then((r) => r.data),
 };

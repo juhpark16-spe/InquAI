@@ -281,3 +281,18 @@ def test_queue_prev_next(client, db):
     assert client.post("/api/auth/login", json={"username": "agent1", "password": "test-password-1234"}).status_code == 200
     mine = client.get(f"/api/inquiries/{ids['Q1']}/queue").json()
     assert mine == {"total": 2, "position": 2, "prev_id": ids["Q2"], "next_id": None}       # agent1(id 2)의 Q2·Q1만
+
+
+def test_close_reason_answered_needs_sent_answer(client, db, inquiries):
+    """'답변으로 해결'은 보낸 답변이 있을 때만 (고객 화면은 '종료됨' 없이 그대로)"""
+    from backend.database.models import Inquiry, Response
+    login(client, "agent1")
+    r = patch(client, "/api/inquiries/3/status", {"status": "완료", "reason": "답변으로 해결"})
+    assert r.status_code == 422                                                    # 아직 보낸 답변 없음
+    db.add(Response(inquiry_id=3, draft_text="답변", final_text="답변", status="발송"))
+    db.commit()
+    assert patch(client, "/api/inquiries/3/status", {"status": "완료", "reason": "답변으로 해결"}).status_code == 200
+    db.expire_all()
+    assert db.get(Inquiry, 3).close_reason == "답변으로 해결"
+    from backend.services.inquiries import CLOSED_TEXT
+    assert "답변으로 해결" not in CLOSED_TEXT                                       # 고객에게 '종료됨' 안내 없음

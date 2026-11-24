@@ -178,6 +178,8 @@ def change_status(inquiry_id: int, body: StatusRequest, request: Request, user: 
     inquiry = get_inquiry_for_user(db, inquiry_id, user)
     if inquiry.status == body.status:
         raise AppError(400, f"이미 '{body.status}' 상태입니다.", "INVALID_STATE")
+    if body.reason == "답변으로 해결" and not any(r.status == "발송" for r in inquiry.responses):
+        raise AppError(422, "아직 보낸 답변이 없어요. 답변 없이 끝내는 사유를 골라 주세요.", "VALIDATION_ERROR")
     before = inquiry.status
     inquiry.status = body.status
     if before in ("완료", "자동 처리") and body.status in sla.OPEN_STATUSES:

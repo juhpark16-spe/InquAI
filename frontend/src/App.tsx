@@ -17,6 +17,10 @@ import InquiryDetailPage from "./pages/admin/InquiryDetailPage";
 import InquiryListPage from "./pages/admin/InquiryListPage";
 import LoginPage from "./pages/admin/LoginPage";
 import UsersPage from "./pages/admin/UsersPage";
+import TicketsPage from "./pages/admin/TicketsPage";
+import CustomersPage from "./pages/admin/CustomersPage";
+import InventoryPage from "./pages/admin/InventoryPage";
+import OrdersPage from "./pages/admin/OrdersPage";
 import CustomerLayout from "./pages/customer/CustomerLayout";
 import FaqPage from "./pages/customer/FaqPage";
 import InquiryFormPage from "./pages/customer/InquiryFormPage";
@@ -62,6 +66,11 @@ export default function App() {
               <Route path="/admin/inquiries" element={<InquiryListPage />} />
               <Route path="/admin/inquiries/:id" element={<InquiryDetailPage />} />
               <Route path="/admin/agent-logs" element={<AgentLogsPage />} />
+              <Route path="/admin/tickets" element={<TicketsPage />} />
+              <Route path="/admin/customers" element={<CustomersPage />} />
+              <Route path="/admin/customers/:id" element={<CustomersPage />} />
+              <Route path="/admin/orders" element={<OrdersPage />} />
+              <Route path="/admin/inventory" element={<InventoryPage />} />
               <Route path="/admin/account" element={<AccountPage />} />
               <Route element={<ProtectedRoute roles={["admin"]} />}>
                 <Route path="/admin/users" element={<UsersPage />} />

@@ -12,7 +12,7 @@ from sqlalchemy import func, select
 
 from backend.core.dependencies import DB, AdminOnly
 from backend.core.errors import AppError
-from backend.database.models import AdminAuditLog, AdminUser, Faq, Inquiry, ReplyTemplate, as_utc, utcnow
+from backend.database.models import AdminAuditLog, AdminUser, Customer, Faq, Inquiry, ReplyTemplate, as_utc, utcnow
 
 router = APIRouter(prefix="/audit-logs", tags=["작업 기록"])
 
@@ -26,7 +26,7 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "status_change": ("상태 변경", "문의 처리"), "note_create": ("상담원 공유 메모", "문의 처리"),
     "label_correct": ("분류 수정", "문의 처리"), "ticket_approve": ("티켓 승인", "문의 처리"),
     "ticket_reject": ("티켓 반려", "문의 처리"), "order_action": ("바로 처리", "문의 처리"),
-    "order_number_change": ("주문번호 변경", "문의 처리"),
+    "order_number_change": ("주문번호 변경", "문의 처리"), "customer_view": ("고객 정보 조회", "문의 처리"),
     "recheck_set": ("다시 안내 예정", "답변"), "recheck_clear": ("다시 안내 완료", "답변"),
     "draft_generate": ("AI 초안 만들기", "답변"), "response_create": ("답변 작성", "답변"),
     "response_edit": ("초안 수정", "답변"), "response_approve": ("답변 발송", "답변"),
@@ -112,16 +112,18 @@ def list_audit_logs(
     ids = lambda t: {a.target_id for a in rows if a.target_type == t and a.target_id}  # noqa: E731
     inquiries = {i.id: i.inquiry_number for i in db.scalars(select(Inquiry).where(Inquiry.id.in_(ids("inquiry"))))}
     faqs = {f.id: f.code for f in db.scalars(select(Faq).where(Faq.id.in_(ids("faq"))))}
+    customers = {c.id: c.name for c in db.scalars(select(Customer).where(Customer.id.in_(ids("customer"))))}
     templates = {t.id: t.label for t in db.scalars(select(ReplyTemplate).where(ReplyTemplate.id.in_(ids("reply_template"))))}
 
     def target(a: AdminAuditLog) -> dict | None:
         if not a.target_type or not a.target_id:
             return None
-        label = {"inquiry": inquiries, "admin_user": names, "faq": faqs, "reply_template": templates}.get(a.target_type, {}).get(a.target_id)
+        label = {"inquiry": inquiries, "admin_user": names, "faq": faqs, "reply_template": templates,
+                 "customer": customers}.get(a.target_type, {}).get(a.target_id)
         if label is None and a.target_type == "reply_template":
             label = (a.detail or {}).get("label")       # 지운 문구는 기록에 남긴 이름으로
         link = {"inquiry": f"/admin/inquiries/{a.target_id}", "admin_user": "/admin/users",
-                "faq": "/admin/faqs", "reply_template": "/admin/templates"}.get(a.target_type)
+                "faq": "/admin/faqs", "reply_template": "/admin/templates", "customer": f"/admin/customers/{a.target_id}"}.get(a.target_type)
         return {"type": a.target_type, "id": a.target_id, "label": label or f"#{a.target_id}", "link": link}
 
     items = [{

@@ -24,6 +24,15 @@ function MenuLink({ to, icon, label, count, end }: { to: string; icon: IconName;
   );
 }
 
+/** 메뉴 묶음 제목 (업무 / 쇼핑몰 정보 / 설정): 넓은 화면에서만, 위에 가는 구분선 + 진한 글씨로 묶음이 한눈에 보이게 */
+function MenuTitle({ children, first }: { children: string; first?: boolean }) {
+  return (
+    <p className={cx("hidden px-3 pb-1.5 text-[13px] font-bold text-ink lg:block", first ? "pt-1" : "mt-3 border-t border-hairline pt-4")}>
+      {children}
+    </p>
+  );
+}
+
 /** 어느 화면에서나 문의 찾기 (문의 번호·이메일·제목·내용). '/' 키로 바로 입력.
  *  하나만 찾아지면 그 문의 상세로, 여러 건이면 문의 목록에서 결과를 보여 줌 */
 function GlobalSearch() {
@@ -95,19 +104,31 @@ export default function AdminLayout() {
           </span>
         </div>
 
-        <nav className="flex gap-1 overflow-x-auto px-3 pb-3 [scrollbar-width:none] lg:flex-1 lg:flex-col lg:overflow-visible lg:pb-0">
-          <p className="hidden px-3 pb-1 pt-2 text-xs font-semibold tracking-wider text-muted lg:block">업무</p>
+        <nav className="flex gap-1 overflow-x-auto px-3 pb-3 [scrollbar-width:none] lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto lg:pb-0">
+          {/* 자주 쓰는 순서: 상담 업무(매일) → 쇼핑몰 정보(상담 중 찾아보기) → AI 관리(점검) → 설정(가끔) */}
+          <MenuTitle first>상담 업무</MenuTitle>
           {isAdmin && <MenuLink to="/admin" end icon="dashboard" label="대시보드" />}
           <MenuLink to="/admin/inquiries" icon="inbox" label="문의 관리" count={openCount} />
+          <MenuLink to="/admin/tickets" icon="ticket" label="취소·교환·반품" />
+          <MenuTitle>쇼핑몰 정보 (조회 전용)</MenuTitle>
+          <MenuLink to="/admin/orders" icon="truck" label="주문·배송" />
+          <MenuLink to="/admin/customers" icon="person" label="고객 조회" />
+          <MenuLink to="/admin/inventory" icon="box" label="재고 현황" />
+          <MenuTitle>AI 관리</MenuTitle>
           <MenuLink to="/admin/agent-logs" icon="bot" label="AI 실행 로그" />
           {isAdmin && <MenuLink to="/admin/drafts" icon="edit" label="AI 초안 분석" />}
           {isAdmin && <MenuLink to="/admin/retraining" icon="zap" label="재학습 현황" />}
-          <p className="hidden px-3 pb-1 pt-5 text-xs font-semibold tracking-wider text-muted lg:block">설정</p>
+          <MenuTitle>설정</MenuTitle>
           {isAdmin && <MenuLink to="/admin/faqs" icon="book" label="FAQ 관리" />}
           {isAdmin && <MenuLink to="/admin/templates" icon="message" label="답변 문구" />}
           {isAdmin && <MenuLink to="/admin/users" icon="users" label="계정 관리" />}
           {isAdmin && <MenuLink to="/admin/audit" icon="eye" label="작업 기록" />}
           <MenuLink to="/admin/account" icon="lock" label="내 계정" />
+          {/* 고객이 보는 화면 (시연 쇼핑몰 고객센터)을 새 탭으로 */}
+          <a href="/faq" target="_blank" rel="noopener"
+            className="flex shrink-0 items-center gap-3 whitespace-nowrap rounded-xl px-3 py-2 text-sm text-muted hover:bg-white hover:text-ink lg:mt-auto lg:mb-4">
+            <Icon name="external" className="h-[18px] w-[18px]" />고객센터 화면 열기
+          </a>
         </nav>
 
       </aside>

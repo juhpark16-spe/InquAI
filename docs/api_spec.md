@@ -329,9 +329,10 @@
 ```json
 { "status": "완료", "reason": "중복 문의" }
 ```
-- 답변 없이 끝내는 경우(중복 문의, 스팸 등)용. audit_logs (status_change, reason)
-- `reason`: 중복 문의 / 스팸·광고 / 고객 철회 / 전화로 안내 / 기타 → `inquiries.close_reason`, 처리 이력 '(사유: …)', 고객 조회 `closed_note`.
-  화면은 보낸 답변이 있고 그 뒤 추가 문의가 없으면 바로 완료, 아니면 사유를 고르는 창. 다시 열면 사유를 지우고 답변 기한을 새로 시작
+- 완료로 바꾸거나 다시 여는 데 씀. audit_logs (status_change, reason)
+- `reason`: 답변으로 해결 / 중복 문의 / 스팸·광고 / 고객 철회 / 전화로 안내 / 기타 → `inquiries.close_reason`, 처리 이력 '(사유: …)'.
+  '답변으로 해결'은 보낸 답변이 있을 때만 (없으면 422) 이고 고객 화면은 그대로 '답변 완료', 나머지는 고객 조회 `closed_note`('종료됨').
+  화면의 [완료 처리]는 언제나 사유를 고르는 창을 거침 (2026-11-24: 답변한 문의는 '답변으로 해결'이 기본 선택). 다시 열면 사유를 지우고 답변 기한을 새로 시작
 - 바꿀 수 있는 값: `검토 대기`, `담당자 처리`, `완료` (완료한 문의 다시 열기 포함). `접수`·`자동 처리`는 시스템만 정하므로 422
 - 지금과 같은 상태로 바꾸면 400 `INVALID_STATE`. 상담원은 배정된 문의만 (아니면 403)
 
@@ -443,8 +444,31 @@
 - `ticket_type`: 환불 / 교환 / 취소 / 이관
 - 정책 확인 (`docs/shop_policy.md`): 취소는 출고 전만, 반품·교환은 배송 완료 7일 이내(불량 30일). 조건에 맞지 않아도 접수는 하되 `reason`에 "정책 기간 초과"를 붙여 상담원이 판단합니다.
 
-### GET /api/tickets — 티켓 목록 (로그인)
-파라미터: `ticket_type`, `status`. 상담원은 배정된 문의의 티켓만.
+### GET /api/tickets — 처리 요청(티켓) 목록 (로그인, 2026-11-24 구현)
+파라미터: `status`(기본 `접수` = 승인 대기, `승인`·`반려`·`all`), `ticket_type`(취소·교환·환불), `page`, `size`. 상담원은 내가 맡은 문의의 티켓만.
+```json
+{ "items": [ { "id": 8, "ticket_type": "취소", "status": "접수", "reason": "...", "memo": null,
+               "created_at": "...", "handled_at": null, "handled_by": null,
+               "inquiry": { "id": 9, "inquiry_number": "INQ-…", "title": "...", "customer_name": "...", "status": "...", "assigned_to": "김상담" },
+               "order": { "order_number": "20261122-0001", "product_name": "...", "amount": 45000, "order_status": "결제 완료", "shipping_status": null } } ],
+  "total": 1, "counts": { "접수": 1, "승인": 4, "반려": 0 }, "page": 1, "size": 30 }
+```
+- 승인 대기는 오래된 것부터, 나머지는 최신순. `counts`는 종류 조건을 적용한 상태별 건수 (화면 탭 숫자)
+- 화면: 관리 메뉴 **취소·교환·반품** (`/admin/tickets`). 줄을 누르면 문의 상세로 가서 주문 정보를 보고 승인·반려
+
+### GET /api/tickets/refunds — 환불 진행 (로그인, 조회 전용, 2026-11-24 구현)
+승인 뒤 돈이 돌아가는 상황: 결제 내역의 `환불`(반품 환불)·`승인 취소`(출고 전 취소) 줄. 파라미터: `state`(기본 `예정`, `완료`·`all`), `page`, `size`.
+상담원은 내가 맡은 문의의 주문만.
+```json
+{ "items": [ { "id": 31, "kind": "환불", "status": "예정", "amount": 33000, "method": "신용카드", "at": "...(예정일)",
+               "memo": "반품 회수·검수 후 3영업일 이내 (티켓 승인) · 단순 변심 왕복 배송비 6,000원 차감", "overdue": true,
+               "order": { "order_number": "20261118-0003", "product_name": "...", "amount": 39000, "order_status": "배송 완료" },
+               "customer_name": "김민준", "inquiry": { "id": 9, "inquiry_number": "INQ-…" } } ],
+  "total": 1, "summary": { "pending": 1, "pending_amount": 33000, "overdue": 1, "done": 3 }, "page": 1, "size": 30 }
+```
+- `overdue`: 예정일이 지났는데 아직 `예정` → 실제 환불은 쇼핑몰 결제 시스템이 하므로 그쪽 확인이 필요하다는 표시 (화면 빨강)
+- 예정은 예정일 가까운 순, 나머지는 최신순. `inquiry`는 그 주문의 가장 최근 문의 (없으면 null)
+- 화면: **취소·교환·반품** 메뉴의 **환불 진행** 탭
 
 ### PATCH /api/tickets/{id} — 승인·반려 (로그인, 4주차 구현: `backend/api/tickets.py`)
 ```json
@@ -466,6 +490,20 @@
 ```
 - `email`이 주문 고객 이메일과 다르면 404 (다른 고객 정보 노출 방지, 기획서 10장 완료 기준)
 - 경로 변수는 기획서의 `{order_id}` 대신 고객이 아는 `order_number`를 씁니다.
+
+## 7-1. 고객 조회·재고 현황 API (로그인, 조회 전용, 2026-11-24 추가: `backend/api/customers.py`)
+
+InquAI는 상담 시스템이라 고객·주문·재고를 **바꾸지 않고 보기만** 합니다. 바꾸는 일은 문의 상세의 [바로 처리]·티켓 승인에서 하고 그 문의에 기록됩니다.
+
+| 메서드 | 경로 | 설명 |
+| --- | --- | --- |
+| GET | /api/customers?q=&page= | 고객 찾기: 이름·이메일·전화번호 뒷자리(숫자 4자리 이상)·주문번호. 항목 `{id, name, email, phone(가림), member, orders, last_order_at, inquiries, open_inquiries}`, 최근 주문 순 |
+| GET | /api/customers/{id} | 고객 한 명: 주문 전체(문의 상세의 `order`와 같은 모양: 결제·배송 추적·옵션별 재고·취소/반품 가능), 문의 목록, 적립금(`points_balance`·`points_pending`·`point_history`)·쿠폰, 불만 신호(`negative_ratings`·`negative_inquiries`), `inquiry_total`. 작업 기록 `customer_view`(고객 정보 조회) |
+| GET | /api/inventory?only=&q= | 상품 옵션별 재고 `{products:[{product, options:[{option, stock, sold_out, low, restock_at}]}], summary:{options, sold_out, low}, low_stock}`. `only`=sold_out(품절)/low(재고 3개 이하) |
+
+- 권한: 관리자는 모든 고객. 상담원은 **내가 맡은 문의의 고객만** (그 밖은 목록에 없고 상세는 404). 상세의 문의 목록도 내가 맡은 것만 보이고 나머지는 `inquiry_total`로 건수만.
+- 문의 상세 `customer_profile.customer_id` → 고객 카드의 [고객 정보 전체 보기] 링크 (주소에 이메일을 넣지 않으려고 번호로).
+- 화면: 관리 메뉴 '쇼핑몰 정보 (조회 전용)'의 **고객 조회** (`/admin/customers`, `/admin/customers/:id`)·**재고 현황** (`/admin/inventory`). 왼쪽 메뉴 맨 아래 [고객센터 화면 열기]는 고객 화면(`/faq`)을 새 탭으로.
 
 ## 8. FAQ API (관리자)
 
@@ -491,6 +529,26 @@
   (`[확인 필요` 가 남아 있으면 등록 버튼이 잠김). FAQ를 등록하면 그 묶음은 다음 추천에서 빠집니다. LLM이 없으면 묶음만 돌려줍니다.
 
 ## 9. 통계·로그 API
+
+### GET /api/orders — 주문 찾기 (로그인, 조회 전용, 2026-11-24 추가)
+파라미터: `q`(주문번호·상품·고객 이름·이메일·송장번호), `group`(`ready` 출고 전 / `shipping` 배송 중 / `delayed` 배송 지연 /
+`delivered` 배송 완료 / `return` 반품 / `cancel` 취소, 비우면 전체), `page`, `size`. 상담원은 내가 맡은 문의의 고객 주문만.
+```json
+{ "items": [ { "order_number": "20261118-0003", "product_name": "...", "amount": 39000, "quantity": 1,
+               "order_status": "배송 중", "shipping_status": "옥천 HUB 출발", "carrier": "CJ대한통운", "tracking_number": "...",
+               "ordered_at": "...", "delivered_at": null, "delayed": true, "returning": false, "picked_up": false,
+               "customer": { "id": 3, "name": "김민준" }, "inquiries": 1,
+               "latest_inquiry": { "id": 9, "inquiry_number": "INQ-…", "status": "담당자 처리" } } ],
+  "total": 1, "counts": { "ready": 12, "shipping": 15, "delayed": 2, "delivered": 18, "return": 0, "cancel": 5, "all": 50 },
+  "page": 1, "size": 30, "delay_days": 4 }
+```
+- 배송 지연(`delayed`): 출고(`출고`·`배송 중`)됐는데 주문 후 4일이 지나도 배송 완료가 아님 (정책: 평일 출고 + 출고 후 1~2일, 주말 여유)
+- 최근 주문부터. `latest_inquiry`는 그 주문의 가장 최근 문의 (상담원은 내가 맡은 문의만)
+
+### GET /api/orders/{order_number} — 주문 한 건
+`{ "order": (문의 상세의 주문 카드와 같은 모양: 결제·환불 내역, 배송 추적, 반품 기한·진행, 옵션별 재고),
+   "customer": { "id", "name", "member" }, "inquiries": [ { "id", "inquiry_number", "title", "status", "created_at", "assigned_to" } ] }`
+- 상담원이 볼 수 없는 주문은 404. 화면: 관리 메뉴 **주문·배송** (`/admin/orders`), 줄을 누르면 바로 아래에 펼침
 
 ### GET /api/stats/summary — 대시보드 (관리자, 2주차 구현)
 파라미터: `from`, `to` (한국 날짜 `YYYY-MM-DD`, 기본: 최근 7일, 최대 92일)
@@ -706,6 +764,7 @@
 | --- | --- | --- |
 | 추가 | `PATCH /api/inquiries/{id}/status` | 답변 없이 끝내는 문의 처리 |
 | 추가 | `PATCH /api/tickets/{id}` | 기획서 2-3 "환불·교환 승인·반려"에 필요한 API가 없었음 |
+| 추가 | `GET /api/customers`, `GET /api/customers/{id}`, `GET /api/inventory` | 상담원이 문의 밖에서도 고객·주문·재고를 찾아볼 수 있게 (조회 전용, 상품·쿠폰 등록 같은 쇼핑몰 운영 기능은 넣지 않음) |
 | 변경 | 배송 조회 경로 `{order_id}` → `{order_number}` + `email` | 고객이 아는 값으로 조회하고, 이메일로 본인 확인 |
 | 변경 | `/api/stats/summary` 권한 "필요" → 관리자 | 6장 권한표 (통계 대시보드는 관리자만) |
 | 구체화 | 고객 응답에 분석 결과·판단 이유를 넣지 않음 | 내부 정보 노출 방지 |

@@ -2,7 +2,8 @@
 
 from sqlalchemy import select
 
-from backend.database.models import AgentLog, Customer, Inquiry, Order, Response
+from backend.agents.drafting import with_greeting
+from backend.database.models import AgentLog, Attachment, Customer, CustomerMessage, Inquiry, Order, ReplyTemplate, Response
 from backend.main import app
 from backend.tests.conftest import TEST_PASSWORD
 from backend.tests.test_inquiries import ai, post, route_reply, saved  # noqa: F401  (fixture 재사용)
@@ -37,7 +38,8 @@ def test_review_decision_gets_draft_at_registration(client, db, ai):
     inquiry, log = saved(db, body["inquiry_number"])
     draft = db.scalar(select(Response).where(Response.inquiry_id == inquiry.id))
     assert draft.status == "초안" and draft.generated_by == "llm"
-    assert draft.draft_text == DRAFT["answer"].replace(" (F05)", "")             # FAQ 번호는 고객 글에서 지움
+    # 첫 답변: 첫인사가 맨 앞에 붙고, FAQ 번호는 고객 글에서 지움
+    assert draft.draft_text == "안녕하세요, 고객님. InquAI 쇼핑 고객센터입니다.\n\n" + DRAFT["answer"].replace(" (F05)", "")
     assert draft.used_faq_ids == ["F05"]                                     # 넘기지 않은 F99는 버림
     assert draft.check_points == ["도착 예정일"] and draft.grounded is False   # [확인 필요]가 있으면 근거 부족
     assert log.tokens["calls"] == 2 and log.error is None and log.response_text == draft.draft_text
@@ -191,3 +193,41 @@ def test_draft_instruction_goes_to_llm_and_history(client, db, ai):
     assert history[-1] == "AI 초안 만들기 (요청: 더 짧게)"
     too_long = client.post(f"/api/inquiries/{inquiry.id}/draft", headers=h, json={"instruction": "가" * 201})
     assert too_long.status_code == 422
+
+
+
+def test_with_greeting_replaces_ai_greeting():
+    g = "안녕하세요, 고객님. InquAI 쇼핑 고객센터입니다."
+    assert with_greeting("안녕하세요, 고객님. 문의 주셔서 감사합니다.", g) == f"{g}\n\n문의 주셔서 감사합니다."
+    assert with_greeting("안녕하세요. InquAI 쇼핑 고객센터입니다. 확인해 보겠습니다.", g) == f"{g}\n\n확인해 보겠습니다."
+    assert with_greeting("불편을 드려 죄송합니다.", g) == f"{g}\n\n불편을 드려 죄송합니다."
+
+
+def test_follow_up_photos_and_greeting_in_draft(client, db, ai):
+    """추가 문의로 보낸 사진·주문번호를 AI가 알아보게: 대화에 [사진 N장 함께 보냄], 첫 답변이면 첫인사"""
+    ai["analyzer"].next = {"confidence": 0.6}                                # 담당자 연결 (LLM 안 씀)
+    inquiry, _ = saved(db, post(client, content="코트 단추가 하나 없어요. 교환해 주세요").json()["inquiry_number"])
+    msg = CustomerMessage(inquiry_id=inquiry.id, content="주문번호랑 사진 보내드립니다.")
+    db.add(msg)
+    db.flush()
+    db.add_all([Attachment(token=f"t{i}", inquiry_id=inquiry.id, message_id=msg.id, filename="a.jpg", content_type="image/jpeg",
+                           size=1, path="x") for i in range(2)])
+    first = db.scalar(select(ReplyTemplate).where(ReplyTemplate.label == "첫인사"))   # 서버 시작 때 넣은 기본 문구
+    first.text = "안녕하세요, InquAI 고객센터입니다."                                  # 관리자가 고친 첫인사
+    db.commit()
+    rec = Recorder(ai["llm"])
+    app.state.llm = rec
+    ai["llm"].replies = {"draft": {**DRAFT, "answer": "안녕하세요, 고객님. 보내 주신 사진 2장 잘 받았습니다.", "check_points": []}}
+    h = login(client)
+
+    d = client.post(f"/api/inquiries/{inquiry.id}/draft", headers=h).json()
+    assert d["draft_text"] == "안녕하세요, InquAI 고객센터입니다.\n\n보내 주신 사진 2장 잘 받았습니다."   # AI 인사 대신 정해진 첫인사
+    sent = rec.inputs["draft"]
+    assert "고객 (추가 문의) [사진 2장 함께 보냄]" in sent and "[답변 상황] 첫 답변" in sent
+
+    # 답변을 한 번 보낸 뒤의 초안: 첫인사 없이, 이어지는 답변
+    db.add(Response(inquiry_id=inquiry.id, draft_text="먼저 보낸 답변", final_text="먼저 보낸 답변", status="발송"))
+    db.commit()
+    ai["llm"].replies = {"draft": {**DRAFT, "answer": "교환 접수 도와드리겠습니다.", "check_points": []}}
+    d2 = client.post(f"/api/inquiries/{inquiry.id}/draft", headers=h, json={"replace": True}).json()
+    assert d2["draft_text"] == "교환 접수 도와드리겠습니다." and "[답변 상황] 이어지는 답변 (보낸 답변 1건)" in rec.inputs["draft"]

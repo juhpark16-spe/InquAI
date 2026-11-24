@@ -187,7 +187,7 @@ export interface InquiryDetail {
   inquiry_number: string;
   customer: { name: string; email: string; order_number: string | null };
   // 고객 카드: 쇼핑몰 회원 여부, 전화번호(가림), 주문·문의 수, 불만 신호
-  customer_profile: { member: boolean; phone: string | null; orders: number; inquiries: number;
+  customer_profile: { customer_id?: number | null; member: boolean; phone: string | null; orders: number; inquiries: number;
     negative_inquiries: number; negative_ratings: number;
     points_balance: number | null; points_pending: number;
     point_history: { at: string; amount: number; reason: string; status: string; order_number: string | null }[];

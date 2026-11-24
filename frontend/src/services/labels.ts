@@ -24,3 +24,12 @@ export function failReason(output: Record<string, unknown> | null | undefined): 
   const message = typeof output?.message === "string" ? output.message : "";
   return message.replace(/\s*\(.*\)\s*$/, "") || "이유 기록 없음";
 }
+
+/** 처리 요청(티켓) 종류: 서버 값 '환불'은 반품 후 환불이라 화면에서는 '반품'으로.
+ *  취소·반품 모두 승인하면 환불이 진행됨 (취소 = 카드 승인 취소로 바로 전액, 반품 = 회수·검수 뒤 3영업일 안) */
+export const TICKET_KIND: Record<string, { label: string; refund: string }> = {
+  취소: { label: "취소", refund: "바로 전액 환불" },
+  교환: { label: "교환", refund: "환불 없음" },
+  환불: { label: "반품", refund: "회수 후 환불" },
+};
+export const ticketKind = (type: string) => TICKET_KIND[type]?.label ?? type;
