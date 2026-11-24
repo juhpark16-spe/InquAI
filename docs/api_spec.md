@@ -110,7 +110,9 @@
                                         //  화면에서 배송·취소·교환·반품 같은 내용을 쓰면 입력을 권유)
   "title": "배송 문의",
   "content": "지금 주문하면 보통 며칠 만에 받을 수 있어요?",
-  "password": "••••••"                    // 조회 비밀번호 6~64자 (Argon2 해시로 저장)
+  "password": "••••••",                   // 조회 비밀번호 6~64자 (Argon2 해시로 저장)
+  "client_request_id": "3f2c…"            // 선택: 화면이 폼마다 만드는 번호. 응답이 늦어 다시 눌러도 같은 이메일·같은 번호면
+                                          //  새로 만들지 않고 처음 문의의 결과를 그대로 돌려줌 (두 번 등록 방지)
 }
 // 201 응답 — 자동 답변
 {
@@ -168,6 +170,7 @@
 - 비밀번호는 문의마다 저장합니다. 같은 이메일이라도 비밀번호가 다른 문의는 보이지 않아, 남이 내 이메일로 문의해도 내 문의는 볼 수 없습니다.
 - 일치하는 문의가 없으면 이메일이 없든 비밀번호가 틀리든 같은 404. 이메일이 없을 때도 비밀번호 확인을 한 번 해서 응답 시간으로 구분할 수 없게 합니다.
 - 같은 이메일로 15분 안에 5번 틀리면 15분 동안 429 (비밀번호 맞히기 방지, 서버 메모리 기록). 같은 IP 1분 10회 초과도 429
+- `closed_note`: 상담원이 답변 없이 완료한 문의(사유 있음)는 화면에 '종료됨'과 이 안내 (예: 중복 문의 → "같은 내용의 다른 문의에서 안내드려요."). 다시 열리면 null
 - 한 이메일에서 최근 30건까지 확인합니다. 비밀번호는 되찾을 수 없어, 화면에서 "새 문의에 이전 문의 내용을 적어 달라"고 안내합니다.
 
 ### 실제 쇼핑몰 고객센터 기능 (2주차 추가)
@@ -227,11 +230,13 @@
 | urgency | 높음 | |
 | status | 검토 대기 | |
 | decision | 답변 초안 | 처리 방식 |
-| assigned_to | 2 / `me` / `none` | 관리자만 다른 사람 지정 가능 |
-| q | 환불 | 제목·내용·문의 번호·이메일 검색 |
+| assigned_to | 2 / `me` / `none` | 관리자만 다른 사람 지정 가능. 상담원은 `none`(미배정 문의 가져오기)도 가능 |
+| q | 환불 | 제목·내용·문의 번호·이메일·고객 이름·주문번호 검색 |
 | sort | `urgency` (기본) / `-created_at` | 긴급도 높은 순 → 최신순 |
 
-상담원이 호출하면 `assigned_to=me`가 강제됩니다.
+상담원이 호출하면 `assigned_to=me`가 강제됩니다 (`none`만 예외).
+목록 항목에 `new_follow_up`(마지막 답변 뒤 고객 추가 문의가 있음 → 화면 '💬 추가 문의'), `bad_rating`(보낸 답변에 👎). 화면은 60초마다 조용히 새로 고침.
+상세는 상담원도 미배정 문의를 볼 수 있습니다 (메모·답변 등 다른 처리는 [내가 맡기] 뒤에).
 ```json
 { "items": [ {
     "id": 8, "inquiry_number": "INQ-20261113-0008", "title": "배송 문의", "customer_name": "홍길동",
@@ -310,19 +315,23 @@
 - 재학습용 내보내기: `python -m backend.training.export_corrections` → `data/corrections/{category,sentiment}_corrections.csv`
   (text + 정답 라벨 + 처음 모델 라벨. 고객 원문이 있어 Git 제외)
 
-### PATCH /api/inquiries/{id}/assign — 배정·재배정 (관리자)
+### PATCH /api/inquiries/{id}/assign — 배정·재배정 (관리자) · 가져오기·넘기기 (상담원)
 ```json
-{ "assigned_to": 2 }      // null이면 배정 해제
+{ "assigned_to": 2, "memo": "택배사 분실 조사 요청함, 회신 오면 재발송 안내" }      // null이면 배정 해제
 ```
+- 관리자: 누구에게나. 상담원: 미배정 문의를 **나에게**(가져오기, [내가 맡기]) 또는 내 문의를 **다른 사람에게**(넘기기).
+  넘길 때 `memo` 2자 이상 필수(없으면 422) → 상담원 공유 메모 '[인계] …'로 남음. 그 밖은 403
 - status가 `검토 대기`·`접수`이면 `담당자 처리`로 바꿉니다. audit_logs (assign)
 - 없는 계정·비활성 계정에 배정하면 400 `INVALID_ASSIGNEE`. 배정자와 상태가 그대로면 기록하지 않습니다.
 - 응답: `{ "id", "inquiry_number", "status", "assigned_to": {id, display_name} | null, "updated_at" }` (상태 변경도 같음)
 
 ### PATCH /api/inquiries/{id}/status — 상태 변경 (로그인, **추가**)
 ```json
-{ "status": "완료" }
+{ "status": "완료", "reason": "중복 문의" }
 ```
-- 답변 없이 끝내는 경우(중복 문의, 스팸 등)용. audit_logs (status_change)
+- 답변 없이 끝내는 경우(중복 문의, 스팸 등)용. audit_logs (status_change, reason)
+- `reason`: 중복 문의 / 스팸·광고 / 고객 철회 / 전화로 안내 / 기타 → `inquiries.close_reason`, 처리 이력 '(사유: …)', 고객 조회 `closed_note`.
+  화면은 보낸 답변이 있고 그 뒤 추가 문의가 없으면 바로 완료, 아니면 사유를 고르는 창. 다시 열면 사유를 지우고 답변 기한을 새로 시작
 - 바꿀 수 있는 값: `검토 대기`, `담당자 처리`, `완료` (완료한 문의 다시 열기 포함). `접수`·`자동 처리`는 시스템만 정하므로 422
 - 지금과 같은 상태로 바꾸면 400 `INVALID_STATE`. 상담원은 배정된 문의만 (아니면 403)
 
@@ -397,6 +406,8 @@
 { "text": "고객님, 주문하신 패딩은 현재 대전 HUB에 도착해 ..." }   // final_text 로 저장
 ```
 - status가 `초안`일 때만 (발송된 답변은 400 `INVALID_STATE`). 내용이 바뀌었을 때만 audit_logs (response_edit)
+- `base`(선택): 화면이 불러온 때의 초안 내용. 그 사이 다른 사람이 고쳐 지금 내용과 다르면 409 `STALE` (덮어쓰지 않음).
+  화면은 [새 내용 불러오기] / [내 내용으로 덮어쓰기](base 없이 다시 보냄)를 보여 줌. approve 도 같음
 
 ### POST /api/responses/{id}/approve — 승인·발송
 - 본문에 `{ "text": "..." }`를 함께 보내면 그 내용으로 고친 뒤 바로 발송 (화면의 [발송] 버튼)
@@ -675,7 +686,7 @@
 
 | 메서드 | 경로 | 설명 |
 | --- | --- | --- |
-| GET | /api/admin/staff | 배정 선택 상자용: 활성 계정만 `[{id, username, display_name, role}]` |
+| GET | /api/admin/staff | 배정·넘기기 선택 상자용 (로그인한 상담원도): 활성 계정만 `[{id, username, display_name, role}]` |
 | GET | /api/admin/users | 계정 목록 (비활성 포함). `is_active`, `locked_until`, `last_login_at`, `created_at` 포함, 비밀번호 해시는 내보내지 않음 |
 | POST | /api/admin/users | `{ "username": "agent3", "display_name": "상담원 박서준", "role": "agent", "password": "8자 이상", "categories": ["배송", "교환"] }` → 201 |
 | PATCH | /api/admin/users/{id} | 바꿀 것만: `display_name`, `role`, `is_active`, `categories` |

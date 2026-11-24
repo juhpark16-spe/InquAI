@@ -58,7 +58,8 @@ class InquiryCreate(_Email):
     # 파손·불량·오배송 문의의 사진 칸 (token → '송장' / '파손 부위'), 고객이 고른 '파손·불량·오배송 문의예요',
     # '지금은 사진이 없어요' (backend/services/photo_evidence.py)
     photo_labels: dict[str, Literal["송장", "파손 부위"]] = Field(default_factory=dict, max_length=3)
-    damage_report: bool | None = None   # 파손 체크: None = 내용으로 판단, true/false = 고객이 고른 그대로
+    damage_report: bool | None = None
+    client_request_id: str | None = Field(default=None, max_length=64)   # 화면이 만든 값: 같은 값이면 같은 문의   # 파손 체크: None = 내용으로 판단, true/false = 고객이 고른 그대로
     photos_later: bool = False
 
     @field_validator("customer_name", "title", "content", mode="before")
@@ -157,6 +158,7 @@ class InquiryPublic(BaseModel):
     more_answer_coming: bool = False  # 상담원이 확인 후 다시 안내하기로 함 → '추가 안내 예정'
     order_number: str | None = None   # 내 문의의 주문번호 (없으면 추가 문의에서 받음)
     order_needs_fix: bool = False     # 적은 주문번호로 내 주문을 찾지 못함 → 추가 문의에서 다시 받음
+    closed_note: str | None = None    # 답변 없이 종료된 문의 → '종료됨'과 이 문장
     photos_requested: bool = False    # 파손 사진을 나중에 보내기로 함
 
 

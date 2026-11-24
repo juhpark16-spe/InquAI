@@ -45,6 +45,8 @@ class InquiryListItem(BaseModel):
     recheck_note: str | None = None          # '확인 후 다시 안내' 표시: 확인할 내용
     recheck_due_at: UTCDateTime | None = None  # 다시 안내할 기한
     note_count: int = 0                        # 상담원 공유 메모 개수
+    new_follow_up: bool = False                # 마지막 답변 뒤 고객 추가 문의가 있음
+    bad_rating: bool = False                   # 보낸 답변에 고객 👎
 
 
 class NoteCreate(BaseModel):
@@ -99,14 +101,19 @@ class AnalysisCorrection(BaseModel):
 
 class AssignRequest(BaseModel):
     assigned_to: int | None  # null 이면 배정 해제
+    memo: str | None = Field(None, max_length=500)   # 넘기기(인계) 메모: 상담원이 다른 상담원에게 넘길 때 필수
 
 
 # 사람이 바꿀 수 있는 상태. '접수'·'자동 처리'는 시스템(에이전트)만 정함
 MANUAL_STATUSES = ("검토 대기", "담당자 처리", "완료")
 
 
+CLOSE_REASONS = ("중복 문의", "스팸·광고", "고객 철회", "전화로 안내", "기타")
+
+
 class StatusRequest(BaseModel):
     status: Literal[MANUAL_STATUSES]
+    reason: Literal[CLOSE_REASONS] | None = None   # 답변 없이 '완료'로 바꿀 때 사유 (화면은 꼭 받음)
 
 
 class InquiryState(BaseModel):
@@ -353,6 +360,7 @@ class InquiryDetail(BaseModel):
     overdue: bool
     recheck: RecheckOut | None = None   # 확인 후 다시 안내 표시
     photo_request: str | None = None    # '나중에': 파손 문의인데 고객이 사진을 나중에 보내기로 함
+    close_reason: str | None = None     # 답변 없이 종료한 사유
     messages: list[MessageOut]          # 고객 추가 문의
     notes: list[NoteOut]                # 상담원 공유 메모 (고객에게 안 보임)
     attachments: list[AttachmentOut]

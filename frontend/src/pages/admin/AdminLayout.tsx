@@ -64,7 +64,7 @@ function GlobalSearch() {
     <form onSubmit={submit} role="search" className="relative min-w-0 flex-1 sm:max-w-md">
       <Icon name="search" className="pointer-events-none absolute left-4 top-1/2 z-10 h-[18px] w-[18px] -translate-y-1/2 text-muted" />
       <input ref={box} value={q} onChange={(e) => setQ(e.target.value)} disabled={busy} maxLength={100}
-        placeholder="문의 번호·이메일·제목으로 찾기" aria-label="문의 검색"
+        placeholder="문의 번호·이메일·제목·고객 이름·주문번호로 찾기" aria-label="문의 검색"
         className="h-12 w-full rounded-2xl border border-hairline bg-white pl-11 pr-12 text-sm text-ink outline-none placeholder:text-muted focus:border-primary" />
       <kbd className="pointer-events-none absolute right-4 top-1/2 z-10 -translate-y-1/2 rounded-md border border-hairline bg-surface-soft px-1.5 font-sans text-xs text-muted">/</kbd>
     </form>

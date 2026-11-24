@@ -53,11 +53,17 @@ class ResponseCreate(_Text):
 
 
 class ResponseUpdate(_Text):
-    pass
+    # 화면이 불러온 초안 글. 그 사이 다른 상담원이 고쳤으면(지금 글과 다르면) 409 STALE — 보내지 않으면 확인하지 않음
+    base: str | None = Field(None, max_length=MAX_LEN)
 
 
-class ResponseSend(_Text):
+class ResponseSend(ResponseUpdate):
     recheck: RecheckIn | None = None  # 발송하면서 '확인 후 다시 안내' 표시
+
+
+def _check_stale(response: Response, base: str | None) -> None:
+    if base is not None and base.strip() != (response.final_text or response.draft_text or "").strip():
+        raise AppError(409, "다른 상담원이 방금 이 초안을 고쳤어요. 새 내용을 불러와 확인하거나, 내 내용으로 덮어쓰세요.", "STALE")
 
 
 class DraftRequest(BaseModel):
@@ -118,6 +124,7 @@ def update_response(response_id: int, body: ResponseUpdate, request: Request, us
     response = _get_response_for_user(db, response_id, user)
     if response.status != "초안":
         raise AppError(400, "이미 발송한 답변은 수정할 수 없습니다.", "INVALID_STATE")
+    _check_stale(response, body.base)
     if body.text != (response.final_text or response.draft_text):
         response.final_text = body.text
         add_audit(db, request, "response_edit", user, "inquiry", response.inquiry_id, response_id=response.id)
@@ -131,8 +138,9 @@ def approve_response(response_id: int, request: Request, user: LoginUser, db: DB
     """body 로 최종 문장을 함께 보내면 그 내용으로 저장 후 발송 (수정과 발송을 한 번에). recheck 는 다시 안내 표시."""
     response = _get_response_for_user(db, response_id, user)
     if response.status != "초안":
-        raise AppError(400, "이미 발송한 답변입니다.", "INVALID_STATE")
+        raise AppError(400, "이미 발송한 답변입니다. (다른 상담원이 방금 보냈을 수 있어요)", "INVALID_STATE")
     if body is not None:
+        _check_stale(response, body.base)
         response.final_text = body.text
     _send(db, request, response, user, body.recheck if body else None)
     db.commit()

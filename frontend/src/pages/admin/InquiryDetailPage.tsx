@@ -13,6 +13,7 @@ import AnalysisEditor from "../../components/AnalysisEditor";
 import AnswerComposer from "../../components/AnswerComposer";
 import InternalNotes from "../../components/InternalNotes";
 import { confirmDialog } from "../../components/ConfirmDialog";
+import Modal from "../../components/Modal";
 import { TOOL_LABEL, byLabel, failReason, toolLabel } from "../../services/labels";
 import { Alert, Badge, Button, Input, Select, Spinner, cx, formatDate } from "../../components/ui";
 import { errorMessage, inquiryApi, type QuickAction } from "../../services/api";
@@ -478,6 +479,61 @@ function OrderHead({ o }: { o: OrderCard }) {
   );
 }
 
+const CLOSE_REASONS = ["중복 문의", "스팸·광고", "고객 철회", "전화로 안내", "기타"] as const;
+
+/** 답변 없이 완료: 사유를 고름 (고객 화면에 '종료됨'과 사유에 맞는 안내가 보임, 처리 이력에도 남음) */
+function CloseDialog({ onClose, onDone }: { onClose: () => void; onDone: (reason: string) => void }) {
+  const [reason, setReason] = useState<string>("");
+  return (
+    <Modal title="답변 없이 완료 처리" onClose={onClose}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>취소</Button>
+        <Button disabled={!reason} onClick={() => onDone(reason)}>완료 처리</Button>
+      </>}>
+      <p>고객에게 답변을 보내지 않고 끝내는 이유를 골라 주세요. 고객 화면에는 '종료됨'으로 보여요.</p>
+      <div className="grid grid-cols-2 gap-2">
+        {CLOSE_REASONS.map((r) => (
+          <label key={r} className={cx("flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2",
+            reason === r ? "border-primary bg-primary-soft" : "border-hairline hover:bg-surface-soft")}>
+            <input type="radio" name="close-reason" checked={reason === r} onChange={() => setReason(r)} />{r}
+          </label>
+        ))}
+      </div>
+    </Modal>
+  );
+}
+
+/** 넘기기: 다른 상담원에게 인계 (인계 메모 필수 → 공유 메모로 남고, 받는 사람에게 🔔 배정 알림) */
+function HandoverDialog({ staff, meId, onClose, onDone }: {
+  staff: User[]; meId: number; onClose: () => void; onDone: (to: number, memo: string) => void;
+}) {
+  const [to, setTo] = useState("");
+  const [memo, setMemo] = useState("");
+  const others = staff.filter((u) => u.id !== meId);
+  return (
+    <Modal title="다른 상담원에게 넘기기" onClose={onClose}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>취소</Button>
+        <Button disabled={!to || memo.trim().length < 2} onClick={() => onDone(Number(to), memo.trim())}>넘기기</Button>
+      </>}>
+      <label className="block space-y-1">
+        <span className="font-semibold text-ink">받는 사람</span>
+        <Select value={to} onChange={(e) => setTo(e.target.value)} className="w-full" aria-label="받는 사람">
+          <option value="">고르기</option>
+          {others.map((u) => <option key={u.id} value={u.id}>{u.display_name}</option>)}
+        </Select>
+      </label>
+      <label className="block space-y-1">
+        <span className="font-semibold text-ink">인계 메모 (필수)</span>
+        <textarea value={memo} onChange={(e) => setMemo(e.target.value)} maxLength={500} aria-label="인계 메모"
+          className="min-h-24 w-full rounded-xl border border-hairline bg-white px-3 py-2 outline-none focus:border-primary"
+          placeholder="지금까지 한 일과 남은 일 (예: 택배사 분실 조사 요청함, 회신 오면 재발송 안내)" />
+      </label>
+      <p className="text-xs text-muted">메모는 상담원 공유 메모에 '[인계]'로 남아요. 넘긴 뒤에는 이 문의를 볼 수 없어요.</p>
+    </Modal>
+  );
+}
+
 /** 주문번호 입력·변경: 고객이 빠뜨렸거나 잘못 적은 번호를 상담원이 확인한 번호로 (추가 문의·전화로 받은 번호, 고객 글에 적힌 번호) */
 function OrderNumberFix({ inquiryId, current, hints, onDone, compact }: {
   inquiryId: number; current: string | null; hints: NonNullable<InquiryDetail["order_hints"]>; onDone: (msg: string) => void; compact?: boolean;
@@ -815,6 +871,24 @@ export default function InquiryDetailPage() {
   const { user } = useAuth();
   const [data, setData] = useState<InquiryDetail | null>(null);
   const [staff, setStaff] = useState<User[]>([]);
+  const [dialog, setDialog] = useState<"close" | "handover" | null>(null);
+  // 쓰던 답변이 있으면 다른 문의로 옮기기 전에 물음 (옮기면 답변 칸이 비워짐)
+  const dirty = useRef(false);
+  async function go(to: number | null | undefined) {
+    if (!to) return;
+    if (dirty.current && !(await confirmDialog({
+      title: "작성 중인 답변이 있어요", message: "다른 문의로 옮기면 쓰던 답변이 사라져요.\n남기려면 [초안 저장]을 먼저 눌러 주세요.",
+      confirmLabel: "옮기기", cancelLabel: "머무르기", tone: "danger",
+    }))) return;
+    dirty.current = false;
+    navigate(`/admin/inquiries/${to}`);
+  }
+  // 새로 고침·창 닫기도 브라우저가 한 번 물음
+  useEffect(() => {
+    const onUnload = (e: BeforeUnloadEvent) => { if (dirty.current) e.preventDefault(); };
+    window.addEventListener("beforeunload", onUnload);
+    return () => window.removeEventListener("beforeunload", onUnload);
+  }, []);
   const [error, setError] = useState("");
   const [actionError, setActionError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -838,7 +912,7 @@ export default function InquiryDetailPage() {
     const onKey = (e: KeyboardEvent) => {
       if (!e.altKey || !queue) return;
       const to = e.key === "ArrowLeft" ? queue.prev_id : e.key === "ArrowRight" ? queue.next_id : null;
-      if (to) { e.preventDefault(); navigate(`/admin/inquiries/${to}`); }
+      if (to) { e.preventDefault(); go(to); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -848,7 +922,7 @@ export default function InquiryDetailPage() {
     inquiryApi.queue(id).then(setQueue).catch(() => setQueue(null));
   }, [id, data?.status]);
   useEffect(() => {
-    if (user?.role === "admin") inquiryApi.staff().then(setStaff).catch(() => setStaff([]));
+    inquiryApi.staff().then(setStaff).catch(() => setStaff([]));   // 관리자: 배정, 상담원: 넘길 상대
   }, [user]);
 
   async function run(action: () => Promise<unknown>) {
@@ -993,12 +1067,12 @@ export default function InquiryDetailPage() {
             {queue && queue.total > 0 && (
               <span className="flex items-center gap-1" aria-label="처리 대기열">
                 <Button variant="ghost" className="min-h-9 px-2.5 py-1" disabled={!queue.prev_id} title="이전 미처리 문의 (Alt+←)"
-                  onClick={() => queue.prev_id && navigate(`/admin/inquiries/${queue.prev_id}`)}>◀</Button>
+                  onClick={() => go(queue.prev_id)}>◀</Button>
                 <span className="px-1 tabular-nums text-muted" title="미처리 대기열 (긴급도 → 오래된 순)">
                   {queue.position ? `${queue.position} / ${queue.total}` : `대기 ${queue.total}건`}
                 </span>
                 <Button variant="ghost" className="min-h-9 px-2.5 py-1" disabled={!queue.next_id} title="다음 미처리 문의 (Alt+→)"
-                  onClick={() => queue.next_id && navigate(`/admin/inquiries/${queue.next_id}`)}>▶</Button>
+                  onClick={() => go(queue.next_id)}>▶</Button>
               </span>
             )}
             <span className="ml-1 text-muted">담당</span>
@@ -1009,16 +1083,40 @@ export default function InquiryDetailPage() {
                 {staff.map((s) => <option key={s.id} value={s.id}>{s.display_name}</option>)}
               </Select>
             ) : (
-              <span className="font-medium text-ink">{data.assigned_to?.display_name ?? "미배정"}</span>
+              <>
+                <span className="font-medium text-ink">{data.assigned_to?.display_name ?? "미배정"}</span>
+                {!data.assigned_to && (
+                  <Button disabled={busy} onClick={() => run(() => inquiryApi.assign(id, user!.id))}>내가 맡기</Button>
+                )}
+                {data.assigned_to?.id === user?.id && (
+                  <Button variant="ghost" disabled={busy} onClick={() => setDialog("handover")}>넘기기</Button>
+                )}
+              </>
             )}
             {isOpen ? (
-              <Button disabled={busy} onClick={() => run(() => inquiryApi.setStatus(id, "완료"))}>완료 처리</Button>
+              <Button disabled={busy || (user?.role !== "admin" && data.assigned_to?.id !== user?.id)}
+                onClick={() => (data.responses.some((r) => r.status === "발송") && !data.messages.length
+                  ? run(() => inquiryApi.setStatus(id, "완료")) : setDialog("close"))}>완료 처리</Button>
             ) : (
               <Button variant="ghost" disabled={busy} onClick={() => run(() => inquiryApi.setStatus(id, "담당자 처리"))}>다시 열기</Button>
             )}
           </div>
         </div>
         {actionError && <div className="mt-2"><Alert>{actionError}</Alert></div>}
+        {user?.role !== "admin" && !data.assigned_to && (
+          <div className="mt-2"><Alert kind="info">아직 담당자가 없는 문의예요. [내가 맡기]를 누르면 답변·처리할 수 있어요.</Alert></div>
+        )}
+        {dialog === "close" && (
+          <CloseDialog onClose={() => setDialog(null)}
+            onDone={(reason) => { setDialog(null); run(() => inquiryApi.setStatus(id, "완료", reason)); }} />
+        )}
+        {dialog === "handover" && user && (
+          <HandoverDialog staff={staff} meId={user.id} onClose={() => setDialog(null)}
+            onDone={(to, memo) => {
+              setDialog(null);
+              run(async () => { await inquiryApi.assign(id, to, memo); navigate("/admin/inquiries?open=true"); });
+            }} />
+        )}
         {notice && <div className="mt-2"><Alert kind="success">{notice}</Alert></div>}
         {/* 처리가 끝난 문의: 다음 미처리 문의로 바로 (목록으로 돌아갔다 오지 않게) */}
         {!isOpen && queue?.next_id && (
@@ -1026,7 +1124,7 @@ export default function InquiryDetailPage() {
             <span>
               {data.recheck ? `답변은 보냈어요 (확인 후 다시 안내 ${formatDate(data.recheck.due_at)}까지).` : "이 문의는 처리됐어요."} 미처리 {queue.total}건이 남아 있습니다.
             </span>
-            <Button className="min-h-9 px-4 py-1" onClick={() => navigate(`/admin/inquiries/${queue.next_id}`)}>다음 미처리 문의 →</Button>
+            <Button className="min-h-9 px-4 py-1" onClick={() => go(queue.next_id)}>다음 미처리 문의 →</Button>
           </div>
         )}
       </div>
@@ -1039,7 +1137,8 @@ export default function InquiryDetailPage() {
         <div className="space-y-4">
           <Card title="문의와 답변">
             {/* key: 다른 문의로 옮기면 쓰던 답변·다시 안내 체크·요청을 모두 비움 (A 문의에 쓴 글이 B 고객에게 가지 않게) */}
-            <AnswerComposer key={data.id} data={data} refFaqCodes={refFaqs.map(([code]) => code)} onChanged={load} />
+            <AnswerComposer key={data.id} data={data} refFaqCodes={refFaqs.map(([code]) => code)} onChanged={load}
+              onDirtyChange={(d) => { dirty.current = d; }} />
           </Card>
 
           <details className="group rounded-2xl border border-hairline bg-white">

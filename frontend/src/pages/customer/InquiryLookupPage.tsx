@@ -13,7 +13,9 @@ import { customerApi, errorMessage } from "../../services/api";
 import type { InquiryPublic } from "../../services/types";
 
 /** 고객에게 보이는 상태 (InquiryThreads 와 같은 기준: 마지막 글이 고객 것이면 '답변 준비 중') */
+const closed = (i: InquiryPublic) => i.status === "완료" && !!i.closed_note;
 function waiting(i: InquiryPublic) {
+  if (closed(i)) return false;
   const mine = Math.max(new Date(i.created_at).getTime(), ...i.messages.map((m) => new Date(m.at).getTime()));
   const answered = Math.max(0, ...i.answers.map((a) => new Date(a.answered_at).getTime()));
   return mine > answered;
@@ -70,8 +72,9 @@ export default function InquiryLookupPage() {
   }
 
   const pending = items?.filter((i) => waiting(i)).length ?? 0;
-  const more = items?.filter((i) => !waiting(i) && i.more_answer_coming).length ?? 0;
-  const done = (items?.length ?? 0) - pending - more;
+  const more = items?.filter((i) => !waiting(i) && !closed(i) && i.more_answer_coming).length ?? 0;
+  const ended = items?.filter(closed).length ?? 0;
+  const done = (items?.length ?? 0) - pending - more - ended;
 
   return (
     <div className="space-y-4">
@@ -89,6 +92,7 @@ export default function InquiryLookupPage() {
               {pending > 0 && <span className="font-semibold text-primary">답변 준비 중 {pending}</span>}
               {more > 0 && <span className="font-semibold text-primary">추가 안내 예정 {more}</span>}
               {done > 0 && <span className="text-emerald-700">답변 완료 {done}</span>}
+              {ended > 0 && <span>종료됨 {ended}</span>}
               <span>· 최신순, 누르면 펼쳐져요</span>
             </p>
           </div>

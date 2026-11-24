@@ -77,6 +77,9 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | recheck_due_at | DATETIME NULL | 다시 안내할 기한 |
 | recheck_by | FK → admin_users NULL | 표시한 상담원 |
 | recheck_at | DATETIME NULL | 표시한 시각 |
+| sla_started_at | DATETIME NULL | 답변 기한을 센 시작 시각 (완료 뒤 다시 열리면 그때로, 없으면 created_at, `services/sla.py`) |
+| close_reason | VARCHAR(20) NULL | 답변 없이 완료한 사유 (중복 문의·스팸·광고·고객 철회·전화로 안내·기타). 고객 조회에 '종료됨'과 안내, 다시 열면 NULL |
+| client_request_id | VARCHAR(64) NULL, 색인 | 화면이 등록 폼마다 만든 번호. 같은 이메일·같은 번호로 다시 오면 새로 만들지 않음 (두 번 등록 방지) |
 | **updated_at** | DATETIME | 상태가 바뀔 때마다 갱신 |
 
 **status 값과 바뀌는 시점**

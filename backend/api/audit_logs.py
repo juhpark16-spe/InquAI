@@ -56,7 +56,7 @@ def _summary(a: AdminAuditLog, names: dict[int, str]) -> str:
         before, after = d.get("before") or {}, d.get("after") or {}
         return f"{name(before.get('assigned_to'))} → {name(after.get('assigned_to'))}"
     if a.action == "status_change":
-        return f"{d.get('before')} → {d.get('after')}"
+        return f"{d.get('before')} → {d.get('after')}" + (f" · {d['reason']}" if d.get("reason") else "")
     if a.action in ("user_update", "template_update"):
         after = d.get("after") or {}
         return ", ".join(f"{k}: {v}" for k, v in after.items() if k != "text") + (" · 문장 변경" if "text" in after else "")

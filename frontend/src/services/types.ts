@@ -57,6 +57,7 @@ export interface InquiryCreate {
   // 파손·불량·오배송 문의: 사진 칸 이름(token → 송장/파손 부위), 고객이 고른 '파손 문의예요', '지금은 사진이 없어요'
   photo_labels?: Record<string, "송장" | "파손 부위">;
   damage_report?: boolean | null;   // 파손 체크: null = 내용으로 자동 판단
+  client_request_id?: string;     // 이 화면에서 만든 값: 다시 눌러도 같은 문의 (중복 등록 방지)
   photos_later?: boolean;
 }
 
@@ -83,6 +84,7 @@ export interface InquiryPublic {
   more_answer_coming?: boolean; // 상담원이 확인 후 다시 안내하기로 함 → '추가 안내 예정'
   order_number?: string | null;  // 내 문의의 주문번호 (없으면 추가 문의에서 받음)
   order_needs_fix?: boolean;     // 적은 주문번호로 내 주문을 찾지 못함 → 추가 문의에서 다시 받음
+  closed_note?: string | null;   // 답변 없이 종료된 문의 → '종료됨'과 이 문장
   photos_requested?: boolean;    // 파손 사진을 나중에 보내기로 함 → 추가 문의에 안내
 }
 
@@ -105,6 +107,8 @@ export interface InquiryListItem {
   recheck_note?: string | null;   // '확인 후 다시 안내' 표시: 확인할 내용
   recheck_due_at?: string | null; // 다시 안내할 기한
   note_count?: number;            // 상담원 공유 메모 개수
+  new_follow_up?: boolean;        // 마지막 답변 뒤 고객 추가 문의
+  bad_rating?: boolean;           // 보낸 답변에 고객 👎
 }
 
 /** 확인 후 다시 안내 표시 (backend/services/recheck.py) */
@@ -211,6 +215,7 @@ export interface InquiryDetail {
   overdue: boolean;
   recheck?: Recheck | null;
   photo_request?: string | null; // '나중에': 파손 문의인데 고객이 사진을 나중에 보내기로 함
+  close_reason?: string | null;  // 답변 없이 종료한 사유
   messages: { id: number; text: string; created_at: string }[];
   notes: { id: number; author: string; author_id?: number | null; text: string; created_at: string }[];
   attachments: { id: number; filename: string; content_type: string; size: number; message_id: number | null; label?: string | null; created_at: string }[];

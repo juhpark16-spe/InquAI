@@ -11,7 +11,7 @@
 from fastapi import APIRouter, Request
 from sqlalchemy import select, update
 
-from backend.core.dependencies import DB, AdminOnly
+from backend.core.dependencies import DB, AdminOnly, LoginUser
 from backend.core.errors import AppError
 from backend.core.security import hash_password
 from backend.database.models import AdminUser, RefreshToken, utcnow
@@ -35,8 +35,8 @@ def _get_user(db, user_id: int) -> AdminUser:
     return user
 
 
-@router.get("/staff", response_model=list[UserOut], summary="배정할 수 있는 계정 목록 (관리자)")
-def list_staff(_: AdminOnly, db: DB):
+@router.get("/staff", response_model=list[UserOut], summary="배정할 수 있는 계정 목록 (로그인: 상담원은 넘길 상대를 고를 때)")
+def list_staff(_: LoginUser, db: DB):
     return db.scalars(select(AdminUser).where(AdminUser.is_active.is_(True))
                       .order_by(AdminUser.role.desc(), AdminUser.id)).all()  # 상담원(agent) 먼저
 

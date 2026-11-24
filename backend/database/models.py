@@ -109,6 +109,10 @@ class Inquiry(TimestampMixin, Base):
     # 다시 안내 (backend/services/recheck.py): "확인 후 다시 안내드리겠습니다"를 먼저 보냈을 때 확인할 내용·기한
     # 답변 기한을 세기 시작한 시각: 처음은 접수 시각(NULL), 끝난 문의가 추가 문의로 다시 열리면 그 시각 (services/sla.py)
     sla_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # 답변 없이 [완료 처리]한 사유 (중복 문의 / 스팸·광고 / 고객 철회 / 전화로 안내 / 기타). 다시 열면 지움
+    close_reason: Mapped[str | None] = mapped_column(String(20))
+    # 고객 화면이 문의마다 만든 값: 응답이 늦어 다시 눌러도 같은 문의를 두 번 만들지 않게
+    client_request_id: Mapped[str | None] = mapped_column(String(64), index=True)
     # 파손·불량·오배송 문의인데 고객이 '지금은 사진이 없어요'를 고름 → '나중에' (추가 문의로 사진이 오면 풀림)
     photo_request: Mapped[str | None] = mapped_column(String(10))
     recheck_note: Mapped[str | None] = mapped_column(String(200))

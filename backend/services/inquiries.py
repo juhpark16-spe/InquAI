@@ -36,7 +36,7 @@ def _save_inquiry(db: Session, body: InquiryCreate) -> Inquiry:
     photo_evidence.check(body.title, body.content, body.attachment_tokens, body.photo_labels, body.photos_later,
                          body.damage_report)   # 파손 문의: 송장·파손 부위 사진 또는 '지금은 사진이 없어요'
     fields = body.model_dump(exclude={"password", "privacy_agreed", "attachment_tokens", "photo_labels", "damage_report",
-                                      "photos_later"})
+                                      "photos_later"})   # client_request_id 는 그대로 저장 (다시 눌렀는지 알아보려고)
     needs = photo_evidence.needs_photos(body.title, body.content, body.damage_report)
     # 두 칸(송장·파손 부위) 중 하나라도 비었는데 '지금은 사진이 없어요'면 → 나중에 받음 (한 장만 올린 경우도)
     missing = set(photo_evidence.LABELS) - set(body.photo_labels.values())
@@ -64,6 +64,14 @@ def _save_inquiry(db: Session, body: InquiryCreate) -> Inquiry:
 def register_inquiry(db: Session, body: InquiryCreate, analyzer, faq_search, llm, timeout: float,
                      schedule_draft=None) -> dict:
     """schedule_draft(inquiry_id): 답변 초안을 고객 응답 뒤에 쓰도록 맡길 함수 (API의 BackgroundTasks)"""
+    # 0. 같은 화면에서 다시 누른 등록(응답이 늦어 시간 초과 뒤 재시도): 이미 만든 문의를 그대로 돌려줌
+    if body.client_request_id:
+        same = db.scalar(select(Inquiry).where(Inquiry.client_request_id == body.client_request_id,
+                                               Inquiry.customer_email == body.customer_email))
+        if same is not None:
+            sent = [r for r in same.responses if r.status == "발송"]
+            return _customer_response(same, (sent[-1].final_text or sent[-1].draft_text) if sent else None)
+
     # 1. 저장 (접수). 이후 단계가 실패해도 문의는 남음
     inquiry = _save_inquiry(db, body)
 
@@ -163,6 +171,12 @@ def _owned(db: Session, email: str, password: str) -> list[Inquiry]:
     return [i for i in candidates if i.lookup_password_hash and verify_password(password, i.lookup_password_hash)]
 
 
+# 답변 없이 종료한 사유 → 고객에게 보여 줄 말 (스팸·광고는 사유를 말하지 않음)
+CLOSED_TEXT = {"중복 문의": "같은 내용의 다른 문의에서 안내드려요.", "고객 철회": "문의를 취소하셔서 종료했어요.",
+               "전화로 안내": "전화로 안내드리고 종료했어요.", "스팸·광고": "상담원이 확인 후 종료했어요.",
+               "기타": "상담원이 확인 후 종료했어요."}
+
+
 def _public(inquiry: Inquiry) -> dict:
     sent = [r for r in inquiry.responses if r.status == "발송"]  # 초안은 고객에게 보이지 않음
     last = sent[-1] if sent else None
@@ -179,6 +193,8 @@ def _public(inquiry: Inquiry) -> dict:
             "attachments": [{"url": uploads.public_url(a), "filename": a.filename, "message_id": a.message_id, "label": a.label}
                             for a in inquiry.attachments],
             "can_follow_up": len(inquiry.messages) < FOLLOW_UP_LIMIT,
+            # 답변 없이 종료: 고객 화면은 '답변 준비 중' 대신 '종료됨'과 이 문장 (다시 열리면 None)
+            "closed_note": CLOSED_TEXT.get(inquiry.close_reason) if inquiry.status == "완료" and inquiry.close_reason else None,
             "order_number": inquiry.order_number,           # 없으면 추가 문의에서 주문번호를 받음
             "order_needs_fix": bool(inquiry.order_number) and not order_resolves(object_session(inquiry), inquiry),   # 적은 번호로 주문을 찾지 못함
             "photos_requested": inquiry.photo_request is not None,   # 파손 사진을 나중에 보내기로 함 → 추가 문의에 안내
@@ -208,6 +224,7 @@ def add_follow_up(db: Session, inquiry: Inquiry, content: str, tokens: list[str]
         inquiry.photo_request = None   # 나중에 보내기로 한 사진이 옴
     if inquiry.status in REOPEN_FROM:
         inquiry.sla_started_at = utcnow()   # 끝난 문의가 다시 열림 → 답변 기한을 지금부터 다시 셈
+        inquiry.close_reason = None
     if inquiry.status in REOPEN_FROM or inquiry.status == "접수":
         inquiry.status = "담당자 처리"  # 사람이 이어서 봐야 함
     if inquiry.assigned_to is None:

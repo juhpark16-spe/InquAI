@@ -345,3 +345,28 @@ test("로그인하지 않으면 관리 화면 대신 로그인 화면", async ({
   await expect(page).toHaveURL(/\/login/);
   await expect(page.getByRole("heading", { name: "InquAI 관리" })).toBeVisible();
 });
+
+test("답변 없이 완료할 때 사유를 고름 → 고객 조회에 '종료됨'과 안내", async ({ page }) => {
+  const email = `e2e-close-${Date.now()}@example.com`;
+  const number = await createInquiry(page, email, "같은 내용 다시 문의 (자동 테스트)", "어제 남긴 문의와 같은 내용이에요. 반품 접수는 어디서 하나요?");
+
+  await staffLogin(page, "admin");
+  await page.getByLabel("문의 검색").focus();
+  await page.keyboard.type(number);
+  await page.keyboard.press("Enter");
+  await expect(page).toHaveURL(/\/admin\/inquiries\/\d+$/);
+  await page.getByRole("button", { name: "완료 처리" }).click();
+  const dialog = page.getByRole("dialog", { name: "답변 없이 완료 처리" });
+  await expect(dialog.getByRole("button", { name: "완료 처리" })).toBeDisabled();   // 사유를 골라야 누를 수 있음
+  await dialog.getByLabel("중복 문의").check();
+  await dialog.getByRole("button", { name: "완료 처리" }).click();
+  await expect(page.getByRole("button", { name: "다시 열기" })).toBeVisible();      // 완료됨 (사유는 처리 이력에 남음)
+
+  await page.context().clearCookies();
+  await page.goto("/inquiry/lookup");
+  await page.getByLabel("문의할 때 쓴 이메일").fill(email);
+  await page.getByLabel("조회 비밀번호").fill(LOOKUP_PASSWORD);
+  await page.getByRole("button", { name: "조회", exact: true }).click();
+  await expect(page.getByText("종료됨 1")).toBeVisible();
+  await expect(page.getByText(/답변 없이 종료되었어요/)).toBeVisible();
+});

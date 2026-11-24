@@ -171,10 +171,12 @@ export const inquiryApi = {
     return http.get<Page<InquiryListItem>>("/inquiries", { params }).then((r) => r.data);
   },
   get: (id: number) => http.get<InquiryDetail>(`/inquiries/${id}`).then((r) => r.data),
-  assign: (id: number, assigned_to: number | null) =>
-    http.patch<InquiryState>(`/inquiries/${id}/assign`, { assigned_to }).then((r) => r.data),
-  setStatus: (id: number, status: string) =>
-    http.patch<InquiryState>(`/inquiries/${id}/status`, { status }).then((r) => r.data),
+  // 배정: 관리자는 누구에게나, 상담원은 [내가 맡기](미배정) · [넘기기](인계 메모 필수)
+  assign: (id: number, assigned_to: number | null, memo?: string) =>
+    http.patch<InquiryState>(`/inquiries/${id}/assign`, { assigned_to, memo: memo || null }).then((r) => r.data),
+  // 답변 없이 완료할 때는 사유 (고객 화면에 '종료됨'과 함께)
+  setStatus: (id: number, status: string, reason?: string) =>
+    http.patch<InquiryState>(`/inquiries/${id}/status`, { status, reason: reason || null }).then((r) => r.data),
   staff: () => http.get<User[]>("/admin/staff").then((r) => r.data),
   // 분류 결과 수정 (재학습 데이터): 바꿀 것만 보냄
   correctAnalysis: (id: number, body: { category?: string; sentiment?: string }) =>
@@ -207,9 +209,11 @@ export const responseApi = {
   create: (inquiryId: number, text: string, send: boolean, recheck?: RecheckInput | null) =>
     http.post<ResponseItem>(`/inquiries/${inquiryId}/responses`, { text, send, recheck: send ? recheck ?? null : null })
       .then((r) => r.data),
-  update: (id: number, text: string) => http.put<ResponseItem>(`/responses/${id}`, { text }).then((r) => r.data),
-  approve: (id: number, text?: string, recheck?: RecheckInput | null) =>
-    http.post<ResponseItem>(`/responses/${id}/approve`, text === undefined ? undefined : { text, recheck: recheck ?? null })
+  // base: 화면이 불러온 초안 글. 그 사이 다른 상담원이 고쳤으면 409 STALE (덮어쓰려면 base 없이)
+  update: (id: number, text: string, base?: string | null) =>
+    http.put<ResponseItem>(`/responses/${id}`, { text, base: base ?? null }).then((r) => r.data),
+  approve: (id: number, text?: string, recheck?: RecheckInput | null, base?: string | null) =>
+    http.post<ResponseItem>(`/responses/${id}/approve`, text === undefined ? undefined : { text, recheck: recheck ?? null, base: base ?? null })
       .then((r) => r.data),
   // AI 초안 만들기: 보내지 않은 초안 자리에 씀. 상담원이 고친 초안이 있으면 replace=true 일 때만 바꿈 (아니면 409)
   draft: (inquiryId: number, replace = false, instruction?: string) =>

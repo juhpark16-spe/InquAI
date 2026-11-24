@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session, selectinload
 from backend.core.dependencies import DB, AdminOnly, LoginUser
 from backend.core.errors import AppError
 from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminUser, AnalysisResult, Attachment,
-                                     Inquiry, InquiryNote, LabelCorrection, Notification, Order, utcnow)
+                                     Inquiry, InquiryNote, LabelCorrection, Notification, Order, as_utc, utcnow)
 from backend.schemas.inquiry import normalize_order_number
 from backend.schemas.inquiry_admin import (AnalysisCorrection, AnalysisOut, AssignRequest, InquiryDetail, InquiryListItem, InquiryState, NoteCreate,
                                            NoteOut, Page, StatusRequest)
@@ -30,13 +30,14 @@ router = APIRouter(prefix="/inquiries", tags=["문의 관리"])
 URGENCY_ORDER = case({"높음": 0, "보통": 1, "낮음": 2}, value=AnalysisResult.urgency, else_=3)
 
 
-def get_inquiry_for_user(db: Session, inquiry_id: int, user: AdminUser) -> Inquiry:
-    """문의를 찾고 권한을 확인합니다. 배정·상태 변경 등 다른 관리 API도 이 함수를 씁니다."""
+def get_inquiry_for_user(db: Session, inquiry_id: int, user: AdminUser, allow_unassigned: bool = False) -> Inquiry:
+    """문의를 찾고 권한을 확인합니다. 배정·상태 변경 등 다른 관리 API도 이 함수를 씁니다.
+    allow_unassigned: 상담원이 미배정 문의를 보고(상세) 가져올(배정) 수 있게. 답변·처리는 맡은 뒤에만"""
     inquiry = db.get(Inquiry, inquiry_id)
     if inquiry is None:
         raise AppError(404, "문의를 찾을 수 없습니다.", "NOT_FOUND")
-    if user.role != "admin" and inquiry.assigned_to != user.id:
-        raise AppError(403, "배정된 문의만 볼 수 있습니다.", "FORBIDDEN")
+    if user.role != "admin" and inquiry.assigned_to != user.id and not (allow_unassigned and inquiry.assigned_to is None):
+        raise AppError(403, "배정된 문의만 볼 수 있습니다. (미배정 문의는 [내가 맡기] 뒤에 처리할 수 있어요)", "FORBIDDEN")
     return inquiry
 
 
@@ -56,15 +57,15 @@ def list_inquiries(
     overdue: bool | None = Query(None, description="true 면 답변 기한(주말 제외, 긴급 4시간, 그 외 24시간)을 넘긴 미처리만"),
     assigned_to: str | None = Query(None, description="상담원 id, me, none (관리자만 지정 가능)"),
     recheck: bool | None = Query(None, description="true 면 '확인 후 다시 안내' 표시가 남은 문의만 (다시 안내 기한이 가까운 순)"),
-    q: str | None = Query(None, max_length=100, description="제목·내용·문의 번호·이메일 검색"),
+    q: str | None = Query(None, max_length=100, description="제목·내용·문의 번호·이메일·고객 이름·주문번호 검색"),
     sort: Literal["urgency", "-created_at"] = "urgency",
     page: int = Query(1, ge=1),
     size: int = Query(20, ge=1, le=100),
 ):
     stmt = select(Inquiry, AnalysisResult).outerjoin(AnalysisResult, AnalysisResult.inquiry_id == Inquiry.id)
 
-    if user.role != "admin":
-        assigned_to = "me"  # 상담원은 자신에게 배정된 문의만
+    if user.role != "admin" and assigned_to != "none":
+        assigned_to = "me"  # 상담원은 자신에게 배정된 문의만 (미배정 문의 목록은 볼 수 있음: 가져오기)
     if assigned_to == "me":
         stmt = stmt.where(Inquiry.assigned_to == user.id)
     elif assigned_to == "none":
@@ -96,13 +97,15 @@ def list_inquiries(
     if q and q.strip():
         word = q.strip()
         stmt = stmt.where(or_(*(col.contains(word, autoescape=True) for col in (
-            Inquiry.title, Inquiry.content, Inquiry.inquiry_number, Inquiry.customer_email))))
+            Inquiry.title, Inquiry.content, Inquiry.inquiry_number, Inquiry.customer_email, Inquiry.customer_name,
+            Inquiry.order_number))))
 
     total = db.scalar(select(func.count()).select_from(stmt.subquery()))
     order = [URGENCY_ORDER, Inquiry.created_at.desc()] if sort == "urgency" else [Inquiry.created_at.desc()]
     if recheck:
         order = [Inquiry.recheck_due_at]
-    rows = db.execute(stmt.options(selectinload(Inquiry.assignee), selectinload(Inquiry.notes))
+    rows = db.execute(stmt.options(selectinload(Inquiry.assignee), selectinload(Inquiry.notes),
+                                   selectinload(Inquiry.messages), selectinload(Inquiry.responses))
                       .order_by(*order, Inquiry.id.desc())
                       .offset((page - 1) * size).limit(size)).all()
 
@@ -116,8 +119,17 @@ def list_inquiries(
         "overdue": sla.is_overdue(i.status, sla.started(i), a.urgency if a else None),
         "recheck_note": i.recheck_note, "recheck_due_at": i.recheck_due_at,
         "note_count": len(i.notes),   # 상담원 공유 메모 개수 (목록 제목 옆 📝)
+        **_activity(i),
     } for i, a in rows]
     return {"items": items, "total": total, "page": page, "size": size}
+
+
+def _activity(i: Inquiry) -> dict:
+    """목록 표시: 마지막으로 보낸 답변 뒤에 고객이 추가 문의를 남겼는지, 보낸 답변에 👎 가 있는지"""
+    sent = [r for r in i.responses if r.status == "발송"]
+    last_sent = max((as_utc(r.approved_at or r.created_at) for r in sent), default=None)
+    new_follow_up = any(last_sent is None or as_utc(m.created_at) > last_sent for m in i.messages) if i.messages else False
+    return {"new_follow_up": new_follow_up, "bad_rating": any(r.rating is not None and r.rating < 0 for r in sent)}
 
 
 def _state(inquiry: Inquiry) -> dict:
@@ -125,13 +137,27 @@ def _state(inquiry: Inquiry) -> dict:
             "assigned_to": _assignee(inquiry.assignee), "updated_at": inquiry.updated_at}
 
 
-@router.patch("/{inquiry_id}/assign", response_model=InquiryState, summary="배정·재배정 (관리자)")
-def assign_inquiry(inquiry_id: int, body: AssignRequest, request: Request, admin: AdminOnly, db: DB):
-    inquiry = get_inquiry_for_user(db, inquiry_id, admin)
+@router.patch("/{inquiry_id}/assign", response_model=InquiryState, summary="배정·넘기기·가져오기 (로그인)")
+def assign_inquiry(inquiry_id: int, body: AssignRequest, request: Request, user: LoginUser, db: DB):
+    """관리자: 누구에게나 배정·해제. 상담원: 맡은 문의를 다른 상담원에게 넘기기(인계 메모 필수, 공유 메모로 남음),
+    미배정 문의를 내가 맡기. 받는 사람에게는 🔔 '배정' 알림"""
+    inquiry = get_inquiry_for_user(db, inquiry_id, user, allow_unassigned=True)
+    admin = user
+    memo = (body.memo or "").strip()
+    if user.role != "admin":
+        if inquiry.assigned_to is None:
+            if body.assigned_to != user.id:
+                raise AppError(403, "미배정 문의는 내가 맡는 것만 할 수 있어요.", "FORBIDDEN")
+        elif body.assigned_to is None or body.assigned_to == user.id:
+            raise AppError(422, "넘길 상담원을 골라 주세요.", "VALIDATION_ERROR")
+        elif len(memo) < 2:
+            raise AppError(422, "넘길 때는 인계 메모(지금까지 한 일·남은 일)를 적어 주세요.", "VALIDATION_ERROR")
     if body.assigned_to is not None:
         target = db.get(AdminUser, body.assigned_to)
         if target is None or not target.is_active:
             raise AppError(400, "배정할 수 없는 계정입니다.", "INVALID_ASSIGNEE")
+    if memo:   # 인계 메모는 상담원 공유 메모로 (받는 사람이 바로 봄)
+        db.add(InquiryNote(inquiry_id=inquiry.id, author_id=user.id, text=f"[인계] {memo}"))
 
     before = {"assigned_to": inquiry.assigned_to, "status": inquiry.status}
     inquiry.assigned_to = body.assigned_to
@@ -156,7 +182,11 @@ def change_status(inquiry_id: int, body: StatusRequest, request: Request, user: 
     inquiry.status = body.status
     if before in ("완료", "자동 처리") and body.status in sla.OPEN_STATUSES:
         inquiry.sla_started_at = utcnow()   # 다시 열기: 답변 기한을 지금부터 다시 셈
-    add_audit(db, request, "status_change", user, "inquiry", inquiry.id, before=before, after=body.status)
+        inquiry.close_reason = None
+    if body.status == "완료":
+        inquiry.close_reason = body.reason   # 답변 없이 끝내는 사유 (고객 화면에 '종료됨'과 함께)
+    add_audit(db, request, "status_change", user, "inquiry", inquiry.id, before=before, after=body.status,
+              reason=body.reason)
     db.commit()
     db.refresh(inquiry)
     return _state(inquiry)
@@ -203,7 +233,7 @@ def queue(inquiry_id: int, user: LoginUser, db: DB):
 
 @router.get("/{inquiry_id}", response_model=InquiryDetail, summary="문의 상세 (로그인)")
 def get_inquiry(inquiry_id: int, user: LoginUser, db: DB):
-    inquiry = get_inquiry_for_user(db, inquiry_id, user)
+    inquiry = get_inquiry_for_user(db, inquiry_id, user, allow_unassigned=True)
     corrections = db.scalars(select(LabelCorrection).where(LabelCorrection.inquiry_id == inquiry.id)
                              .order_by(LabelCorrection.id)).all()
     urgency = inquiry.analysis.urgency if inquiry.analysis else None
@@ -229,6 +259,7 @@ def get_inquiry(inquiry_id: int, user: LoginUser, db: DB):
         "overdue": sla.is_overdue(inquiry.status, sla.started(inquiry), urgency),
         "recheck": recheck_svc.info(inquiry, names),
         "photo_request": inquiry.photo_request,
+        "close_reason": inquiry.close_reason,
         "messages": [{"id": m.id, "text": m.content, "created_at": m.created_at} for m in inquiry.messages],
         "notes": [{"id": n.id, "author": names.get(n.author_id, "?"), "author_id": n.author_id, "text": n.text,
                    "created_at": n.created_at}

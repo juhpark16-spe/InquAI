@@ -8,7 +8,7 @@
 //   다음 답변을 보내면 표시가 풀림 (backend/services/recheck.py)
 import { useEffect, useRef, useState } from "react";
 
-import { customerApi, errorMessage, inquiryApi, responseApi, templateApi, type RecheckInput, type ReplyTemplate } from "../services/api";
+import { customerApi, errorCode, errorMessage, inquiryApi, responseApi, templateApi, type RecheckInput, type ReplyTemplate } from "../services/api";
 import type { FaqPublic, InquiryDetail } from "../services/types";
 import { Bubble, Note } from "./Chat";
 import { confirmDialog } from "./ConfirmDialog";
@@ -80,10 +80,11 @@ const LATER_WORDS = /확인\s*(후|하여|해서|하고).{0,20}(안내|연락|�
 // AI 초안 다시 만들기에 붙일 요청 (상담원이 직접 적어도 됨, 200자)
 const DRAFT_ASKS = ["더 짧게", "사과를 먼저", "더 정중하게", "회수·환불 일정 안내 추가"];
 
-export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
+export default function AnswerComposer({ data, refFaqCodes, onChanged, onDirtyChange }: {
   data: InquiryDetail;
   refFaqCodes: string[];
   onChanged: () => void;
+  onDirtyChange?: (dirty: boolean) => void;   // 쓰던 답변이 있는지 (다른 문의로 옮기기 전 확인용)
 }) {
   const sent = data.responses.filter((r) => r.status === "발송");
   const draft = data.responses.find((r) => r.status === "초안");
@@ -121,6 +122,10 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
   }, [refFaqCodes.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dirty = text.trim() !== (draft ? (draft.final_text ?? draft.draft_text) : "").trim();
+  useEffect(() => { onDirtyChange?.(dirty); }, [dirty]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 두 상담원이 같은 초안을 고칠 때: 내가 불러온 글(base)과 서버 글이 다르면 409 STALE → 새 내용 불러오기 / 내 내용으로 덮어쓰기
+  const [stale, setStale] = useState(false);
+  const base = draft ? (draft.final_text ?? draft.draft_text) : null;
 
   async function run(kind: "save" | "send" | "draft", action: () => Promise<unknown>, ok: string) {
     setError("");
@@ -131,13 +136,14 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
       setNotice(ok);
       onChanged();
     } catch (err) {
+      setStale(errorCode(err) === "STALE");
       setError(errorMessage(err));
     } finally {
       setBusy("");
     }
   }
 
-  const save = async (send: boolean) => {
+  const save = async (send: boolean, overwrite = false) => {
     if (send && recheckOn && !recheckReady) {
       setError("확인 후 다시 안내: 확인할 내용과 다시 안내할 기한(지금 이후)을 정해 주세요.");
       return;
@@ -153,8 +159,10 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
         : data.recheck ? "답변을 보냈습니다. 다시 안내 표시도 풀었습니다."
           : "답변을 보냈습니다. 고객 조회 화면에 보이고 고객에게 답변 알림(메일)이 가며, 문의는 완료로 바뀌었습니다.";
     return run(send ? "send" : "save", async () => {
-    if (draft) await (send ? responseApi.approve(draft.id, text, recheck) : responseApi.update(draft.id, text));
+    const b = overwrite ? null : base;   // 덮어쓰기면 확인하지 않음
+    if (draft) await (send ? responseApi.approve(draft.id, text, recheck, b) : responseApi.update(draft.id, text, b));
     else await responseApi.create(data.id, text, send, recheck);
+    setStale(false);
     if (send) { // 보낸 뒤에는 입력칸을 비워 추가 답변용으로
       setText("");
       setRecheckOn(false);
@@ -440,6 +448,14 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged }: {
             </div>
           </>
         {error && <Alert>{error}</Alert>}
+        {stale && (
+          <div className="flex flex-wrap gap-2">
+            <Button variant="ghost" className="min-h-9 px-3 py-1" disabled={!!busy}
+              onClick={() => { setStale(false); setError(""); onChanged(); }}>새 내용 불러오기 (내 글은 사라져요)</Button>
+            <Button variant="danger" className="min-h-9 px-3 py-1" disabled={!!busy}
+              onClick={() => save(false, true)}>내 내용으로 덮어쓰기</Button>
+          </div>
+        )}
         {notice && <Alert kind="success">{notice}</Alert>}
       </div>
     </div>

@@ -34,8 +34,15 @@ export default function InquiryListPage() {
   const page = Number(params.get("page") ?? 1);
   const key = params.toString();
 
+  // 1분마다 조용히 다시 불러옴 (새 문의·추가 문의·👎 를 놓치지 않게, 로딩 표시 없이)
+  const [tick, setTick] = useState(0);
   useEffect(() => {
-    setLoading(true);
+    const t = window.setInterval(() => { if (document.visibilityState === "visible") setTick((n) => n + 1); }, 60_000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  useEffect(() => {
+    if (tick === 0) setLoading(true);
     setError("");
     inquiryApi
       .list({
@@ -48,7 +55,7 @@ export default function InquiryListPage() {
       .catch((err) => setError(errorMessage(err)))
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, tick]);
 
   function update(name: string, value: string) {
     const next = new URLSearchParams(params);
@@ -73,7 +80,7 @@ export default function InquiryListPage() {
         <div>
           <h1 className="page-title">문의 관리</h1>
           <p className="text-sm text-slate-500">
-            {user?.role === "agent" ? "나에게 배정된 문의만 보입니다." : "긴급도 높은 문의가 위에 옵니다."}
+            {user?.role === "agent" ? (params.get("assigned_to") === "none" ? "아직 담당자가 없는 문의예요. 열어서 [내가 맡기]를 누르면 처리할 수 있어요." : "나에게 배정된 문의만 보입니다.") : "긴급도 높은 문의가 위에 옵니다."}
           </p>
         </div>
         {q && (
@@ -103,11 +110,17 @@ export default function InquiryListPage() {
         {filter("urgency", "긴급도", URGENCIES)}
         {filter("category", "유형", CATEGORIES)}
         {filter("decision", "처리 방식", DECISIONS)}
-        {user?.role === "admin" && (
+        {user?.role === "admin" ? (
           <Select value={params.get("assigned_to") ?? ""} onChange={(e) => update("assigned_to", e.target.value)} aria-label="배정">
             <option value="">배정 전체</option>
             <option value="none">미배정</option>
             <option value="me">나에게 배정</option>
+          </Select>
+        ) : (
+          // 상담원: 내 문의 / 아직 아무도 맡지 않은 문의 ([내가 맡기]로 가져오기)
+          <Select value={params.get("assigned_to") === "none" ? "none" : ""} onChange={(e) => update("assigned_to", e.target.value)} aria-label="배정">
+            <option value="">내 문의</option>
+            <option value="none">미배정 문의 (가져오기)</option>
           </Select>
         )}
         <Select value={params.get("sort") ?? "urgency"} onChange={(e) => update("sort", e.target.value === "urgency" ? "" : e.target.value)} aria-label="정렬">
@@ -140,7 +153,9 @@ export default function InquiryListPage() {
                 </td>
                 <td className="max-w-xs truncate px-3 py-3">
                   {i.title}
-                  {!!i.note_count && <span className="ml-1.5 text-xs text-amber-800" title={`상담원 공유 메모 ${i.note_count}개`}>📝 {i.note_count}</span>}
+                  {!!i.note_count && <span className="ml-1.5 text-xs text-slate-600" title={`상담원 공유 메모 ${i.note_count}개`}>📝 {i.note_count}</span>}
+                  {i.new_follow_up && <span className="ml-1.5 rounded-full bg-primary-soft px-2 py-0.5 text-xs font-semibold text-primary" title="마지막 답변 뒤에 고객이 추가 문의를 남겼어요">💬 추가 문의</span>}
+                  {i.bad_rating && <span className="ml-1.5 rounded-full bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700" title="보낸 답변에 고객이 '도움 안 됨'을 남겼어요">👎</span>}
                 </td>
                 <td className="whitespace-nowrap px-3 py-3">{i.customer_name}</td>
                 <td className="whitespace-nowrap px-3 py-3">{i.category ?? "-"}<LowConfidence value={i.confidence} /></td>

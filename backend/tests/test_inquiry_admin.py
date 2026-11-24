@@ -105,8 +105,11 @@ def test_invalid_params(client, inquiries, params):
 def test_agent_sees_only_assigned(client, inquiries):
     login(client, "agent1")
     assert numbers(client.get("/api/inquiries")) == ["0002", "0003"]
-    # 다른 배정 조건을 줘도 자신에게 배정된 것만
-    assert numbers(client.get("/api/inquiries", params={"assigned_to": "none"})) == ["0002", "0003"]
+    # 다른 상담원의 문의는 볼 수 없음 (다른 배정 조건을 줘도 자신에게 배정된 것만)
+    assert numbers(client.get("/api/inquiries", params={"assigned_to": "1"})) == ["0002", "0003"]
+    # 미배정 문의 목록은 볼 수 있음 ([내가 맡기]로 가져오기 위해)
+    unassigned = numbers(client.get("/api/inquiries", params={"assigned_to": "none"}))
+    assert unassigned and not set(unassigned) & {"0002", "0003"}
 
 
 def test_detail_admin(client, inquiries):
@@ -130,7 +133,9 @@ def test_detail_before_analysis(client, inquiries):
 def test_detail_permissions(client, inquiries):
     login(client, "agent1")
     assert client.get("/api/inquiries/2").status_code == 200        # 배정됨
-    r = client.get("/api/inquiries/1")                                # 배정 안 됨
+    assert client.get("/api/inquiries/1").status_code == 200        # 미배정: 볼 수는 있음 ([내가 맡기]로 가져오기)
+    r = client.post("/api/inquiries/1/notes", json={"text": "메모"},   # 처리는 맡은 뒤에
+                    headers={"X-CSRF-Token": client.cookies.get("csrf_token")})
     assert r.status_code == 403 and r.json()["code"] == "FORBIDDEN"
     assert client.get("/api/inquiries/999").status_code == 404
 
@@ -191,10 +196,20 @@ def test_assign_invalid_target(client, db, inquiries):
     assert patch(client, "/api/inquiries/999/assign", {"assigned_to": AGENT_ID}).status_code == 404
 
 
-def test_agent_cannot_assign(client, inquiries):
+def test_agent_claim_and_handover(client, db, inquiries):
+    """상담원: 미배정 문의는 '내가 맡기'만, 맡은 문의는 인계 메모와 함께 다른 사람에게 넘기기 (메모는 공유 메모로)"""
     login(client, "agent1")
-    r = patch(client, "/api/inquiries/2/assign", {"assigned_to": AGENT_ID})
+    r = patch(client, "/api/inquiries/5/assign", {"assigned_to": 1})          # 미배정을 남에게 → 안 됨
     assert r.status_code == 403 and r.json()["code"] == "FORBIDDEN"
+    assert patch(client, "/api/inquiries/5/assign", {"assigned_to": AGENT_ID}).status_code == 200   # 내가 맡기
+    assert patch(client, "/api/inquiries/2/assign", {"assigned_to": 1}).status_code == 422          # 인계 메모 없음
+    r = patch(client, "/api/inquiries/2/assign", {"assigned_to": 1, "memo": "환불 요청 확인 중, 카드사 회신 대기"})
+    assert r.status_code == 200 and r.json()["assigned_to"]["id"] == 1
+    assert client.get("/api/inquiries/2").status_code == 403                  # 넘긴 뒤에는 볼 수 없음
+    client.cookies.clear()
+    login(client, "admin")
+    notes = client.get("/api/inquiries/2").json()["notes"]
+    assert notes[-1]["text"] == "[인계] 환불 요청 확인 중, 카드사 회신 대기"
 
 
 def test_patch_requires_csrf(client, inquiries):
@@ -229,9 +244,9 @@ def test_status_only_manual_values(client, inquiries, value):
     login(client, "admin")
     assert patch(client, "/api/inquiries/1/status", {"status": value}).status_code == 422
 
-def test_staff_list_admin_only(client, inquiries):
+def test_staff_list(client, inquiries):
     login(client, "agent1")
-    assert client.get("/api/admin/staff").status_code == 403
+    assert client.get("/api/admin/staff").status_code == 200        # 상담원도 넘길 상대를 고를 수 있게
     client.cookies.clear()
     login(client, "admin")
     r = client.get("/api/admin/staff")

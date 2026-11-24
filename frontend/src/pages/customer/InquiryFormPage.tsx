@@ -29,13 +29,30 @@ function normalizeOrder(raw: string): string | null {
   const fixed = /^\d{12}$/.test(v) ? `${v.slice(0, 8)}-${v.slice(8)}` : v;
   return /^\d{8}-\d{4}$/.test(fixed) ? fixed : null;
 }
+// 쓰던 문의를 임시 저장 (새로 고침·실수로 창을 옮겨도 남음, 탭을 닫으면 지워짐). 비밀번호는 저장하지 않음
+const DRAFT_KEY = "inquai.inquiryDraft";
+type Draft = Pick<typeof EMPTY, "customer_name" | "customer_email" | "order_number" | "title" | "content">;
+function readDraft(): Draft | null {
+  try {
+    const d = JSON.parse(sessionStorage.getItem(DRAFT_KEY) ?? "null");
+    return d && (d.title || d.content) ? d : null;
+  } catch { return null; }
+}
+function clearDraft() { try { sessionStorage.removeItem(DRAFT_KEY); } catch { /* 저장소를 못 쓰는 브라우저 */ } }
+const newRequestId = () => (crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`);
 const WAIT_MESSAGES = ["문의 내용을 분석하고 있습니다…", "답변을 작성하고 있습니다…", "조금만 기다려 주세요…"];
 
 export default function InquiryFormPage() {
   const { customer } = useShop();
   const [params] = useSearchParams();
   const [orders, setOrders] = useState<ShopOrder[]>([]);
-  const [form, setForm] = useState({ ...EMPTY, order_number: params.get("order") ?? "" });
+  const presetOrder = params.get("order") ?? "";
+  const [restored] = useState(readDraft);
+  const [form, setForm] = useState(() => ({ ...EMPTY, ...restored, ...(presetOrder ? { order_number: presetOrder } : {}) }));
+  // 같은 문의를 두 번 등록하지 않게: 응답이 늦어 다시 눌러도 서버가 같은 번호로 처리 (등록에 성공하면 새로 만듦)
+  const [requestId, setRequestId] = useState(newRequestId);
+  const [showRestored, setShowRestored] = useState(!!restored);
+  const [copied, setCopied] = useState(false);
   const [sending, setSending] = useState(false);
   const [waitStep, setWaitStep] = useState(0);
   const [error, setError] = useState("");
@@ -57,6 +74,15 @@ export default function InquiryFormPage() {
     const timer = setInterval(() => setWaitStep((s) => Math.min(s + 1, WAIT_MESSAGES.length - 1)), 4000);
     return () => clearInterval(timer);
   }, [sending]);
+
+  useEffect(() => {
+    if (result) return;
+    const { customer_name, customer_email, order_number, title, content } = form;
+    try {
+      if (title || content) sessionStorage.setItem(DRAFT_KEY, JSON.stringify({ customer_name, customer_email, order_number, title, content }));
+      else sessionStorage.removeItem(DRAFT_KEY);
+    } catch { /* 저장소를 못 쓰는 브라우저: 임시 저장 없이 그대로 씀 */ }
+  }, [form, result]);
 
   useEffect(() => {
     if (customer) shopApi.orders().then(setOrders).catch(() => setOrders([]));
@@ -103,7 +129,10 @@ export default function InquiryFormPage() {
         privacy_agreed: agreed, attachment_tokens: allPhotos.map((p) => p.token),
         photo_labels: damageMode
           ? Object.fromEntries(SLOTS.flatMap((s) => (evidence[s.label] ? [[evidence[s.label]!.token, s.label]] : []))) : {},
-        damage_report: damageChoice, photos_later: damageMode && photosLater }));
+        damage_report: damageChoice, photos_later: damageMode && photosLater, client_request_id: requestId }));
+      clearDraft();
+      setShowRestored(false);
+      setRequestId(newRequestId());
       setLookupEmail(form.customer_email);
       setSentAt(new Date().toISOString());
     } catch (err) {
@@ -111,7 +140,11 @@ export default function InquiryFormPage() {
         setDamageChoice(true);
         setPhotoTried(true);
       }
-      setError(errorMessage(err));
+      // 응답이 늦은 경우: 이미 접수됐을 수 있음. 같은 요청 번호로 다시 보내면 두 번 등록되지 않음
+      const timedOut = (err as { code?: string })?.code === "ECONNABORTED";
+      setError(timedOut
+        ? "응답이 늦어지고 있어요. 문의가 이미 접수됐을 수 있어요. [문의 등록]을 한 번 더 누르면 두 번 등록되지 않고 결과를 보여 드려요."
+        : errorMessage(err));
     } finally {
       setSending(false);
     }
@@ -123,7 +156,13 @@ export default function InquiryFormPage() {
         <Card title="문의가 등록되었습니다">
           <dl className="mb-4 grid grid-cols-[6rem_1fr] gap-y-1 text-sm">
             <dt className="text-slate-500">문의 번호</dt>
-            <dd className="font-mono font-semibold text-slate-900">{result.inquiry_number}</dd>
+            <dd className="flex items-center gap-2">
+              <span className="font-mono font-semibold text-slate-900">{result.inquiry_number}</span>
+              <button type="button" className="rounded-lg border border-hairline px-2 py-0.5 text-xs text-body hover:bg-surface-soft"
+                onClick={() => navigator.clipboard?.writeText(result.inquiry_number).then(() => {
+                  setCopied(true); setTimeout(() => setCopied(false), 2000);
+                }).catch(() => {})}>{copied ? "복사됨 ✓" : "복사"}</button>
+            </dd>
             <dt className="text-slate-500">처리 상태</dt>
             <dd>{result.status}</dd>
           </dl>
@@ -144,7 +183,8 @@ export default function InquiryFormPage() {
         </Card>
         <div className="flex gap-2">
           <Button variant="ghost" onClick={() => {
-            setResult(null); setForm(EMPTY); setPhotos([]); setAgreed(false);
+            // 주문 화면에서 들어왔으면(?order=) 같은 주문으로 새 문의를 쓰기 쉽게 그대로 둠
+            setResult(null); setForm({ ...EMPTY, order_number: presetOrder }); setPhotos([]); setAgreed(false);
             setEvidence({ "송장": null, "파손 부위": null }); setDamageChoice(null); setPhotosLater(false); setPhotoTried(false);
           }}>새 문의 작성</Button>
           {/* 이메일은 주소(URL)에 남기지 않고 화면 이동 상태로만 넘김 */}
@@ -166,6 +206,14 @@ export default function InquiryFormPage() {
       </div>
     <Card>
       <form onSubmit={submit} className="space-y-4">
+        {showRestored && (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-primary-soft px-3 py-2 text-sm text-ink">
+            <span>쓰던 문의를 불러왔어요. (사진·비밀번호는 다시 넣어 주세요)</span>
+            <button type="button" className="text-xs font-semibold text-primary underline" onClick={() => {
+              clearDraft(); setShowRestored(false); setForm({ ...EMPTY, order_number: presetOrder });
+            }}>지우고 새로 쓰기</button>
+          </div>
+        )}
         {/* 로그인 상태는 제목 옆 배지와 오른쪽 위 메뉴(로그인 · 내 쇼핑)에서 보여 줌 */}
         {!customer && (
         <div className="grid gap-4 sm:grid-cols-2">

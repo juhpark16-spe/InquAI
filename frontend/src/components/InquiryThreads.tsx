@@ -43,16 +43,24 @@ function normalizeOrder(raw: string): string | null {
 }
 
 /** 내용 보충 · 추가 문의: 문의 수정 대신 빠뜨린 내용·사진·주문번호를 이어서 보냄 (처음 글은 그대로 남음) */
-function FollowUp({ inquiry, actions, onDone }: { inquiry: InquiryPublic; actions: ThreadActions; onDone: () => void }) {
-  const [open, setOpen] = useState(false);
-  const [text, setText] = useState("");
+function FollowUp({ inquiry, actions, onDone, open, setOpen, prompt }: {
+  inquiry: InquiryPublic; actions: ThreadActions; onDone: () => void;
+  open: boolean; setOpen: (open: boolean) => void; prompt?: string;
+}) {
+  // 쓰던 추가 문의는 문의마다 임시 저장 (새로 고침해도 남음, 보내면 지워짐)
+  const draftKey = `inquai.followUp.${inquiry.inquiry_number}`;
+  const [text, setTextState] = useState(() => { try { return sessionStorage.getItem(draftKey) ?? ""; } catch { return ""; } });
+  const setText = (v: string) => {
+    setTextState(v);
+    try { if (v) sessionStorage.setItem(draftKey, v); else sessionStorage.removeItem(draftKey); } catch { /* 저장소 없음 */ }
+  };
   const [order, setOrder] = useState("");
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   if (!inquiry.can_follow_up) return <p className="text-xs text-slate-500">이 문의에는 더 이상 추가 문의를 남길 수 없어요. 새 문의로 남겨 주세요.</p>;
-  if (!open) return <Button variant="ghost" onClick={() => setOpen(true)}>내용 보충 · 추가 문의</Button>;
+  if (!open) return <Button variant="ghost" onClick={() => setOpen(true)}>{text ? "쓰던 추가 문의 이어 쓰기" : "내용 보충 · 추가 문의"}</Button>;
   // 주문번호가 없거나, 적은 번호로 내 주문을 찾지 못했으면 다시 받음
   const needsOrder = !inquiry.order_number || !!inquiry.order_needs_fix;
   const orderNumber = needsOrder ? normalizeOrder(order) : "";
@@ -78,6 +86,7 @@ function FollowUp({ inquiry, actions, onDone }: { inquiry: InquiryPublic; action
 
   return (
     <div className="space-y-2 rounded-lg border border-slate-200 bg-white p-3">
+      {prompt && <p className="text-sm font-semibold text-ink">{prompt}</p>}
       <p className="text-xs text-muted">등록한 문의는 고칠 수 없어요. 빠뜨린 내용·사진은 여기에 이어서 보내 주세요.</p>
       {inquiry.photos_requested && (
         <p className="rounded-lg bg-primary-soft px-3 py-2 text-sm text-ink">📷 <b>송장이 보이는 사진 1장</b>과 <b>파손 부위 사진 1장</b>을 함께 올려 주세요. 사진이 오면 바로 확인해 드려요.</p>
@@ -108,7 +117,8 @@ function FollowUp({ inquiry, actions, onDone }: { inquiry: InquiryPublic; action
 
 /** 고객에게 보이는 상태: 내부 상태 이름(담당자 처리·자동 처리 등) 대신, 마지막 글이 누구 것인지로.
  *  상담원이 '확인 후 다시 안내'를 표시해 두었으면 답변을 받았어도 '추가 안내 예정' */
-function CustomerStatus({ waiting, more }: { waiting: boolean; more: boolean }) {
+function CustomerStatus({ waiting, more, closed }: { waiting: boolean; more: boolean; closed?: boolean }) {
+  if (closed) return <span className="whitespace-nowrap rounded-full bg-slate-100 px-2.5 py-0.5 text-xs font-semibold text-slate-600">종료됨</span>;
   if (waiting) return <span className="whitespace-nowrap rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">답변 준비 중</span>;
   if (more) return <span className="whitespace-nowrap rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">추가 안내 예정</span>;
   return <span className="whitespace-nowrap rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">답변 완료</span>;
@@ -118,7 +128,11 @@ export default function InquiryThreads({ items, notice, actions, reload }: {
   items: InquiryPublic[]; notice: string; actions: ThreadActions; reload: () => Promise<void>;
 }) {
   const [error, setError] = useState("");
-  const [done, setDone] = useState("");
+  // 문의마다: 완료 안내(추가 문의 접수·평가 감사), 추가 문의 칸 열림, 👎 뒤 질문
+  const [done, setDone] = useState<Record<string, string>>({});
+  const [followOpen, setFollowOpen] = useState<Record<string, boolean>>({});
+  const [askWhy, setAskWhy] = useState<Record<string, boolean>>({});
+  const say = (n: string, text: string) => setDone((d) => ({ ...d, [n]: text }));
   // 문의가 여러 건이면 길어지므로 접어 두고, 가장 최근 문의 하나만 펼침
   const [open, setOpen] = useState<Set<string>>(() => new Set(items.slice(0, 1).map((i) => i.inquiry_number)));
   const toggle = (n: string) => setOpen((prev) => {
@@ -131,6 +145,15 @@ export default function InquiryThreads({ items, notice, actions, reload }: {
     setError("");
     try {
       await actions.rate(inquiryNumber, answerId, helpful);
+      if (helpful) {
+        say(inquiryNumber, "평가해 주셔서 감사합니다. 더 좋은 답변을 드리는 데 참고할게요.");
+        setAskWhy((a) => ({ ...a, [inquiryNumber]: false }));
+      } else {
+        // 👎: 무엇이 부족했는지 바로 적을 수 있게 추가 문의 칸을 엶 (적으면 담당자가 다시 확인)
+        say(inquiryNumber, "");
+        setAskWhy((a) => ({ ...a, [inquiryNumber]: true }));
+        setFollowOpen((o) => ({ ...o, [inquiryNumber]: true }));
+      }
       await reload();
     } catch (err) {
       setError(errorMessage(err));
@@ -140,7 +163,6 @@ export default function InquiryThreads({ items, notice, actions, reload }: {
   return (
     <div className="space-y-3">
       {error && <Alert>{error}</Alert>}
-      {done && <Alert kind="success">{done}</Alert>}
       {items.map((found) => {
         // 내 글(처음 문의 + 추가 문의)과 고객센터 답변을 시간순으로
         const thread = [
@@ -149,7 +171,9 @@ export default function InquiryThreads({ items, notice, actions, reload }: {
           ...found.answers.map((a) => ({ kind: "answer" as const, at: a.answered_at, text: a.text, a })),
         ].sort((x, y) => new Date(x.at).getTime() - new Date(y.at).getTime());
         const last = thread[thread.length - 1];
-        const waiting = last.kind === "me";
+        // 답변 없이 종료(중복·스팸·철회 등): 기다리는 중이 아니라 '종료됨'과 사유 안내
+        const closed = found.status === "완료" && !!found.closed_note;
+        const waiting = !closed && last.kind === "me";
         const isOpen = open.has(found.inquiry_number);
         return (
           <section key={found.inquiry_number} className="overflow-hidden rounded-2xl border border-hairline bg-white">
@@ -158,7 +182,7 @@ export default function InquiryThreads({ items, notice, actions, reload }: {
               <span className="min-w-0 flex-1">
                 <span className="flex flex-wrap items-center gap-2">
                   <span className="text-base font-semibold text-ink">{found.title}</span>
-                  <CustomerStatus waiting={waiting} more={!!found.more_answer_coming} />
+                  <CustomerStatus waiting={waiting} more={!!found.more_answer_coming} closed={closed} />
                 </span>
                 <span className="mt-0.5 block text-xs text-muted">{formatDate(found.created_at)} · <span className="font-mono">{found.inquiry_number}</span></span>
                 {!isOpen && (
@@ -182,11 +206,23 @@ export default function InquiryThreads({ items, notice, actions, reload }: {
                     </Bubble>
                   ))}
                   {waiting && <Note>담당자가 확인하고 있어요. {notice}</Note>}
-                  {!waiting && found.more_answer_coming && <Note>담당자가 확인한 뒤 이어서 안내해 드릴게요.</Note>}
+                  {closed && <Note>이 문의는 답변 없이 종료되었어요. {found.closed_note}</Note>}
+                  {!waiting && !closed && found.more_answer_coming && <Note>담당자가 확인한 뒤 이어서 안내해 드릴게요.</Note>}
                 </div>
+                {done[found.inquiry_number] && <div className="mt-3"><Alert kind="success">{done[found.inquiry_number]}</Alert></div>}
                 <div className="mt-3">
                   <FollowUp inquiry={found} actions={actions}
-                    onDone={() => { setDone("추가 문의가 접수되었습니다. 담당자가 확인 후 답변드릴게요."); reload(); }} />
+                    open={!!followOpen[found.inquiry_number]}
+                    setOpen={(o) => {
+                      setFollowOpen((f) => ({ ...f, [found.inquiry_number]: o }));
+                      if (!o) setAskWhy((a) => ({ ...a, [found.inquiry_number]: false }));
+                    }}
+                    prompt={askWhy[found.inquiry_number] ? "어떤 점이 부족했나요? 알려 주시면 담당자가 다시 확인해 드릴게요." : undefined}
+                    onDone={() => {
+                      setAskWhy((a) => ({ ...a, [found.inquiry_number]: false }));
+                      say(found.inquiry_number, "추가 문의가 접수되었습니다. 담당자가 확인 후 답변드릴게요.");
+                      reload();
+                    }} />
                 </div>
               </div>
             )}

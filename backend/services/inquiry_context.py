@@ -269,7 +269,7 @@ def history(db: Session, inquiry: Inquiry) -> list[dict]:
             if before.get("status") != after.get("status"):
                 text += f" · 상태 {before.get('status')} → {after.get('status')}"
         elif a.action == "status_change":
-            text = f"상태 변경: {d.get('before')} → {d.get('after')}"
+            text = f"상태 변경: {d.get('before')} → {d.get('after')}" + (f" (사유: {d['reason']})" if d.get("reason") else "")
         elif a.action == "response_create":
             text = "답변 작성"
         elif a.action == "response_edit":
