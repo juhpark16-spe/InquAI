@@ -182,9 +182,9 @@
 | 사진 연결 | `POST /api/inquiries` 의 `attachment_tokens: [token]` | 올린 뒤 1시간 안, 한 번만 연결 가능. 잘못되면 문의도 저장하지 않음 |
 | 파손 사진 | `photo_labels: {token: "송장"·"파손 부위"}`, `damage_report`(화면의 '상품이 파손·불량이거나 잘못 왔어요' 체크: 생략 = 내용 표현으로 판단, true/false = 고객이 고른 그대로), `photos_later` | 제목·내용이 파손·불량·오배송 표현이거나 `damage_report=true`면 (고객이 체크를 풀면 `false` → 사진 없이 등록) **송장·파손 부위 사진 두 장** 필요 (아니면 422 `PHOTO_REQUIRED`, `missing`). `photos_later=true`(지금은 사진이 없어요)면 사진 없이 등록하고 `photo_request='나중에'` → 추가 문의로 사진이 오면 풀림 (`services/photo_evidence.py`) |
 | 답변 평가 | `POST /api/inquiries/answers/{response_id}/rating?inquiry_number=` `{ customer_email, password, helpful }` | 본인 확인 후 `responses.rating` = 1 / -1 (다시 누르면 변경). 대시보드 "AI 자동 답변 만족도" |
-| 추가 문의 (내용 보충) | `POST /api/inquiries/follow-up` `{ customer_email, password, inquiry_number, content, attachment_tokens, order_number? }` | 같은 문의에 이어서 (등록한 문의는 고칠 수 없어 빠뜨린 내용·사진·주문번호를 여기로). `order_number`는 처음 문의에 주문번호가 없거나 적은 번호로 내 주문을 찾지 못했을 때(없는 주문·주문자 이메일이 다름) 문의에 붙고 대화에 '(주문번호 추가: …)' 또는 '(주문번호 변경: A → B)'로 남음 (형식은 문의 등록과 같음, 맞는 번호가 이미 있으면 무시). 조회 응답에 `order_number`, `order_needs_fix`, `photos_requested`. 자동 처리·완료된 문의는 `담당자 처리`로 다시 열고, 미배정이면 자동 배정. AI 재분석은 하지 않음. 문의당 10개까지, IP 1분 5회 |
+| 추가 문의 (내용 보충) | `POST /api/inquiries/follow-up` `{ customer_email, password, inquiry_number, content, attachment_tokens, order_number? }` | 같은 문의에 이어서 (등록한 문의는 고칠 수 없어 빠뜨린 내용·사진·주문번호를 여기로). `order_number`는 처음 문의에 주문번호가 없거나 적은 번호로 내 주문을 찾지 못했을 때(없는 주문·주문자 이메일이 다름) 문의에 붙고 대화에 '(주문번호 추가: …)' 또는 '(주문번호 변경: A → B)'로 남음 (형식은 문의 등록과 같음, 맞는 번호가 이미 있으면 무시). 조회 응답에 `order_number`, `order_needs_fix`, `photos_requested`. 자동 처리·완료된 문의는 `담당자 처리`로 다시 열고, 미배정이면 자동 배정. AI 재분석은 하지 않음. `content`는 2자 이상, 또는 사진·주문번호만 보내도 됨 (비우면 '(사진 보냄)'처럼 채움, 셋 다 없으면 422). 문의당 10개까지, IP 1분 5회 |
 | 답변 시간 안내 | `/lookup` 응답의 `notice` | "영업일 기준 1일 이내에 답변드립니다 (평일 10:00~17:00)" |
-| 답변 알림 | (자동) | 자동 답변·상담원 발송 때 "답변이 등록되었습니다" 메일 (`services/notify.py`). 본문에는 답변 내용 대신 문의 조회 링크만 |
+| 답변 알림 | (자동) | 자동 답변·상담원 발송 때 "답변이 등록되었습니다" 메일 (`services/notify.py`). 본문에는 답변 내용 대신 링크만: 비회원 문의는 문의 조회(`/inquiry/lookup`), 회원 문의(조회 비밀번호 없음)는 내 쇼핑(`/my`) |
 
 **답변 알림 메일** (`backend/services/notify.py`, 설정은 `.env.example`)
 - 기본 `MAIL_ENABLED=false`: 보내지 않고 `notifications`에 기록만 (status `기록`). 테스트·CI·화면 자동 테스트는 항상 꺼짐
@@ -281,6 +281,8 @@
 - `order`: 취소 가능(출고 전), 반품 기한(배송 완료 + 7일, 불량·오배송 30일)을 정책 기준으로 계산. `email_match=false`면 주문자와 문의자가 다를 수 있어 화면에 경고
 - `email_orders`: 문의 이메일과 같은 이메일로 주문한 내역 최근 5건 (`order`의 주문은 제외, 각 항목은 `order`와 같은 형식). 주문번호를 적지 않은 문의도 어떤 주문인지 짐작할 수 있게 함. 문의 이메일은 본인 인증 전이라 화면에 "본인 확인 후 안내" 경고를 함께 표시하며, 관리자 화면에만 보이고 고객에게는 나가지 않음
 - `customer_history`: 같은 이메일의 다른 문의 최근 5건. 상담원은 자신에게 배정된 것만
+- `customer_history_hidden`: 상담원에게 보이지 않는(남이 맡았거나 미배정) 같은 고객 문의 수 `{total, open}` (내용은 숨김, 관리자는 0)
+- `order.return_reason`·`order.refund_preview`: [반품 회수 접수] 뒤 반품 사유와 환불 예정 금액 (반품 승인 확인창)
 - `customer_profile`: 고객 카드 (같은 이메일 기준). `member`=쇼핑몰 회원 로그인 가능 고객, `phone`은 가운데를 가림,
   `orders`·`inquiries`=주문·문의 수, 불만 신호 `negative_ratings`(이전 답변에 👎 수)·`negative_inquiries`(부정 감정 문의 수).
   화면은 👎가 있거나 부정 문의가 2건 이상이면 "응대에 신경 쓸 고객"으로 표시
@@ -442,7 +444,7 @@
 { "inquiry_id": 9, "order_id": 31, "ticket_type": "환불", "reason": "사이즈가 안 맞아 반품" }
 ```
 - `ticket_type`: 환불 / 교환 / 취소 / 이관
-- 정책 확인 (`docs/shop_policy.md`): 취소는 출고 전만, 반품·교환은 배송 완료 7일 이내(불량 30일). 조건에 맞지 않아도 접수는 하되 `reason`에 "정책 기간 초과"를 붙여 상담원이 판단합니다.
+- 정책 확인 (`docs/shop_policy.md`): 취소는 출고 전만, 반품·교환은 배송 완료 7일 이내(불량 30일). 조건에 맞지 않아도 접수는 하고(고객 글 그대로 `reason`), 승인할 때 서버가 조건을 다시 확인해 맞지 않으면 409로 막습니다 (아래 PATCH).
 
 ### GET /api/tickets — 처리 요청(티켓) 목록 (로그인, 2026-11-24 구현)
 파라미터: `status`(기본 `접수` = 승인 대기, `승인`·`반려`·`all`), `ticket_type`(취소·교환·환불), `page`, `size`. 상담원은 내가 맡은 문의의 티켓만.
@@ -476,8 +478,13 @@
 ```
 - 권한: 관리자, 또는 그 문의를 배정받은 상담원 (아니면 403). 취소·교환·환불 티켓만 (이관 티켓은 422), 이미 처리된 티켓은 409 `TICKET_DONE`.
 - **취소 승인**은 출고 전 주문(결제 완료·상품 준비 중)만 → 주문 상태를 '취소'로 바꿈. 이미 출고된 주문은 409 (반려 후 반품 안내).
-- 교환·환불 승인은 티켓만 승인 (회수·환불은 실제 쇼핑몰 시스템의 일, 시연에서는 기록만). **반려는 `memo`(사유) 필수** (422).
-- audit_logs `ticket_approve` / `ticket_reject` (target: 문의, detail: ticket_id·ticket_type·memo·주문 상태 전→후) → 문의 처리 이력에 "티켓 #8 취소 승인 · 주문 결제 완료 → 취소".
+- **본인 확인**: 승인은 문의 이메일 = 주문자 이메일일 때만 ([바로 처리]와 같은 기준). 다르면 409 `NOT_OWNER` (반려는 가능).
+- **환불(화면 이름 '반품') 승인**은 [반품 회수 접수](배송 완료·반품 기한 7일/불량 30일 확인 + 사유 기록) 뒤에만 (아니면 409 `RETURN_NOT_REQUESTED`).
+  승인하면 결제 내역에 '환불 예정'(3영업일 뒤, 주말 제외)을 남기고, 회수 접수 사유가 단순 변심이면 왕복 배송비 6,000원을 뺀 금액.
+- **교환 승인**은 배송 완료 + 배송 완료 후 30일 안 (아니면 409). 회수·환불·재발송은 실제 쇼핑몰 시스템의 일이라 시연에서는 기록만.
+- **반려는 `memo`(사유) 필수** (422).
+- 승인 대기 중인 요청이 있는 문의는 답변을 보내도 '완료'가 아니라 '담당자 처리'로 남습니다 (`POST /api/responses/{id}/approve`, 요청이 잊히지 않게).
+- audit_logs `ticket_approve` / `ticket_reject` (target: 문의, detail: ticket_id·ticket_type·memo·주문 상태 전→후) → 문의 처리 이력에 "취소 요청 #8 승인 · 주문 결제 완료 → 취소" (종류는 화면 이름: 환불 → 반품).
 - [AI 초안 다시 만들기]의 근거(처리 기록)에 티켓 상태·메모가 들어가 결과를 반영한 답변 초안을 씁니다.
 - 화면: 문의 상세 오른쪽 "접수된 티켓" (처리할 티켓이 있으면 맨 위), [취소 승인] / [반려 + 사유].
 
@@ -491,7 +498,7 @@
 - `email`이 주문 고객 이메일과 다르면 404 (다른 고객 정보 노출 방지, 기획서 10장 완료 기준)
 - 경로 변수는 기획서의 `{order_id}` 대신 고객이 아는 `order_number`를 씁니다.
 
-## 7-1. 고객 조회·재고 현황 API (로그인, 조회 전용, 2026-11-24 추가: `backend/api/customers.py`)
+## 7-1. 주문·배송·고객 조회·재고 현황 API (로그인, 조회 전용, 2026-11-24 추가: `backend/api/customers.py`)
 
 InquAI는 상담 시스템이라 고객·주문·재고를 **바꾸지 않고 보기만** 합니다. 바꾸는 일은 문의 상세의 [바로 처리]·티켓 승인에서 하고 그 문의에 기록됩니다.
 
@@ -504,6 +511,26 @@ InquAI는 상담 시스템이라 고객·주문·재고를 **바꾸지 않고 �
 - 권한: 관리자는 모든 고객. 상담원은 **내가 맡은 문의의 고객만** (그 밖은 목록에 없고 상세는 404). 상세의 문의 목록도 내가 맡은 것만 보이고 나머지는 `inquiry_total`로 건수만.
 - 문의 상세 `customer_profile.customer_id` → 고객 카드의 [고객 정보 전체 보기] 링크 (주소에 이메일을 넣지 않으려고 번호로).
 - 화면: 관리 메뉴 '쇼핑몰 정보 (조회 전용)'의 **고객 조회** (`/admin/customers`, `/admin/customers/:id`)·**재고 현황** (`/admin/inventory`). 왼쪽 메뉴 맨 아래 [고객센터 화면 열기]는 고객 화면(`/faq`)을 새 탭으로.
+
+### GET /api/orders — 주문 찾기 (로그인, 조회 전용, 2026-11-24 추가)
+파라미터: `q`(주문번호·상품·고객 이름·이메일·송장번호), `group`(`ready` 출고 전 / `shipping` 배송 중 / `delayed` 배송 지연 /
+`delivered` 배송 완료 / `return` 반품 / `cancel` 취소, 비우면 전체), `page`, `size`. 상담원은 내가 맡은 문의의 고객 주문만.
+```json
+{ "items": [ { "order_number": "20261118-0003", "product_name": "...", "amount": 39000, "quantity": 1,
+               "order_status": "배송 중", "shipping_status": "옥천 HUB 출발", "carrier": "CJ대한통운", "tracking_number": "...",
+               "ordered_at": "...", "delivered_at": null, "delayed": true, "returning": false, "picked_up": false,
+               "customer": { "id": 3, "name": "김민준" }, "inquiries": 1,
+               "latest_inquiry": { "id": 9, "inquiry_number": "INQ-…", "status": "담당자 처리" } } ],
+  "total": 1, "counts": { "ready": 12, "shipping": 15, "delayed": 2, "delivered": 18, "return": 0, "cancel": 5, "all": 50 },
+  "page": 1, "size": 30, "delay_days": 4 }
+```
+- 배송 지연(`delayed`): 출고(`출고`·`배송 중`)됐는데 주문 후 4일이 지나도 배송 완료가 아님 (정책: 평일 출고 + 출고 후 1~2일, 주말 여유)
+- 최근 주문부터. `latest_inquiry`는 그 주문의 가장 최근 문의 (상담원은 내가 맡은 문의만)
+
+### GET /api/orders/{order_number} — 주문 한 건
+`{ "order": (문의 상세의 주문 카드와 같은 모양: 결제·환불 내역, 배송 추적, 반품 기한·진행, 옵션별 재고),
+   "customer": { "id", "name", "member" }, "inquiries": [ { "id", "inquiry_number", "title", "status", "created_at", "assigned_to" } ] }`
+- 상담원이 볼 수 없는 주문은 404. 화면: 관리 메뉴 **주문·배송** (`/admin/orders`), 줄을 누르면 바로 아래에 펼침
 
 ## 8. FAQ API (관리자)
 
@@ -530,26 +557,6 @@ InquAI는 상담 시스템이라 고객·주문·재고를 **바꾸지 않고 �
 
 ## 9. 통계·로그 API
 
-### GET /api/orders — 주문 찾기 (로그인, 조회 전용, 2026-11-24 추가)
-파라미터: `q`(주문번호·상품·고객 이름·이메일·송장번호), `group`(`ready` 출고 전 / `shipping` 배송 중 / `delayed` 배송 지연 /
-`delivered` 배송 완료 / `return` 반품 / `cancel` 취소, 비우면 전체), `page`, `size`. 상담원은 내가 맡은 문의의 고객 주문만.
-```json
-{ "items": [ { "order_number": "20261118-0003", "product_name": "...", "amount": 39000, "quantity": 1,
-               "order_status": "배송 중", "shipping_status": "옥천 HUB 출발", "carrier": "CJ대한통운", "tracking_number": "...",
-               "ordered_at": "...", "delivered_at": null, "delayed": true, "returning": false, "picked_up": false,
-               "customer": { "id": 3, "name": "김민준" }, "inquiries": 1,
-               "latest_inquiry": { "id": 9, "inquiry_number": "INQ-…", "status": "담당자 처리" } } ],
-  "total": 1, "counts": { "ready": 12, "shipping": 15, "delayed": 2, "delivered": 18, "return": 0, "cancel": 5, "all": 50 },
-  "page": 1, "size": 30, "delay_days": 4 }
-```
-- 배송 지연(`delayed`): 출고(`출고`·`배송 중`)됐는데 주문 후 4일이 지나도 배송 완료가 아님 (정책: 평일 출고 + 출고 후 1~2일, 주말 여유)
-- 최근 주문부터. `latest_inquiry`는 그 주문의 가장 최근 문의 (상담원은 내가 맡은 문의만)
-
-### GET /api/orders/{order_number} — 주문 한 건
-`{ "order": (문의 상세의 주문 카드와 같은 모양: 결제·환불 내역, 배송 추적, 반품 기한·진행, 옵션별 재고),
-   "customer": { "id", "name", "member" }, "inquiries": [ { "id", "inquiry_number", "title", "status", "created_at", "assigned_to" } ] }`
-- 상담원이 볼 수 없는 주문은 404. 화면: 관리 메뉴 **주문·배송** (`/admin/orders`), 줄을 누르면 바로 아래에 펼침
-
 ### GET /api/stats/summary — 대시보드 (관리자, 2주차 구현)
 파라미터: `from`, `to` (한국 날짜 `YYYY-MM-DD`, 기본: 최근 7일, 최대 92일)
 ```json
@@ -562,7 +569,7 @@ InquAI는 상담 시스템이라 고객·주문·재고를 **바꾸지 않고 �
   },
   "previous": { "from": "2026-11-02", "to": "2026-11-08", "total": 110,   // 바로 앞 같은 길이 기간 (증감 비교)
                 "auto_rate": 0.29, "avg_latency_ms": 9100 },
-  "now": { "open": 20, "urgent_open": 3, "review_waiting": 12, "unassigned_open": 5 },  // 기간과 관계없이 현재
+  "now": { "open": 20, "urgent_open": 3, "review_waiting": 12, "unassigned_open": 5, "overdue_open": 2, "pending_tickets": 4 },  // 기간과 관계없이 현재 (pending_tickets: 승인 대기 취소·교환·반품 요청)
   "daily": [ { "date": "2026-11-15", "total": 18, "open": 6, "done": 12, "auto": 7,
                "by_category": { "배송": 5, "주문 취소": 1, "...": 0 } } ],
   "by_status": { "접수": 0, "자동 처리": 45, "검토 대기": 12, "담당자 처리": 8, "완료": 67 },
@@ -640,6 +647,7 @@ InquAI는 상담 시스템이라 고객·주문·재고를 **바꾸지 않고 �
 | `assigned` | 문의가 나에게 배정됨 (자동·수동, 내가 한 배정은 제외) | 나에게 배정 | 나에게 배정 + 미배정 긴급 문의 접수 |
 | `followup` | 고객 추가 문의 | 내 담당 문의 | 내 담당 + 미배정 문의 |
 | `due_soon` | 답변 기한 1시간 이내 (미처리, 알림 시각 = 기한 1시간 전) | 내 담당 문의 | 내 담당 + 미배정 문의 |
+| `overdue` | 답변 기한이 지난 미처리 문의 (알림 시각 = 기한, 7일 안) | 내 담당 문의 | **모든 담당자**의 문의 (담당자 이름 함께) |
 | `bad_rating` | 고객 👎 '도움 안 됨' | 내가 보낸 답변 | 모든 답변 (AI 자동 답변 포함) |
 | `memo` | 다른 사람이 남긴 상담원 공유 메모 (내가 남긴 메모는 제외) | 내 담당 문의 | 내 담당 + 미배정 문의 |
 | `recheck` | '확인 후 다시 안내' 기한 1시간 전부터 (지나도 풀 때까지, 알림 시각 = 기한 1시간 전) | 내 담당 문의 | 내 담당 + 미배정 문의 |
@@ -724,9 +732,6 @@ InquAI는 상담 시스템이라 고객·주문·재고를 **바꾸지 않고 �
 - `patterns`: 자주 고친 패턴 `[{field, before, after, count, pending, examples[{inquiry_id, text}]}]` (많은 순) — 모델의 약점
 - `recent`: 최근 수정 20건, `history`: 모델 버전별 학습 데이터·점수(외부·직접 쓴 평가용·실전)·메모
 - 재학습 실행은 GPU가 필요해 API로 열지 않고 명령으로 합니다 (`docs/retraining.md`). 모델을 바꾸면 `model_history.json`에 한 줄 더하고 `current`를 옮깁니다.
-
-### GET /api/admin/audit-logs — 작업 기록 (관리자)
-파라미터: `admin_id`, `action`, `target_type`, `from`, `to`
 
 ## 8-1. 고객 FAQ API (공개, 2주차 추가)
 

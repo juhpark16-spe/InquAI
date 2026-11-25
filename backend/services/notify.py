@@ -39,21 +39,22 @@ def is_fake_address(address: str) -> bool:
     return domain in FAKE_DOMAINS or domain.endswith(FAKE_SUFFIXES)
 
 
-def _body(inquiry: Inquiry, lookup_url: str) -> str:
-    return (f"{inquiry.customer_name} 고객님, 안녕하세요. InquAI 쇼핑 고객센터입니다.\n\n"
-            f"문의하신 '{inquiry.title}'({inquiry.inquiry_number})에 답변이 등록되었습니다.\n"
-            f"아래 주소의 문의 조회에서 이메일과 문의할 때 정한 비밀번호로 확인해 주세요.\n\n"
-            f"{lookup_url}\n\n"
-            "회원으로 문의하셨다면 쇼핑몰 로그인 후 '내 쇼핑 > 내 문의'에서도 볼 수 있습니다.\n"
-            "이 메일은 발신 전용입니다.")
+def _body(inquiry: Inquiry, shop_url: str) -> str:
+    """회원 문의(조회 비밀번호 없음)는 '내 쇼핑 > 내 문의'로, 비회원 문의는 문의 조회(이메일 + 비밀번호)로 안내"""
+    head = (f"{inquiry.customer_name} 고객님, 안녕하세요. InquAI 쇼핑 고객센터입니다.\n\n"
+            f"문의하신 '{inquiry.title}'({inquiry.inquiry_number})에 답변이 등록되었습니다.\n")
+    if inquiry.lookup_password_hash is None:   # 쇼핑몰에 로그인한 상태로 남긴 문의
+        guide = f"쇼핑몰에 로그인한 뒤 '내 쇼핑 > 내 문의'에서 확인해 주세요 (비밀번호 없이 바로 보입니다).\n\n{shop_url}/my\n\n"
+    else:
+        guide = f"아래 주소의 문의 조회에서 이메일과 문의할 때 정한 비밀번호로 확인해 주세요.\n\n{shop_url}/inquiry/lookup\n\n"
+    return head + guide + "이 메일은 발신 전용입니다."
 
 
 def answer_registered(db: Session, inquiry: Inquiry) -> Notification:
     """답변 알림을 남기고, 메일이 켜져 있으면 커밋 뒤에 보내도록 예약 (커밋은 부르는 쪽에서)"""
     settings = get_settings()
-    lookup_url = f"{settings.shop_url.rstrip('/')}/inquiry/lookup"
     n = Notification(inquiry_id=inquiry.id, channel="email", recipient=inquiry.customer_email,
-                     subject=SUBJECT, body=_body(inquiry, lookup_url), status="기록")
+                     subject=SUBJECT, body=_body(inquiry, settings.shop_url.rstrip("/")), status="기록")
     db.add(n)
     if not settings.mail_enabled:
         logger.info("답변 알림(기록만) → %s: %s", inquiry.customer_email, inquiry.inquiry_number)

@@ -3,7 +3,7 @@
 import re
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from backend.schemas.common import UTCDateTime
 
@@ -95,7 +95,7 @@ class InquiryLookup(_Email):
 class FollowUpCreate(InquiryLookup):
     """추가 문의: 본인 확인(이메일 + 비밀번호) + 어느 문의에 이어서 쓰는지"""
     inquiry_number: str = Field(min_length=1, max_length=20)
-    content: str = Field(min_length=2, max_length=2000)
+    content: str = Field(default="", max_length=2000)   # 사진·주문번호만 보낼 때는 비워도 됨 (fill_follow_up)
     attachment_tokens: list[str] = Field(default_factory=list, max_length=3)
     # 처음 문의에 주문번호가 없을 때만 받음 (있으면 무시). 형식은 문의 등록과 같음
     order_number: str | None = Field(default=None, max_length=30)
@@ -109,6 +109,22 @@ class FollowUpCreate(InquiryLookup):
     @classmethod
     def _strip(cls, v):
         return v.strip() if isinstance(v, str) else v
+
+    @model_validator(mode="after")
+    def _fill(self):
+        return fill_follow_up(self)
+
+
+def fill_follow_up(body):
+    """추가 문의는 글 2자 이상, 또는 사진·주문번호만 보내도 됨 (파손 사진을 나중에 보낼 때).
+    글이 짧으면 무엇을 보냈는지 대화에 남도록 채움 (쇼핑몰 로그인 추가 문의 api/shop.py FollowUpBody 도 같이 씀)"""
+    if len(body.content) >= 2:
+        return body
+    sent = [x for x, ok in (("사진", body.attachment_tokens), ("주문번호", body.order_number)) if ok]
+    if not sent:
+        raise ValueError("내용을 2자 이상 적거나 사진을 올려 주세요.")
+    body.content = (body.content + " " if body.content else "") + f"({'·'.join(sent)} 보냄)"
+    return body
 
 
 class RatingCreate(InquiryLookup):

@@ -34,6 +34,12 @@ export default function InquiryListPage() {
   const page = Number(params.get("page") ?? 1);
   const key = params.toString();
 
+  // 관리자: 담당자별로 걸러 보기 (대시보드 '담당자별 미처리'에서 눌러 들어옴)
+  const [staff, setStaff] = useState<{ id: number; display_name: string }[]>([]);
+  useEffect(() => {
+    if (user?.role === "admin") inquiryApi.staff().then(setStaff).catch(() => setStaff([]));
+  }, [user?.role]);
+
   // 1분마다 조용히 다시 불러옴 (새 문의·추가 문의·👎 를 놓치지 않게, 로딩 표시 없이)
   const [tick, setTick] = useState(0);
   useEffect(() => {
@@ -115,6 +121,7 @@ export default function InquiryListPage() {
             <option value="">배정 전체</option>
             <option value="none">미배정</option>
             <option value="me">나에게 배정</option>
+            {staff.filter((s) => s.id !== user.id).map((s) => <option key={s.id} value={String(s.id)}>{s.display_name} 담당</option>)}
           </Select>
         ) : (
           // 상담원: 내 문의 / 아직 아무도 맡지 않은 문의 ([내가 맡기]로 가져오기)

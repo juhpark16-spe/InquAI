@@ -57,7 +57,7 @@ def build(db, user) -> list[dict]:
         or ((a.detail or {}).get("after") or {}).get("assigned_to") == user.id)]
     inquiries = {i.id: i for i in db.scalars(select(Inquiry).where(Inquiry.id.in_({a.target_id for a in to_me})))} if to_me else {}
     for a in to_me:
-        if a.target_id in inquiries:
+        if a.target_id in inquiries and inquiries[a.target_id].assigned_to == user.id:   # 그 뒤 남에게 넘어간 문의는 빼기
             how = "자동 배정" if a.action == "auto_assign" else "배정"
             items.append(_item("assigned", a.created_at, inquiries[a.target_id], f"나에게 {how}된 문의"))
     if admin:   # 관리자: 아무도 맡지 않은 긴급 문의가 들어옴
@@ -79,6 +79,18 @@ def build(db, user) -> list[dict]:
         due = sla.due_at(sla.started(i), i.analysis.urgency if i.analysis else None)
         if now < due <= now + DUE_SOON:
             items.append(_item("due_soon", due - DUE_SOON, i, f"답변 기한 {max(1, round((due - now).total_seconds() / 60))}분 남음"))
+
+    # 3-1. 답변 기한 지남: 담당자에게, 관리자는 모든 담당자의 문의 (팀 전체 지연을 놓치지 않게). 알림 시각 = 기한
+    late_rows = open_rows if not admin else db.scalars(
+        select(Inquiry).options(selectinload(Inquiry.analysis), selectinload(Inquiry.assignee))
+        .where(Inquiry.status.in_(sla.OPEN_STATUSES))).all()
+    for i in late_rows:
+        due = sla.due_at(sla.started(i), i.analysis.urgency if i.analysis else None)
+        if since <= due <= now:
+            hours = (now - due).total_seconds() / 3600
+            late = f"{max(1, round(hours * 60))}분" if hours < 1 else f"{round(hours)}시간"
+            who = "" if i.assigned_to == user.id else f" · 담당 {i.assignee.display_name if i.assignee else '미배정'}"
+            items.append(_item("overdue", due, i, f"답변 기한 {late} 지남{who}"))
 
     # 4. 고객 👎 평가
     stmt = (select(Response, Inquiry).join(Inquiry, Response.inquiry_id == Inquiry.id)

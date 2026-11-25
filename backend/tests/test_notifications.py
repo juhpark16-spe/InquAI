@@ -43,7 +43,7 @@ def test_each_kind_goes_to_the_right_person(client, db):
     e = inquiry(db, 5, status="자동 처리")                                # AI 자동 답변에 👎 → 관리자만
     db.add(Response(inquiry_id=e.id, draft_text="답", status="발송", rating=-1, rated_at=now))
     inquiry(db, 6, urgency="높음", status="접수")                         # 미배정 긴급 → 관리자만
-    inquiry(db, 7, assigned=AGENT, hours_ago=30)                         # 기한 지남 → 임박 알림 아님
+    inquiry(db, 7, assigned=AGENT, hours_ago=30)                         # 기한 지남 → 임박이 아니라 '기한 초과' 알림
     old = inquiry(db, 8, assigned=AGENT)                                 # 8일 전 추가 문의 → 빠짐
     db.add(CustomerMessage(inquiry_id=old.id, content="오래됨", created_at=now - timedelta(days=8)))
     db.commit()
@@ -54,7 +54,10 @@ def test_each_kind_goes_to_the_right_person(client, db):
     got = set(kinds(client))
     # 주말에는 답변 기한이 멈춰(월요일 00:00부터 다시 셈) '기한 30분 남음'이 1시간 안이 아님 → 임박 알림 없음
     due = set() if sla.is_weekend(now) else {("due_soon", "INQ-N-0002")}
-    assert got == {("assigned", "INQ-N-0001"), ("followup", "INQ-N-0003"), ("bad_rating", "INQ-N-0004")} | due
+    # 기한 초과: 30시간 전 접수(24시간 기한)는 지남. 8번 문의(1시간 전)는 아님 (주말이면 기한이 멈춰 달라질 수 있어 범위로)
+    late = {x for x in got if x[0] == "overdue"}
+    assert ("overdue", "INQ-N-0007") in late or sla.is_weekend(now)
+    assert got - late == {("assigned", "INQ-N-0001"), ("followup", "INQ-N-0003"), ("bad_rating", "INQ-N-0004")} | due
 
     login(client, "admin")
     got = set(kinds(client))
@@ -62,6 +65,7 @@ def test_each_kind_goes_to_the_right_person(client, db):
     assert ("assigned", "INQ-N-0006") in got                                              # 미배정 긴급
     assert ("assigned", "INQ-N-0001") not in got                                          # 남에게 배정된 건 아님
     assert ("followup", "INQ-N-0003") not in got                                          # 상담원 담당 문의
+    assert ("overdue", "INQ-N-0007") in got or sla.is_weekend(now)                        # 관리자는 모든 담당자의 기한 초과
 
 
 def test_my_own_assignment_is_not_notified(client, db):
@@ -119,3 +123,13 @@ def test_internal_memo_notifies_assignee_not_writer(client, db):
     client.headers["X-CSRF-Token"] = client.cookies.get("csrf_token")
     client.post(f"/api/inquiries/{a.id}/notes", json={"text": "고객에게 안내 완료"})   # 내가 남긴 메모
     assert len([x for x in kinds(client) if x[0] == "memo"]) == 1
+
+
+def test_assignment_moved_away_is_not_notified(client, db):
+    """나에게 배정됐다가 남에게 넘어간 문의는 '배정 알림'에서 빠짐 (눌러도 볼 수 없으니)"""
+    i = inquiry(db, 1, assigned=ADMIN)                                   # 지금은 관리자 담당
+    db.add(AdminAuditLog(admin_id=None, action="auto_assign", target_type="inquiry", target_id=i.id,
+                         detail={"assigned_to": AGENT}))                 # 처음엔 상담원에게 자동 배정
+    db.commit()
+    login(client, "agent1")
+    assert ("assigned", "INQ-N-0001") not in kinds(client)

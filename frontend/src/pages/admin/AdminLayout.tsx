@@ -8,7 +8,7 @@ import { useAuth } from "../../auth/AuthProvider";
 import Icon, { type IconName } from "../../components/Icon";
 import NotificationBell from "../../components/NotificationBell";
 import { cx, initialOf } from "../../components/ui";
-import { inquiryApi } from "../../services/api";
+import { inquiryApi, opsApi } from "../../services/api";
 
 function MenuLink({ to, icon, label, count, end }: { to: string; icon: IconName; label: string; count?: number | null; end?: boolean }) {
   return (
@@ -85,11 +85,14 @@ export default function AdminLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [openCount, setOpenCount] = useState<number | null>(null);
+  const [ticketCount, setTicketCount] = useState<number | null>(null);
   const isAdmin = user?.role === "admin";
 
   // 미처리 건수 (상담원은 자기에게 배정된 문의만 집계됨). 화면을 옮길 때마다 새로 셈
   useEffect(() => {
     inquiryApi.list({ open: "true", size: 1 }).then((r) => setOpenCount(r.total)).catch(() => setOpenCount(null));
+    // 승인 대기 중인 취소·교환·반품 요청 (상담원은 내가 맡은 문의의 것만)
+    opsApi.tickets({ status: "접수" }).then((r) => setTicketCount(r.counts["접수"] ?? 0)).catch(() => setTicketCount(null));
   }, [pathname]);
 
   const initial = initialOf(user?.display_name ?? "");
@@ -109,7 +112,7 @@ export default function AdminLayout() {
           <MenuTitle first>상담 업무</MenuTitle>
           {isAdmin && <MenuLink to="/admin" end icon="dashboard" label="대시보드" />}
           <MenuLink to="/admin/inquiries" icon="inbox" label="문의 관리" count={openCount} />
-          <MenuLink to="/admin/tickets" icon="ticket" label="취소·교환·반품" />
+          <MenuLink to="/admin/tickets" icon="ticket" label="취소·교환·반품" count={ticketCount} />
           <MenuTitle>쇼핑몰 정보 (조회 전용)</MenuTitle>
           <MenuLink to="/admin/orders" icon="truck" label="주문·배송" />
           <MenuLink to="/admin/customers" icon="person" label="고객 조회" />

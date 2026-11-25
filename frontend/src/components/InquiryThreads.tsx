@@ -64,6 +64,7 @@ function FollowUp({ inquiry, actions, onDone, open, setOpen, prompt }: {
   // 주문번호가 없거나, 적은 번호로 내 주문을 찾지 못했으면 다시 받음
   const needsOrder = !inquiry.order_number || !!inquiry.order_needs_fix;
   const orderNumber = needsOrder ? normalizeOrder(order) : "";
+  const ready = text.trim().length >= 2 || photos.length > 0 || !!orderNumber;
   const orderError = needsOrder && orderNumber === null && order.replace(/\s/g, "").length >= 8
     ? "주문번호는 20261103-0042처럼 숫자 8자리-4자리예요." : "";
 
@@ -107,9 +108,11 @@ function FollowUp({ inquiry, actions, onDone, open, setOpen, prompt }: {
       )}
       <PhotoPicker value={photos} onChange={setPhotos} disabled={busy} />
       {error && <Alert>{error}</Alert>}
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap items-center justify-end gap-2">
+        {/* 글 2자 이상, 또는 사진·주문번호만 있어도 보낼 수 있음 (서버 fill_follow_up 과 같은 조건) */}
+        {!ready && !busy && <span className="mr-auto text-xs text-muted">내용을 2자 이상 적거나 사진·주문번호를 넣어 주세요.</span>}
         <Button variant="ghost" onClick={() => setOpen(false)} disabled={busy}>취소</Button>
-        <Button onClick={send} disabled={busy || text.trim().length < 2 || orderNumber === null}>{busy ? <Spinner /> : "보내기"}</Button>
+        <Button onClick={send} disabled={busy || !ready || orderNumber === null}>{busy ? <Spinner /> : "보내기"}</Button>
       </div>
     </div>
   );
@@ -184,7 +187,10 @@ export default function InquiryThreads({ items, notice, actions, reload }: {
                   <span className="text-base font-semibold text-ink">{found.title}</span>
                   <CustomerStatus waiting={waiting} more={!!found.more_answer_coming} closed={closed} />
                 </span>
-                <span className="mt-0.5 block text-xs text-muted">{formatDate(found.created_at)} · <span className="font-mono">{found.inquiry_number}</span></span>
+                <span className="mt-0.5 block text-xs text-muted">
+                  {formatDate(found.created_at)} · <span className="font-mono">{found.inquiry_number}</span>
+                  {found.order_number && <> · 주문 <span className="font-mono">{found.order_number}</span></>}
+                </span>
                 {!isOpen && (
                   <span className="mt-1.5 block truncate text-sm text-body">
                     {last.kind === "answer" ? <b className="font-medium text-primary">{last.a.by}: </b> : "나: "}{last.text}

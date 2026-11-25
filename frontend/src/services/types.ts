@@ -209,6 +209,7 @@ export interface InquiryDetail {
   // 고객이 처음 글·추가 문의에 적은 다른 주문번호 (상담원이 [이 번호로 확인]으로 바로 적용)
   order_hints?: { order_number: string; found: boolean; email_match: boolean; product_name: string | null }[];
   customer_history: { id: number; inquiry_number: string; title: string; status: string; created_at: string }[];
+  customer_history_hidden?: { total: number; open: number };   // 상담원: 다른 상담원이 맡은(또는 미배정) 같은 고객 문의 수
   faq_titles: Record<string, string>;
   history: { at: string; actor: string; text: string; kind: "received" | "followup" | "ai" | "assign" | "status" | "draft" | "sent" | "correct" | "ticket" | "recheck" | "mail" }[];
   due_at: string;
@@ -251,6 +252,8 @@ export interface OrderCard {
   shipment_events?: { at: string; status: string; location: string | null }[];
   return_requested_at?: string | null;
   picked_up_at?: string | null;
+  return_reason?: string | null;     // [반품 회수 접수]에서 고른 사유 (단순 변심 / 불량·오배송)
+  refund_preview?: number;           // 반품 승인 시 환불 예정 금액 (단순 변심이면 왕복 배송비 차감)
   related_inquiries?: { id: number; inquiry_number: string; title: string; status: string; created_at: string; assigned_to?: number | null }[];
   shipping_address?: string | null;
   // 같은 상품의 옵션별 재고 (옵션 변경·교환 안내). low = 3개 이하, restock_at = 품절일 때 재입고 예정일

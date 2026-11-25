@@ -83,6 +83,17 @@ export default function InquiryLookupPage() {
         <p className="mt-1 text-sm text-muted">문의할 때 쓴 이메일과 조회 비밀번호로 답변을 확인하세요.</p>
       </div>
 
+      {/* 회원 문의는 조회 비밀번호 없이 저장되므로 여기서는 찾을 수 없음 → 내 쇼핑으로 안내 */}
+      {customer && !items && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-primary/30 bg-primary-soft px-5 py-4">
+          <p className="text-sm text-ink">
+            <b>{customer.name}님</b>이 로그인한 상태로 남긴 문의는 <b>내 쇼핑 &gt; 내 문의</b>에서 비밀번호 없이 바로 볼 수 있어요.
+            <span className="block text-xs text-muted">아래 조회는 로그인하지 않고(비회원으로) 남긴 문의를 찾을 때 써요.</span>
+          </p>
+          <Link to="/my" className="whitespace-nowrap rounded-full bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90">내 문의 보기</Link>
+        </div>
+      )}
+
       {items ? (
         /* 조회 뒤: 입력 카드 대신 한 줄 띠 (결과가 나오면 이 띠가 화면 위에 오도록 내려감, 위쪽 메뉴 높이만큼 띄움) */
         <div ref={results} className="flex scroll-mt-28 flex-wrap items-center justify-between gap-3 rounded-2xl border border-hairline bg-white px-5 py-3.5">

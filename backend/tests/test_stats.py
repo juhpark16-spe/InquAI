@@ -81,7 +81,7 @@ def test_now_counts_ignore_range(client, data):
     login(client)
     now = client.get("/api/stats/summary", params={"from": "2020-01-01", "to": "2020-01-02"}).json()["now"]
     overdue = now.pop("overdue_open")
-    assert now == {"open": 4, "urgent_open": 1, "review_waiting": 1, "unassigned_open": 3}
+    assert now == {"open": 4, "urgent_open": 1, "review_waiting": 1, "unassigned_open": 3, "pending_tickets": 0}
     assert overdue >= 1  # 10일 전 미처리(#6)는 24시간 기한을 넘김 (#3은 테스트 시각에 따라 달라 범위로 확인)
 
 

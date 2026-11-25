@@ -37,6 +37,7 @@ async function createInquiry(page: Page, email: string, title: string, content: 
   await page.getByRole("button", { name: "문의 등록" }).click();
 
   await expect(page.getByText("문의가 등록되었습니다")).toBeVisible();
+  await expect(page.getByText("답변 준비 중")).toBeVisible();               // 내부 상태(검토 대기 등) 대신 고객 말로
   const number = (await page.getByText(/^INQ-\d{8}-\d{4}$/).textContent())!.trim();
   return number;
 }
@@ -157,6 +158,10 @@ test("회원 주문 취소 요청 → 상담원이 취소 티켓 승인·문구 
   await page.goto("/my");
   await expect(page.locator("li").filter({ hasText: orderNumber }).getByText("취소", { exact: true })).toBeVisible();
   await expect(page.locator("section").filter({ hasText: title }).getByText("답변 완료")).toBeVisible();
+  // 회원이 문의 조회 화면에 오면: 회원 문의는 여기서 찾을 수 없으니 내 쇼핑으로 안내
+  await page.goto("/inquiry/lookup");
+  await page.getByRole("link", { name: "내 문의 보기" }).click();
+  await expect(page).toHaveURL(/\/my$/);
 });
 
 test("출고 전 배송지 변경 요청 → 상담원이 [바로 처리]로 배송지 변경 → 처리 이력에 남음", async ({ page, browser }) => {

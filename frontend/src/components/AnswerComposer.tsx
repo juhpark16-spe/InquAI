@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { customerApi, errorCode, errorMessage, inquiryApi, responseApi, templateApi, type RecheckInput, type ReplyTemplate } from "../services/api";
 import type { FaqPublic, InquiryDetail } from "../services/types";
+import { ticketKind } from "../services/labels";
 import { Bubble, Note } from "./Chat";
 import { confirmDialog } from "./ConfirmDialog";
 import { Alert, Button, Spinner, Textarea, cx, formatDate } from "./ui";
@@ -153,8 +154,17 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged, onDirtyCh
       message: `답변에 [확인 필요] 표시가 ${text.split(CHECK_MARK).length - 1}곳 남아 있습니다.\n확인한 내용으로 고치지 않고 그대로 고객에게 보낼까요?`,
       confirmLabel: "그대로 보내기", cancelLabel: "고치러 가기", tone: "danger",
     }))) return;
+    // 승인 대기 중인 취소·교환·반품 요청이 있으면: 보내도 문의는 '담당자 처리'로 남음 (서버 responses._send) → 한 번 알림
+    const waitingTickets = data.tickets.filter((t) => ["취소", "교환", "환불"].includes(t.ticket_type) && t.status === "접수");
+    if (send && waitingTickets.length && !(await confirmDialog({
+      title: "승인 대기 중인 요청이 있어요",
+      message: `처리하지 않은 ${waitingTickets.map((t) => ticketKind(t.ticket_type)).join("·")} 요청이 ${waitingTickets.length}건 있어요.\n`
+        + "답변은 보내지만 문의는 완료되지 않고 '담당자 처리'로 남아요. 요청을 승인·반려한 뒤 [완료 처리]를 눌러 주세요.",
+      confirmLabel: "답변 보내기", cancelLabel: "요청 먼저 처리",
+    }))) return;
     const recheck = send ? recheckBody() : null;
     const ok = !send ? "초안을 저장했습니다."
+      : waitingTickets.length ? "답변을 보냈습니다. 승인 대기 중인 요청이 있어 문의는 '담당자 처리'로 남겼어요."
       : recheck ? `답변을 보냈습니다. '${recheck.note}'을(를) 확인한 뒤 ${formatDate(recheck.due_at)}까지 다시 안내해 주세요 (목록·대시보드·알림에 표시됩니다).`
         : data.recheck ? "답변을 보냈습니다. 다시 안내 표시도 풀었습니다."
           : "답변을 보냈습니다. 고객 조회 화면에 보이고 고객에게 답변 알림(메일)이 가며, 문의는 완료로 바뀌었습니다.";

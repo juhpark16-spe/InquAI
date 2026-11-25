@@ -308,6 +308,8 @@ class OrderCard(BaseModel):
     shipment_events: list[ShipmentStep] = []
     return_requested_at: UTCDateTime | None = None
     picked_up_at: UTCDateTime | None = None
+    return_reason: str | None = None        # [반품 회수 접수]에서 고른 사유 (단순 변심 / 불량·오배송)
+    refund_preview: int | None = None       # 반품 승인 시 환불 예정 금액 (단순 변심이면 왕복 배송비 차감)
     related_inquiries: list[RelatedInquiry] = []   # 같은 주문으로 들어온 다른 문의
     shipping_address: str | None = None
     option_choices: list[OptionChoice] = []        # 옵션별 재고 (옵션 변경·교환 안내)
@@ -356,6 +358,7 @@ class InquiryDetail(BaseModel):
     email_orders: list[OrderCard]  # 문의 이메일로 찾은 다른 주문 (본인 확인 필요)
     order_hints: list[OrderHint] = []  # 고객 글·추가 문의에 적힌 다른 주문번호
     customer_history: list[HistoryItem]
+    customer_history_hidden: dict[str, int] = {}   # 상담원: 남이 맡은(또는 미배정) 같은 고객 문의 수 {total, open}
     faq_titles: dict[str, str]
     history: list[Event]
     due_at: UTCDateTime

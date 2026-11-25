@@ -254,6 +254,7 @@ def get_inquiry(inquiry_id: int, user: LoginUser, db: DB):
         "email_orders": ctx.email_orders(db, inquiry),
         "order_hints": ctx.order_hints(db, inquiry),   # 고객 글에 적힌 다른 주문번호 ([이 번호로 확인])
         "customer_history": ctx.customer_history(db, inquiry, user),
+        "customer_history_hidden": ctx.hidden_history(db, inquiry, user),
         "customer_profile": ctx.customer_profile(db, inquiry),
         "faq_titles": ctx.faq_titles(db, inquiry),
         "history": ctx.history(db, inquiry),
@@ -312,7 +313,7 @@ def add_note(inquiry_id: int, body: NoteCreate, request: Request, user: LoginUse
 
 @router.get("/{inquiry_id}/attachments/{attachment_id}", summary="첨부 사진 보기 (로그인)")
 def get_attachment(inquiry_id: int, attachment_id: int, user: LoginUser, db: DB):
-    inquiry = get_inquiry_for_user(db, inquiry_id, user)  # 상담원은 배정된 문의의 사진만
+    inquiry = get_inquiry_for_user(db, inquiry_id, user, allow_unassigned=True)  # 상담원은 배정된 문의와 미배정 문의(맡기 전 미리 보기)의 사진만
     att = db.get(Attachment, attachment_id)
     if att is None or att.inquiry_id != inquiry.id or not uploads.file_path(att).exists():
         raise AppError(404, "사진을 찾을 수 없습니다.", "NOT_FOUND")

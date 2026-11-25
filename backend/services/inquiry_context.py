@@ -6,17 +6,20 @@
 import re
 from datetime import timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from backend.database.models import (AdminAuditLog, AdminUser, Coupon, Customer, Faq, Inquiry, Notification, Order,
                                      PointHistory, Response, Ticket, as_utc, utcnow)
 from backend.services import inventory
-from backend.services.order_actions import duplicates
+from backend.services.order_actions import RETURN_FEE, duplicates
 
 CANCELLABLE = ("결제 완료", "상품 준비 중")   # 출고 전 (docs/shop_policy.md 2장)
 RETURN_DAYS, DEFECT_RETURN_DAYS = 7, 30      # 단순 변심 / 불량·오배송 (4장)
 HISTORY_LIMIT = 5
+
+# 처리 요청(티켓) 종류의 화면 이름: 서버 값 '환불'은 반품 후 환불 (frontend/src/services/labels.ts TICKET_KIND 와 같음)
+TICKET_KIND = {"취소": "취소", "교환": "교환", "환불": "반품"}
 
 
 def order_card(db: Session, inquiry: Inquiry) -> dict | None:
@@ -32,9 +35,28 @@ def order_card(db: Session, inquiry: Inquiry) -> dict | None:
     # 같은 주문으로 들어온 다른 문의: 같은 일을 두 번 처리하거나 서로 다르게 안내하지 않게
     others = db.scalars(select(Inquiry).where(Inquiry.order_number == order.order_number, Inquiry.id != inquiry.id)
                         .order_by(Inquiry.created_at.desc())).all()
+    if order.return_requested_at:   # 반품 회수 접수됨 → 사유와 환불 예정 금액 (반품 승인 확인창에 보여 줌)
+        reason = return_reason(db, order.order_number)
+        card["return_reason"], card["refund_preview"] = reason, refund_amount(order, reason)
     card["related_inquiries"] = [{"id": i.id, "inquiry_number": i.inquiry_number, "title": i.title, "status": i.status,
                                   "created_at": i.created_at, "assigned_to": i.assigned_to} for i in others]
     return card
+
+
+def return_reason(db: Session, order_number: str) -> str | None:
+    """상담원이 [반품 회수 접수]로 남긴 반품 사유 (가장 최근 것, 작업 기록에서)"""
+    rows = db.scalars(select(AdminAuditLog).where(AdminAuditLog.action == "order_action")
+                      .order_by(AdminAuditLog.id.desc())).all()
+    for a in rows:
+        d = a.detail or {}
+        if d.get("kind") == "return" and d.get("order_number") == order_number:
+            return (d.get("after") or {}).get("reason")
+    return None
+
+
+def refund_amount(order: Order, reason: str | None) -> int:
+    """반품 환불 금액: 단순 변심이면 왕복 배송비를 뺌 (불량·오배송은 전액)"""
+    return max(order.amount - RETURN_FEE, 0) if reason == "단순 변심" else order.amount
 
 
 ORDER_IN_TEXT = re.compile(r"(?<!\d)(\d{8})(\s*-\s*|)(\d{4})(?!\d)")
@@ -159,6 +181,16 @@ def customer_history(db: Session, inquiry: Inquiry, user: AdminUser) -> list[dic
     rows = db.scalars(stmt.order_by(Inquiry.created_at.desc()).limit(HISTORY_LIMIT)).all()
     return [{"id": i.id, "inquiry_number": i.inquiry_number, "title": i.title, "status": i.status,
              "created_at": i.created_at} for i in rows]
+
+
+def hidden_history(db: Session, inquiry: Inquiry, user: AdminUser) -> dict:
+    """상담원에게 보이지 않는 같은 고객의 다른 문의(남이 맡았거나 미배정) 건수: 내용은 숨기고 수만
+    (같은 고객에게 서로 다른 안내를 하지 않도록, 처리 중인 건이 있으면 관리자·담당자와 확인)"""
+    if user.role == "admin":
+        return {"total": 0, "open": 0}
+    rows = db.execute(select(Inquiry.status).where(Inquiry.customer_email == inquiry.customer_email, Inquiry.id != inquiry.id,
+                                                   or_(Inquiry.assigned_to != user.id, Inquiry.assigned_to.is_(None)))).all()
+    return {"total": len(rows), "open": sum(1 for (s,) in rows if s in ("접수", "검토 대기", "담당자 처리"))}
 
 
 def mask_phone(phone: str | None) -> str | None:
@@ -286,7 +318,8 @@ def history(db: Session, inquiry: Inquiry) -> list[dict]:
                 text += f" (요청: {d['instruction']})"
         elif a.action in ("ticket_approve", "ticket_reject"):
             result = "승인" if a.action == "ticket_approve" else "반려"
-            text = f"티켓 #{d.get('ticket_id')} {d.get('ticket_type')} {result}"
+            kind_name = TICKET_KIND.get(d.get("ticket_type"), d.get("ticket_type"))   # 화면과 같은 이름 (환불 → 반품)
+            text = f"{kind_name} 요청 #{d.get('ticket_id')} {result}"
             if d.get("order"):
                 text += f" · 주문 {d['order']['before']} → {d['order']['after']}"
             if d.get("memo"):

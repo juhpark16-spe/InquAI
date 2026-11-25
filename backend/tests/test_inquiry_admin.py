@@ -296,3 +296,20 @@ def test_close_reason_answered_needs_sent_answer(client, db, inquiries):
     assert db.get(Inquiry, 3).close_reason == "답변으로 해결"
     from backend.services.inquiries import CLOSED_TEXT
     assert "답변으로 해결" not in CLOSED_TEXT                                       # 고객에게 '종료됨' 안내 없음
+
+
+def test_agent_sees_count_of_others_inquiries(client, db, inquiries):
+    """상담원의 고객 카드: 남이 맡은(또는 미배정) 같은 고객 문의는 내용 없이 건수만"""
+    from backend.database.models import Inquiry
+    mine = db.get(Inquiry, 3)                                       # agent1 담당
+    db.add_all([Inquiry(inquiry_number="INQ-H-1", customer_name="c", customer_email=mine.customer_email, title="t",
+                        content="c", status="담당자 처리", assigned_to=None),
+                Inquiry(inquiry_number="INQ-H-2", customer_name="c", customer_email=mine.customer_email, title="t",
+                        content="c", status="완료", assigned_to=1)])
+    db.commit()
+    login(client, "agent1")
+    hidden = client.get("/api/inquiries/3").json()["customer_history_hidden"]
+    assert hidden["open"] == 1 and hidden["total"] >= 2
+    client.cookies.clear()
+    login(client, "admin")
+    assert client.get("/api/inquiries/3").json()["customer_history_hidden"] == {"total": 0, "open": 0}   # 관리자는 다 보임

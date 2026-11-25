@@ -126,3 +126,15 @@ def test_validation_and_csrf(client, inquiry):
     assert client.post(f"/api/inquiries/{inquiry}/responses", headers=h, json={"text": "   "}).status_code == 422
     assert client.post(f"/api/inquiries/{inquiry}/responses", json={"text": "x"}).status_code == 403  # CSRF
     assert client.post("/api/inquiries/999/responses", headers=h, json={"text": "x"}).status_code == 404
+
+
+def test_send_with_waiting_ticket_keeps_inquiry_open(client, db, inquiry):
+    """승인 대기 중인 취소·교환·반품 요청이 있으면 답변을 보내도 '담당자 처리'로 남음 (요청이 잊히지 않게)"""
+    from backend.database.models import Ticket
+    db.add(Ticket(inquiry_id=inquiry, ticket_type="취소", reason="취소해 주세요"))
+    db.commit()
+    h = login(client)
+    r = client.post(f"/api/inquiries/{inquiry}/responses", headers=h, json={"text": "확인 후 취소해 드릴게요.", "send": True})
+    assert r.status_code == 201 and r.json()["status"] == "발송"
+    db.expire_all()
+    assert db.get(Inquiry, inquiry).status == "담당자 처리"

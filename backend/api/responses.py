@@ -24,7 +24,7 @@ from backend.core.config import get_settings
 from backend.core.dependencies import DB, LoginUser
 from backend.core.errors import AppError
 from backend.core.rate_limit import rate_limit
-from backend.database.models import AdminUser, Inquiry, Response, utcnow
+from backend.database.models import AdminUser, Inquiry, Response, Ticket, utcnow
 from backend.schemas.inquiry_admin import ResponseOut
 from backend.services import notify
 from backend.services.recheck import RecheckIn, clear_recheck, set_recheck
@@ -88,9 +88,12 @@ def _send(db: Session, request: Request, response: Response, user: AdminUser, re
     response.approved_by, response.approved_at = user.id, utcnow()
     inquiry = db.get(Inquiry, response.inquiry_id)
     before = inquiry.status
-    inquiry.status = "완료"
+    # 승인 대기 중인 취소·교환·반품 요청이 있으면 완료하지 않음 (목록·미처리 건수에서 빠져 요청이 잊히지 않게)
+    waiting = db.scalar(select(Ticket.id).where(Ticket.inquiry_id == inquiry.id, Ticket.status == "접수",
+                                                Ticket.ticket_type.in_(("취소", "교환", "환불"))).limit(1))
+    inquiry.status = "담당자 처리" if waiting else "완료"
     add_audit(db, request, "response_approve", user, "inquiry", inquiry.id, response_id=response.id,
-              generated_by=response.generated_by, is_edited=response.is_edited, before=before, after="완료")
+              generated_by=response.generated_by, is_edited=response.is_edited, before=before, after=inquiry.status)
     notify.answer_registered(db, inquiry)  # 고객에게 "답변이 등록되었습니다" 알림 (시연용 기록)
     # 다시 안내: 체크하고 보내면 표시를 남기고(바꾸고), 체크 없이 보내면 이 답변이 다시 안내한 것이므로 표시를 풂
     if recheck is not None:

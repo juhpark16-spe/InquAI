@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | address 배송지 변경 | 출고 전 | 주문 배송지 변경 |
 | option 옵션 변경 | 출고 전 + 같은 상품의 다른 옵션, 재고가 주문 수량 이상 | 상품명의 옵션(괄호) 변경, 가격 같음, 재고 이동 (새 옵션 -수량, 원래 옵션 +수량) |
-| partial_cancel 부분 취소 | 출고 전 + 수량 2개 이상, 남기는 수량 1개 이상 | 수량·금액 줄임 + 결제 내역 '승인 취소'(부분) + 열린 취소 티켓은 승인 처리 + 재고 +취소 수량 |
+| partial_cancel 부분 취소 | 출고 전 + 수량 2개 이상, 남기는 수량 1개 이상 | 수량·금액 줄임 + 결제 내역 '승인 취소'(부분, 3만원 미만이 되면 배송비 3,000원 차감) + 열린 취소 티켓은 승인 처리 + 재고 +취소 수량 |
 | duplicate_cancel 중복 승인 취소 | 중복 결제 의심 (같은 금액 승인 10분 안에 두 번) | 결제 내역 '승인 취소' 1건 |
 | points 보상 적립금 | 쇼핑몰 고객 + 한도 (상담원 3,000원, 관리자 50,000원) | 적립금 내역 +금액 |
 | coupon 사과 쿠폰 | 쇼핑몰 고객 + 쿠폰 종류별 권한 | 쿠폰 발급 (30일) |
@@ -29,6 +29,8 @@ from backend.services.inventory import split_product
 
 CANCELLABLE = ("결제 완료", "상품 준비 중")       # 출고 전 (docs/shop_policy.md 2장)
 RETURN_DAYS, DEFECT_RETURN_DAYS = 7, 30
+RETURN_FEE = 6000   # 단순 변심 반품·교환 왕복 배송비 (shop_policy.md F17·F19)
+FREE_SHIPPING_MIN, SHIPPING_FEE = 30000, 3000   # 3만원 이상 무료배송, 아니면 3,000원 (shop_policy.md F15·F28)
 POINT_LIMIT = {"agent": 3000, "admin": 50000}     # 1회 보상 적립금 한도
 DUPLICATE_WINDOW = timedelta(minutes=10)
 
@@ -129,16 +131,21 @@ def run(db: Session, request: Request, user: AdminUser, inquiry: Inquiry, action
         if not 1 <= count < qty:
             raise AppError(422, f"1개부터 {qty - 1}개까지 취소할 수 있습니다 (전부 취소는 취소 티켓 승인으로).", "VALIDATION_ERROR")
         unit = order.amount // qty
-        before, after = {"quantity": qty, "amount": order.amount}, {"quantity": qty - count, "amount": order.amount - unit * count}
-        order.quantity, order.amount = qty - count, order.amount - unit * count
+        left = order.amount - unit * count
+        # 무료배송이던 주문이 3만원 미만이 되면 처음 배송비 3,000원을 빼고 환불 (정책 F28)
+        fee = SHIPPING_FEE if order.amount >= FREE_SHIPPING_MIN > left else 0
+        refund = unit * count - fee
+        before, after = {"quantity": qty, "amount": order.amount}, {"quantity": qty - count, "amount": left, "shipping_fee": fee}
+        order.quantity, order.amount = qty - count, left
         inventory.restock(db, order.product_name, count)   # 취소한 수량은 재고로
-        db.add(Payment(order_id=order.id, kind="승인 취소", method=order.payment_method, amount=unit * count, at=now,
-                       memo=f"부분 취소 {count}개"))
+        db.add(Payment(order_id=order.id, kind="승인 취소", method=order.payment_method, amount=refund, at=now,
+                       memo=f"부분 취소 {count}개" + (f" · 3만원 미만이 되어 배송비 {won(fee)} 차감" if fee else "")))
         for t in db.scalars(select(Ticket).where(Ticket.inquiry_id == inquiry.id, Ticket.ticket_type == "취소",
                                                  Ticket.status == "접수",
                                                  (Ticket.order_id == order.id) | Ticket.order_id.is_(None))):
             t.status, t.memo, t.handled_by, t.handled_at = "승인", f"부분 취소 {count}개로 처리", user.id, now
-        summary = f"부분 취소: {qty}개 → {qty - count}개 ({won(unit * count)} 승인 취소)"
+        summary = (f"부분 취소: {qty}개 → {qty - count}개 ({won(refund)} 승인 취소"
+                   + (f", 무료배송 기준 3만원 미만이 되어 배송비 {won(fee)} 차감)" if fee else ")"))
 
     elif action == "duplicate_cancel":
         order = _order(db, inquiry)

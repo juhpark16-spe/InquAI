@@ -17,7 +17,7 @@
 from collections import Counter
 
 from fastapi import APIRouter, Depends, Response
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy import func, select
 
 from backend.core.dependencies import DB, ShopCustomer
@@ -26,7 +26,7 @@ from backend.core.rate_limit import FailureLock, rate_limit
 from backend.core.security import clear_shop_cookies, create_shop_token, set_shop_cookies, verify_password
 from backend.database.models import Customer, Inquiry
 from backend.schemas.common import UTCDateTime
-from backend.schemas.inquiry import InquiryLookupResult, normalize_order_number
+from backend.schemas.inquiry import InquiryLookupResult, fill_follow_up, normalize_order_number
 from backend.services import sla
 from backend.services.inquiries import add_follow_up, find_customer_inquiries, public_view, rate_answer
 
@@ -64,7 +64,7 @@ class ShopOrder(BaseModel):
 
 
 class FollowUpBody(BaseModel):
-    content: str = Field(min_length=2, max_length=2000)
+    content: str = Field(default="", max_length=2000)   # 사진·주문번호만 보낼 때는 비워도 됨
     attachment_tokens: list[str] = Field(default_factory=list, max_length=3)
     order_number: str | None = Field(default=None, max_length=30)   # 처음 문의에 주문번호가 없을 때만
 
@@ -77,6 +77,10 @@ class FollowUpBody(BaseModel):
     @classmethod
     def _strip(cls, v):
         return v.strip() if isinstance(v, str) else v
+
+    @model_validator(mode="after")
+    def _fill(self):
+        return fill_follow_up(self)
 
 
 class RatingBody(BaseModel):

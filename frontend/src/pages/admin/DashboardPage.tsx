@@ -384,7 +384,7 @@ export default function DashboardPage() {
 
       <section>
         <h2 className="mb-3 text-lg font-semibold text-ink">지금 처리할 일 <span className="font-normal text-muted">· 기간과 관계없이 현재</span></h2>
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
           <WorkCard label="답변 기한 초과" value={data.now.overdue_open} sub="주말 제외 · 긴급 4시간 · 그 외 24시간"
             to="/admin/inquiries?overdue=true" critical highlight />
           <WorkCard label="긴급 미처리" value={data.now.urgent_open} sub="긴급도 높음"
@@ -392,6 +392,7 @@ export default function DashboardPage() {
           <WorkCard label="미처리 전체" value={data.now.open} sub="접수·검토 대기·담당자 처리" to="/admin/inquiries?open=true" />
           <WorkCard label="검토 대기" value={data.now.review_waiting} sub="AI 초안 확인 필요" to="/admin/inquiries?status=검토 대기" />
           <WorkCard label="미배정" value={data.now.unassigned_open} sub="담당자 없음" to="/admin/inquiries?open=true&assigned_to=none" />
+          <WorkCard label="승인 대기 요청" value={data.now.pending_tickets ?? 0} sub="취소·교환·반품" to="/admin/tickets" />
         </div>
         <div className="mt-3 grid gap-3 lg:grid-cols-[2fr_3fr]">
           <NextUp item={prio?.next} open={prio?.open ?? data.now.open} failed={prio === null} />
@@ -520,7 +521,9 @@ export default function DashboardPage() {
           action={<Link to="/admin/inquiries?open=true" className="flex items-center gap-1 text-xs font-medium text-ink hover:underline">전체 보기 <Icon name="arrow" className="h-3.5 w-3.5" /></Link>}>
           <ul className="divide-y divide-hairline">
             {data.staff.map((s) => (
-              <li key={s.id} className="flex items-center gap-3 py-2.5 first:pt-0">
+              <li key={s.id} className="first:pt-0">
+                {/* 누르면 그 사람이 맡은 미처리 문의 목록 */}
+                <Link to={`/admin/inquiries?open=true&assigned_to=${s.id}`} className="-mx-2 flex items-center gap-3 rounded-xl px-2 py-2.5 hover:bg-surface-soft">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-hairline bg-surface-soft text-sm font-semibold text-ink" aria-hidden>
                   {initialOf(s.display_name)}
                 </span>
@@ -532,6 +535,7 @@ export default function DashboardPage() {
                   <span className="rounded-full bg-rose-50 px-2 py-0.5 text-xs font-semibold text-rose-700">긴급 {s.urgent_open}</span>
                 )}
                 <span className="w-14 text-right text-sm tabular-nums text-ink">{s.open}건</span>
+                </Link>
               </li>
             ))}
             <li className="flex items-center gap-3 py-2.5 pb-0">

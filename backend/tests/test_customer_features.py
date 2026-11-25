@@ -91,10 +91,19 @@ def test_agent_cannot_see_other_attachments(client, db, ai):
     db_id = db.scalar(select(Inquiry.id).where(Inquiry.inquiry_number == post(client, attachment_tokens=[token])
                                                 .json()["inquiry_number"]))
     att_id = db.scalar(select(Attachment.id))
+    from backend.core.security import hash_password
+    from backend.database.models import AdminUser
+    from backend.tests.conftest import TEST_PASSWORD
+    other = AdminUser(username="agent2", role="agent", display_name="상담원2", password_hash=hash_password(TEST_PASSWORD))
+    db.add(other)
     i = db.get(Inquiry, db_id)
     i.assigned_to = None
     db.commit()
     admin_login(client, "agent1")
+    # 미배정 문의: 상세를 미리 볼 수 있으니 사진도 보임 (맡을지 판단)
+    assert client.get(f"/api/inquiries/{db_id}/attachments/{att_id}").status_code == 200
+    i.assigned_to = other.id                                       # 다른 상담원이 맡은 문의의 사진은 안 보임
+    db.commit()
     assert client.get(f"/api/inquiries/{db_id}/attachments/{att_id}").status_code == 403
 
 
@@ -135,6 +144,17 @@ def test_follow_up_reopens_and_assigns(client, db, ai):
     d = client.get(f"/api/inquiries/{inquiry.id}").json()
     assert d["messages"][0]["text"] == "그래도 아직 안 왔어요" and d["attachments"][0]["message_id"] == d["messages"][0]["id"]
     assert any(e["kind"] == "followup" for e in d["history"])
+
+
+def test_follow_up_with_photo_only(client, db, ai):
+    """사진만 보내도 됨 (파손 사진을 나중에 보낼 때): 글이 없으면 '(사진 보냄)'으로 남김. 글도 사진도 없으면 422"""
+    auto_answer(ai)
+    number = post(client).json()["inquiry_number"]
+    body = {"customer_email": EMAIL, "password": PW, "inquiry_number": number}
+    assert client.post("/api/inquiries/follow-up", json={**body, "content": " "}).status_code == 422
+    token = upload(client).json()["token"]
+    assert client.post("/api/inquiries/follow-up", json={**body, "content": "", "attachment_tokens": [token]}).status_code == 201
+    assert [m["text"] for m in lookup(client).json()["items"][0]["messages"]] == ["(사진 보냄)"]
 
 
 def test_follow_up_requires_owner(client, ai):

@@ -17,7 +17,7 @@ from backend.core.errors import AppError
 from backend.services import draft_quality, sla
 from backend.services.inquiry_context import history
 from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminAuditLog, AdminUser, Inquiry,
-                                     LabelCorrection, Order, Response, as_utc, utcnow)
+                                     LabelCorrection, Order, Response, Ticket, as_utc, utcnow)
 from backend.training.labels import CATEGORY_LABELS
 
 router = APIRouter(prefix="/stats", tags=["통계"])
@@ -157,6 +157,9 @@ def summary(
             "urgent_open": urgent_open,
             "review_waiting": sum(1 for i in open_rows if i.status == "검토 대기"),
             "unassigned_open": sum(1 for i in open_rows if i.assigned_to is None),
+            # 승인 대기 중인 취소·교환·반품 요청 (취소·교환·반품 메뉴의 '승인 대기')
+            "pending_tickets": db.scalar(select(func.count()).select_from(Ticket).where(
+                Ticket.status == "접수", Ticket.ticket_type.in_(("취소", "교환", "환불")))) or 0,
             "overdue_open": sum(1 for i in open_rows
                                 if sla.is_overdue(i.status, sla.started(i), i.analysis.urgency if i.analysis else None)),
         },

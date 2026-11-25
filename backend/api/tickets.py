@@ -23,23 +23,13 @@ from sqlalchemy.orm import selectinload
 from backend.api.inquiry_admin import get_inquiry_for_user
 from backend.core.dependencies import DB, LoginUser
 from backend.core.errors import AppError
-from backend.database.models import AdminAuditLog, AdminUser, Inquiry, Order, Payment, Ticket, as_utc, utcnow
+from backend.database.models import AdminUser, Inquiry, Order, Payment, Ticket, as_utc, utcnow
 from backend.schemas.inquiry_admin import TicketOut
-from backend.services import inventory
+from backend.services import inventory, sla
+from backend.services import inquiry_context as ctx
+from backend.services.order_actions import DEFECT_RETURN_DAYS, RETURN_FEE
 from backend.services.audit import add_audit
 
-RETURN_FEE = 6000   # 단순 변심 반품 왕복 배송비 (docs/shop_policy.md, services/order_actions.py 의 반품 접수 안내와 같음)
-
-
-def _return_reason(db, order_number: str) -> str | None:
-    """상담원이 [반품 회수 접수]로 남긴 반품 사유 (가장 최근 것, 작업 기록에서)"""
-    rows = db.scalars(select(AdminAuditLog).where(AdminAuditLog.action == "order_action")
-                      .order_by(AdminAuditLog.id.desc())).all()
-    for a in rows:
-        d = a.detail or {}
-        if d.get("kind") == "return" and d.get("order_number") == order_number:
-            return (d.get("after") or {}).get("reason")
-    return None
 
 
 router = APIRouter(prefix="/tickets", tags=["티켓 처리"])
@@ -74,6 +64,16 @@ def decide(ticket_id: int, body: TicketDecision, request: Request, user: LoginUs
     if order is None and inquiry.order_number:   # 주문번호를 나중에 받은 문의 (예전 티켓)
         order = db.scalar(select(Order).where(Order.order_number == inquiry.order_number))
         ticket.order_id = order.id if order else None
+    if body.status == "승인" and order is not None and order.customer.email.lower() != inquiry.customer_email.lower():
+        # 본인 확인: [바로 처리]와 같은 기준 (주문번호를 바꿔 남의 주문이 연결돼도 승인되지 않게)
+        raise AppError(409, "문의 이메일과 주문자 이메일이 달라 승인할 수 없습니다. 본인 확인 후 진행하거나 반려해 주세요.",
+                       "NOT_OWNER")
+    if body.status == "승인" and ticket.ticket_type == "교환" and order is not None:
+        # 교환: 배송 완료 + 불량·오배송 기한(30일) 안 (단순 변심 7일은 상담원이 사유를 보고 판단)
+        if order.order_status != "배송 완료" or not order.delivered_at:
+            raise AppError(409, f"주문이 '{order.order_status}' 상태라 교환을 승인할 수 없어요 (배송 완료 후에만).", "INVALID_STATE")
+        if utcnow() > as_utc(order.delivered_at) + timedelta(days=DEFECT_RETURN_DAYS):
+            raise AppError(409, f"배송 완료 후 {DEFECT_RETURN_DAYS}일이 지나 교환할 수 없어요. 반려하고 안내해 주세요.", "INVALID_STATE")
     order_change = None
     if body.status == "승인" and ticket.ticket_type == "취소":
         if order is None:
@@ -93,11 +93,16 @@ def decide(ticket_id: int, body: TicketDecision, request: Request, user: LoginUs
             raise AppError(409, "이미 취소된 주문이라 결제가 승인 취소로 처리됐어요. 환불 티켓은 반려해 주세요.", "INVALID_STATE")
         if any(p.kind == "환불" for p in order.payments):
             raise AppError(409, "이 주문에는 이미 환불(예정)이 있어요. 결제·환불 내역을 확인해 주세요.", "ALREADY_REFUNDED")
-        amount, memo = order.amount, "반품 회수·검수 후 3영업일 이내 (티켓 승인)"
-        if _return_reason(db, order.order_number) == "단순 변심":   # [반품 회수 접수]에서 안내한 대로 왕복 배송비 차감
-            amount, memo = max(order.amount - RETURN_FEE, 0), memo + f" · 단순 변심 왕복 배송비 {RETURN_FEE:,}원 차감"
+        if order.return_requested_at is None:
+            # 반품 환불은 [반품 회수 접수] 뒤에: 거기서 배송 완료·반품 기한(7일/30일)을 확인하고 사유(배송비 차감 여부)를 남김
+            raise AppError(409, "먼저 주문 정보의 [반품 회수 접수]를 해 주세요. 배송 완료·반품 기한을 확인하고 반품 사유를 남긴 뒤 환불을 승인해요.",
+                           "RETURN_NOT_REQUESTED")
+        reason = ctx.return_reason(db, order.order_number)   # [반품 회수 접수]에서 고른 사유
+        amount, memo = ctx.refund_amount(order, reason), "반품 회수·검수 후 3영업일 이내 (티켓 승인)"
+        if amount < order.amount:   # 단순 변심: 안내한 대로 왕복 배송비 차감
+            memo += f" · 단순 변심 왕복 배송비 {RETURN_FEE:,}원 차감"
         db.add(Payment(order_id=order.id, kind="환불", status="예정", method=order.payment_method, amount=amount,
-                       at=utcnow() + timedelta(days=3), memo=memo))
+                       at=sla.add_weekday_time(utcnow(), timedelta(days=3)), memo=memo))   # 3영업일 (주말 제외)
 
     ticket.status, ticket.memo = body.status, body.memo
     ticket.handled_by, ticket.handled_at = user.id, utcnow()
@@ -131,8 +136,8 @@ def list_tickets(
         stmt = stmt.where(Ticket.status == status)
     total = db.scalar(select(func.count()).select_from(stmt.subquery()))
     # 승인 대기는 오래된 것부터(먼저 들어온 요청 먼저), 처리된 것은 최근 처리 순
-    order = Ticket.created_at.asc() if status == "접수" else Ticket.created_at.desc()
-    rows = db.scalars(stmt.order_by(order, Ticket.id).offset((page - 1) * size).limit(size)).all()
+    order = Ticket.created_at.asc() if status == "접수" else Ticket.handled_at.desc().nulls_last()
+    rows = db.scalars(stmt.order_by(order, Ticket.id.desc()).offset((page - 1) * size).limit(size)).all()
     names = {u.id: u.display_name for u in db.scalars(select(AdminUser))}
     return {
         "items": [{

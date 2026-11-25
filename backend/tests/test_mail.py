@@ -5,6 +5,7 @@ import smtplib
 import pytest
 
 from backend.core.config import get_settings
+from backend.core.security import hash_password
 from backend.database.models import Inquiry, Notification
 from backend.services import notify
 from backend.tests.conftest import TEST_PASSWORD
@@ -19,9 +20,11 @@ def login(client, username="agent1"):
     client.headers["X-CSRF-Token"] = client.cookies.get("csrf_token")
 
 
-def make(db, email=REAL, n=1):
+def make(db, email=REAL, n=1, password: str | None = "lookup-pw"):
+    """password=None 이면 쇼핑몰 로그인 상태로 남긴 회원 문의 (조회 비밀번호 없음)"""
     i = Inquiry(inquiry_number=f"INQ-M-{n}", customer_name="김고객", customer_email=email, title="사이즈 문의",
-                content="M 사이즈 실측이 궁금해요", status="담당자 처리", assigned_to=AGENT)
+                content="M 사이즈 실측이 궁금해요", status="담당자 처리", assigned_to=AGENT,
+                lookup_password_hash=hash_password(password) if password else None)
     db.add(i)
     db.commit()
     return i.id
@@ -92,3 +95,12 @@ def test_no_mail_when_send_is_rolled_back(client, db, mail):
     r = answer(client, inquiry_id, recheck={"note": "x", "due_at": "2020-01-01T00:00:00Z"})   # 지난 기한 → 422, 저장 안 됨
     assert r.status_code == 422 and mail == []
     assert db.query(Notification).count() == 0
+
+
+def test_member_mail_points_to_my_page(client, db, mail):
+    """회원 문의(조회 비밀번호 없음)는 문의 조회로는 찾을 수 없으니 '내 쇼핑 > 내 문의'로 안내"""
+    inquiry_id = make(db, password=None)
+    login(client)
+    assert answer(client, inquiry_id).status_code == 201
+    body = mail[0][2]
+    assert "/my" in body and "내 쇼핑 > 내 문의" in body and "/inquiry/lookup" not in body

@@ -166,6 +166,8 @@ def test_refund_ticket_once_with_return_fee(client, db, ids):
     t2 = Ticket(inquiry_id=ids["delivered"], order_id=d1.id, ticket_type="환불", reason="또 환불", status="접수")
     db.add_all([t1, t2])
     db.commit()
+    card = client.get(f"/api/inquiries/{ids['delivered']}").json()["order"]           # 승인 확인창에 보일 금액·사유
+    assert card["return_reason"] == "단순 변심" and card["refund_preview"] == 79000 - 6000
     assert client.patch(f"/api/tickets/{t1.id}", json={"status": "승인"}).status_code == 200
     refund = db.query(Payment).filter_by(order_id=d1.id, kind="환불").one()
     assert refund.amount == 79000 - 6000 and "6,000원 차감" in refund.memo
@@ -183,3 +185,15 @@ def test_duplicate_warning_stays_cleared_after_partial_and_full_cancel(client, d
     t = db.query(Ticket).filter_by(status="접수").one()
     assert client.patch(f"/api/tickets/{t.id}", json={"status": "승인"}).status_code == 200
     assert client.get(f"/api/inquiries/{ids['ready']}").json()["order"]["duplicate_payment"] is False
+
+
+def test_partial_cancel_deducts_shipping_under_30000(client, db, ids):
+    """무료배송(3만원 이상) 주문이 부분 취소로 3만원 미만이 되면 배송비 3,000원을 빼고 환불 (정책 F28)"""
+    o = order(db, "R-1")
+    o.amount = 50000                                   # 2개 × 25,000원
+    db.commit()
+    login(client, "agent1")
+    assert act(client, ids["ready"], action="partial_cancel", count=1).status_code == 200
+    p = db.query(Payment).filter(Payment.kind == "승인 취소").one()
+    assert p.amount == 22000 and "배송비 3,000원 차감" in p.memo        # 25,000 - 3,000
+    assert order(db, "R-1").amount == 25000

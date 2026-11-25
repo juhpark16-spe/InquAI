@@ -164,7 +164,10 @@ export default function InquiryFormPage() {
                 }).catch(() => {})}>{copied ? "복사됨 ✓" : "복사"}</button>
             </dd>
             <dt className="text-slate-500">처리 상태</dt>
-            <dd>{result.status}</dd>
+            {/* 내부 상태(자동 처리·검토 대기 등) 대신 고객 말로 (문의 조회·내 쇼핑과 같은 표시) */}
+            <dd>{result.answer
+              ? <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">답변 완료</span>
+              : <span className="rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">답변 준비 중</span>}</dd>
           </dl>
           {/* 대화형: 내가 보낸 문의(오른쪽) → AI 답변 또는 접수 안내(왼쪽) */}
           <div className="space-y-4 rounded-xl bg-slate-50 p-4">

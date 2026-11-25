@@ -244,7 +244,14 @@ function OrderActions({ o, inquiryId, onDone }: { o: OrderCard; inquiryId: numbe
                   {Array.from({ length: qty - 1 }, (_, i) => i + 1).map((n) => <option key={n} value={n}>{n}개 ({won(((o.unit_price ?? 0) * n) || null)})</option>)}
                 </Select>
                 <Button className="min-h-9 px-4 py-1" disabled={q.busy}
-                  onClick={() => q.exec("partial_cancel", { count }, `${qty}개 중 ${count}개를 취소할까요?`)}>{q.busy ? <Spinner /> : `${count}개 취소`}</Button>
+                  onClick={() => {
+                    // 서버(order_actions)와 같은 계산: 무료배송(3만원 이상) 주문이 3만원 미만이 되면 배송비 3,000원 차감
+                    const unit = Math.floor((o.amount ?? 0) / qty), left = (o.amount ?? 0) - unit * count;
+                    const fee = (o.amount ?? 0) >= 30000 && left < 30000 ? 3000 : 0;
+                    q.exec("partial_cancel", { count }, `${qty}개 중 ${count}개를 취소할까요?
+환불(승인 취소) ${won(unit * count - fee)}`
+                      + (fee ? ` · 남은 금액이 3만원 미만이 되어 배송비 ${won(fee)} 차감` : ""));
+                  }}>{q.busy ? <Spinner /> : `${count}개 취소`}</Button>
               </div>
             </>
           )}
@@ -597,7 +604,10 @@ function Tickets({ data, onChanged }: { data: InquiryDetail; onChanged: (msg: st
       const message = t.ticket_type === "취소"
         ? `${what}\n주문을 취소하고 결제 금액${order?.amount != null ? ` ${won(order.amount)}` : ""}을 전액 환불(카드 승인 취소)해요.\n되돌릴 수 없어요.`
         : t.ticket_type === "환불"
-          ? `${what}\n반품 환불을 승인해요. 회수·검수 뒤 3영업일 안에 환불돼요 (단순 변심이면 왕복 배송비 6,000원 차감).`
+          // 서버가 계산한 환불 예정 금액·반품 사유 (inquiry_context.order_card: 회수 접수 때 고른 사유로 배송비 차감 여부)
+          ? `${what}\n반품 환불을 승인해요. 환불 예정 ${order?.refund_preview != null ? won(order.refund_preview) : "금액 확인 필요"}`
+            + (order?.return_reason ? ` (반품 사유: ${order.return_reason}, ${order.return_reason === "단순 변심" ? "왕복 배송비 6,000원 차감" : "배송비 쇼핑몰 부담"})` : "")
+            + "\n회수·검수 뒤 3영업일 안에 환불돼요."
           : `${what}\n교환을 승인해요. 새 상품 발송은 쇼핑몰에서 진행돼요.`;
       if (!(await confirmDialog({ title: `${ticketKind(t.ticket_type)} 승인`, message,
         confirmLabel: `${ticketKind(t.ticket_type)} 승인`, tone: t.ticket_type === "교환" ? "primary" : "danger" }))) return;
@@ -625,6 +635,8 @@ function Tickets({ data, onChanged }: { data: InquiryDetail; onChanged: (msg: st
         {data.tickets.map((t) => {
           const actionable = TICKET_ACTIONABLE.includes(t.ticket_type) && t.status === "접수";
           const cancelBlocked = t.ticket_type === "취소" && o?.found && o.cancellable === false;
+          // 반품 환불은 [반품 회수 접수](배송 완료·기한 확인 + 사유) 뒤에만 승인 (서버도 같은 조건)
+          const refundBlocked = t.ticket_type === "환불" && o?.found && !o.return_requested_at;
           return (
             <li key={t.id} className={cx("rounded-xl border p-3", actionable ? "border-amber-300 bg-amber-50/60" : "border-hairline")}>
               <div className="flex items-center justify-between gap-2">
@@ -640,6 +652,12 @@ function Tickets({ data, onChanged }: { data: InquiryDetail; onChanged: (msg: st
                     <p className={cx("text-sm", cancelBlocked ? "text-rose-700" : "text-emerald-700")}>
                       {cancelBlocked ? `주문이 '${o.order_status}' 상태라 취소할 수 없어요 → 반려하고 반품으로 안내`
                         : `출고 전(${o.order_status})이라 승인하면 주문이 바로 취소됩니다`}
+                    </p>
+                  )}
+                  {t.ticket_type === "환불" && o?.found && (
+                    <p className={cx("text-sm", refundBlocked ? "text-amber-800" : "text-emerald-700")}>
+                      {refundBlocked ? "먼저 아래 주문 정보의 [반품 회수 접수]를 해 주세요 (배송 완료·반품 기한 확인, 반품 사유 기록)"
+                        : "반품 회수가 접수돼 있어 승인하면 환불 예정이 기록돼요"}
                     </p>
                   )}
                   {t.ticket_type === "취소" && o?.found && !cancelBlocked && (o.quantity ?? 1) > 1 && (
@@ -659,7 +677,7 @@ function Tickets({ data, onChanged }: { data: InquiryDetail; onChanged: (msg: st
                     </div>
                   ) : (
                     <div className="flex gap-2">
-                      <Button className="min-h-9 flex-1 px-3 py-1" disabled={busy === t.id || !!cancelBlocked}
+                      <Button className="min-h-9 flex-1 px-3 py-1" disabled={busy === t.id || !!cancelBlocked || !!refundBlocked}
                         onClick={() => decide(t.id, "승인")}>{busy === t.id ? <Spinner /> : `${ticketKind(t.ticket_type)} 승인`}</Button>
                       <Button variant="ghost" className="min-h-9 flex-1 px-3 py-1" disabled={busy === t.id}
                         onClick={() => setRejecting(t.id)}>반려</Button>
@@ -876,7 +894,15 @@ export default function InquiryDetailPage() {
       {p?.points_balance != null && <CustomerActions inquiryId={data.id} isAdmin={user?.role === "admin"} onDone={actionDone} />}
       <div className="mt-3 border-t border-hairline pt-3">
         <p className="mb-1.5 text-sm font-semibold text-body">이 고객의 다른 문의 {history.length ? `(${history.length})` : ""}</p>
-        {history.length === 0 ? <p className="text-sm text-muted">없음</p> : (
+        {/* 상담원: 남이 맡은 같은 고객 문의는 내용 없이 수만 (서로 다른 안내를 하지 않게) */}
+        {!!data.customer_history_hidden?.total && (
+          <p className={cx("mb-1.5 rounded-lg px-2.5 py-1.5 text-xs",
+            data.customer_history_hidden.open ? "bg-amber-50 text-amber-900" : "bg-surface-soft text-muted")}>
+            다른 상담원이 맡은(또는 미배정) 문의 {data.customer_history_hidden.total}건
+            {data.customer_history_hidden.open > 0 && <> · <b>처리 중 {data.customer_history_hidden.open}건</b> — 안내가 겹치지 않게 관리자에게 확인해 주세요</>}
+          </p>
+        )}
+        {history.length === 0 && !data.customer_history_hidden?.total ? <p className="text-sm text-muted">없음</p> : history.length === 0 ? null : (
           <>
             <ul className="space-y-1.5 text-sm">{history.slice(0, 3).map(historyRow)}</ul>
             {history.length > 3 && (

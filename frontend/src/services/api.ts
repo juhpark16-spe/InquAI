@@ -115,7 +115,7 @@ export interface InquiryFilters {
 
 /** 알림 (🔔): 나에게 배정 · 고객 추가 문의 · 답변 기한 1시간 이내 · 고객 👎 (backend/api/notifications.py) */
 export interface NotificationItem {
-  kind: "assigned" | "followup" | "due_soon" | "bad_rating" | "recheck" | "memo";
+  kind: "assigned" | "followup" | "due_soon" | "overdue" | "bad_rating" | "recheck" | "memo";
   at: string;
   inquiry_id: number;
   inquiry_number: string;
@@ -227,7 +227,7 @@ export interface StatsSummary {
   range: { from: string; to: string; days: number };
   kpi: { total: number; today: number | null; auto_rate: number | null; approval_without_edit_rate: number | null };
   previous: { from: string; to: string; total: number; auto_rate: number | null; avg_latency_ms: number | null }; // 바로 앞 같은 길이 기간
-  now: { open: number; urgent_open: number; review_waiting: number; unassigned_open: number; overdue_open: number };
+  now: { open: number; urgent_open: number; review_waiting: number; unassigned_open: number; overdue_open: number; pending_tickets?: number };
   ratings: Record<"ai" | "agent", { up: number; down: number; satisfaction: number | null }>;
   daily: { date: string; total: number; open: number; done: number; auto: number; by_category: Record<string, number> }[];
   by_status: Record<string, number>;
