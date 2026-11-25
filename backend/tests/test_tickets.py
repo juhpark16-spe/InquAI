@@ -127,3 +127,34 @@ def test_exchange_needs_delivery_within_30_days(client, db, tickets):
     db.commit()
     r = client.patch(f"/api/tickets/{tickets['others']}", json={"status": "승인"}, headers=h)
     assert r.status_code == 409 and "30일" in r.json()["detail"]
+
+
+def test_list_excludes_escalations(client, tickets):
+    """'상담원 확인 요청'(이관)은 승인·반려 대상이 아니라 목록·건수에서 빠짐 (대시보드 숫자와 같게)"""
+    h = login(client, "admin")
+    r = client.get("/api/tickets", params={"status": "all"}, headers=h).json()
+    assert "이관" not in {t["ticket_type"] for t in r["items"]} and r["counts"]["접수"] == 4
+
+
+def test_refund_or_exchange_without_order_is_blocked(client, db, tickets):
+    t = db.get(Ticket, tickets["refund"])
+    t.order_id = None                          # 주문번호를 없는 번호로 바꿔 연결이 끊긴 경우
+    db.commit()
+    h = login(client)
+    r = client.patch(f"/api/tickets/{t.id}", json={"status": "승인"}, headers=h)
+    assert r.status_code == 409 and "연결된 주문" in r.json()["detail"]
+
+
+def test_full_cancel_returns_partial_cancel_fee(client, db, tickets):
+    """부분 취소로 뺀 배송비 3,000원은 나머지를 모두 취소하면 함께 돌려줌 (출고 안 됐으니)"""
+    from backend.database.models import Payment
+    order = db.get(Order, tickets["order"])
+    order.amount = 25000
+    db.add(Payment(order_id=order.id, kind="승인 취소", amount=22000, at=utcnow(),
+                   memo="부분 취소 1개 · 3만원 미만이 되어 배송비 3,000원 차감"))
+    db.commit()
+    h = login(client)
+    assert client.patch(f"/api/tickets/{tickets['cancel']}", json={"status": "승인"}, headers=h).status_code == 200
+    db.expire_all()
+    last = [p for p in db.get(Order, order.id).payments if p.kind == "승인 취소"][-1]
+    assert last.amount == 28000 and "배송비 3,000원 함께 환불" in last.memo

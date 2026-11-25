@@ -120,6 +120,11 @@ def run(db: Session, request: Request, user: AdminUser, inquiry: Inquiry, action
         inventory.restock(db, order.product_name, qty)   # 원래 옵션은 재고로 돌아감
         order.product_name = f"{base} ({new})"
         summary = f"옵션 변경: {current or '옵션 없음'} → {new}"
+        # 색상·사이즈를 잘못 골라 들어온 취소 요청은 옵션 변경으로 해결됨 → 열린 취소 요청도 처리 (승인 대기에 남지 않게)
+        for t in db.scalars(select(Ticket).where(Ticket.inquiry_id == inquiry.id, Ticket.ticket_type == "취소",
+                                                 Ticket.status == "접수")):
+            t.status, t.memo, t.handled_by, t.handled_at = "승인", f"취소 대신 옵션 변경({new})으로 처리", user.id, now
+            summary += " · 취소 요청은 옵션 변경으로 처리"
 
     elif action == "partial_cancel":
         order = _order(db, inquiry)

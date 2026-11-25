@@ -361,6 +361,8 @@ class InquiryDetail(BaseModel):
     order_hints: list[OrderHint] = []  # 고객 글·추가 문의에 적힌 다른 주문번호
     customer_history: list[HistoryItem]
     customer_history_hidden: dict[str, int] = {}   # 상담원: 남이 맡은(또는 미배정) 같은 고객 문의 수 {total, open}
+    refund_account: dict | None = None             # 환불 계좌 (가림), 전체 번호는 GET /refund-account
+    refund_account_needed: bool = False            # 무통장입금 취소·반품인데 환불 계좌가 아직 없음
     faq_titles: dict[str, str]
     history: list[Event]
     due_at: UTCDateTime

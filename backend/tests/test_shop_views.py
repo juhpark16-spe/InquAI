@@ -146,3 +146,16 @@ def test_carrier_info_and_driver(client, db, setup):
     assert driver["name"].endswith("기사") and driver["phone"].startswith("010-****-")
     assert client.get(f"/api/orders/A-1").json()["order"]["driver"] == driver      # 주문·배송 화면도 같은 기사
     assert driver["name"] not in build_input(db, db.get(Inquiry, setup["main"]), [], None)
+
+
+def test_follow_up_with_only_unused_order_number_is_rejected(db, setup):
+    """이미 맞는 주문번호가 있는 문의에 글 없이 주문번호만 보내면 쓰이지 않으니 받지 않음 (빈 추가 문의 방지)"""
+    import pytest
+
+    from backend.core.errors import AppError
+    from backend.database.models import Inquiry
+    from backend.services.inquiries import add_follow_up
+    inquiry = db.get(Inquiry, setup["main"])                     # 주문 A-1 (본인 주문)이 이미 연결됨
+    with pytest.raises(AppError) as e:
+        add_follow_up(db, inquiry, "(주문번호 보냄)", [], "A-2")
+    assert e.value.status_code == 422

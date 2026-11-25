@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, object_session
 
 from backend.agents.pipeline import needs_draft, run_agent
 from backend.core.security import hash_password, verify_password
-from backend.services import notify, photo_evidence, uploads
+from backend.services import notify, photo_evidence, refund_account, uploads
 from backend.services.assignment import auto_assign
 from backend.services.inquiry_context import order_resolves, relink_open_tickets
 from backend.core.errors import AppError
@@ -36,7 +36,7 @@ def _save_inquiry(db: Session, body: InquiryCreate) -> Inquiry:
     photo_evidence.check(body.title, body.content, body.attachment_tokens, body.photo_labels, body.photos_later,
                          body.damage_report)   # 파손 문의: 송장·파손 부위 사진 또는 '지금은 사진이 없어요'
     fields = body.model_dump(exclude={"password", "privacy_agreed", "attachment_tokens", "photo_labels", "damage_report",
-                                      "photos_later"})   # client_request_id 는 그대로 저장 (다시 눌렀는지 알아보려고)
+                                      "photos_later", "refund_account"})   # client_request_id 는 그대로 저장 (다시 눌렀는지 알아보려고)
     needs = photo_evidence.needs_photos(body.title, body.content, body.damage_report)
     # 두 칸(송장·파손 부위) 중 하나라도 비었는데 '지금은 사진이 없어요'면 → 나중에 받음 (한 장만 올린 경우도)
     missing = set(photo_evidence.LABELS) - set(body.photo_labels.values())
@@ -46,6 +46,8 @@ def _save_inquiry(db: Session, body: InquiryCreate) -> Inquiry:
     fields["privacy_agreed_at"] = utcnow()
     for _ in range(3):  # 동시에 들어와 번호가 겹치면 다시 발급
         inquiry = Inquiry(inquiry_number=_next_inquiry_number(db), **fields)
+        if body.refund_account:   # 무통장입금 주문 취소·반품: 환불 계좌는 글과 따로 (AI에 넘기지 않음)
+            refund_account.save(inquiry, body.refund_account.bank, body.refund_account.holder, body.refund_account.number)
         db.add(inquiry)
         try:
             db.flush()
@@ -199,7 +201,9 @@ def _public(inquiry: Inquiry) -> dict:
             "order_needs_fix": bool(inquiry.order_number) and not order_resolves(object_session(inquiry), inquiry),   # 적은 번호로 주문을 찾지 못함
             "photos_requested": inquiry.photo_request is not None,   # 파손 사진을 나중에 보내기로 함 → 추가 문의에 안내
             # 상담원이 '확인 후 다시 안내'를 표시해 둠 (확인할 내용·기한 같은 내부 정보는 보내지 않음)
-            "more_answer_coming": inquiry.recheck_note is not None}
+            "more_answer_coming": inquiry.recheck_note is not None,
+            "refund_account": refund_account.masked(inquiry),
+            "refund_account_needed": refund_account.needed(object_session(inquiry), inquiry)}
 
 
 FOLLOW_UP_LIMIT = 10  # 문의 1건에 추가 문의 최대 개수 (끝없는 대화 방지, 넘으면 새 문의로)
@@ -207,16 +211,24 @@ REOPEN_FROM = ("자동 처리", "완료")
 
 
 def add_follow_up(db: Session, inquiry: Inquiry, content: str, tokens: list[str],
-                  order_number: str | None = None) -> CustomerMessage:
+                  order_number: str | None = None, refund=None) -> CustomerMessage:
     """고객 추가 문의(내용 보충): 저장 → 사진 연결 → 끝난 문의면 다시 열어 상담원에게 (AI 재분석은 하지 않음).
     처음 문의에 주문번호가 없으면 order_number 를 문의에 붙이고, 대화에도 '(주문번호 추가: …)'로 남김"""
     if len(inquiry.messages) >= FOLLOW_UP_LIMIT:
         raise AppError(400, "이 문의에는 더 이상 추가 문의를 남길 수 없습니다. 새 문의로 남겨 주세요.", "TOO_MANY_MESSAGES")
-    if order_number and order_number != inquiry.order_number and not order_resolves(db, inquiry):
+    applies = bool(order_number) and order_number != inquiry.order_number and not order_resolves(db, inquiry)
+    if content == "(주문번호 보냄)" and not applies:
+        # 글 없이 주문번호만 보냈는데 이미 맞는 주문번호가 있어 쓰이지 않음 → 빈 추가 문의가 남지 않게
+        raise AppError(422, "이 문의에는 이미 주문번호가 있어요. 전하실 내용을 적어 주세요.", "VALIDATION_ERROR")
+    if applies:
         before = inquiry.order_number
         inquiry.order_number = order_number
         relink_open_tickets(db, inquiry)   # 처리 전 티켓도 새 주문으로
         content = f"{content}\n(주문번호 {'변경: ' + before + ' → ' if before else '추가: '}{order_number})"
+    if refund:   # 환불 계좌는 글과 따로 저장 (대화에는 받았다는 표시만, 번호는 남기지 않음)
+        refund_account.save(inquiry, refund.bank, refund.holder, refund.number)
+        if "환불 계좌" not in content:
+            content = f"{content}\n(환불 계좌 등록: {refund.bank})"
     msg = CustomerMessage(inquiry_id=inquiry.id, content=content)
     db.add(msg)
     db.flush()

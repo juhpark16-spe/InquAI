@@ -27,6 +27,7 @@ ACTIONS: dict[str, tuple[str, str]] = {
     "label_correct": ("분류 수정", "문의 처리"), "ticket_approve": ("티켓 승인", "문의 처리"),
     "ticket_reject": ("티켓 반려", "문의 처리"), "order_action": ("바로 처리", "문의 처리"),
     "order_number_change": ("주문번호 변경", "문의 처리"), "customer_view": ("고객 정보 조회", "문의 처리"),
+    "refund_account_view": ("환불 계좌 보기", "문의 처리"),
     "recheck_set": ("다시 안내 예정", "답변"), "recheck_clear": ("다시 안내 완료", "답변"),
     "draft_generate": ("AI 초안 만들기", "답변"), "response_create": ("답변 작성", "답변"),
     "response_edit": ("초안 수정", "답변"), "response_approve": ("답변 발송", "답변"),

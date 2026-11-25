@@ -89,6 +89,11 @@ function ShippingRows({ o }: { o: OrderCard }) {
           )}
         </Row>
       )}
+      {/* 택배사를 모르는 주문이어도 담당 기사는 보이게 */}
+      {!o.carrier_info && o.driver && (
+        <Row label="담당 기사">{o.driver.name} <span className="font-mono text-muted">{o.driver.phone}</span>
+          <span className="block text-xs text-muted">상담원 확인용 (고객 답변에 넣지 않기)</span></Row>
+      )}
     </>
   );
 }
@@ -136,7 +141,9 @@ export function OrderRows({ o }: { o: OrderCard }) {
 }
 
 /** 한 줄 요약: 택배사 · 주문 상태(배송 단계) · 취소 가능 · 반품 기한 (문의 상세 주문 정보 맨 위) */
-export function OrderStatusLine({ o }: { o: OrderCard }) {
+export function OrderStatusLine({ o, exchanged }: { o: OrderCard; exchanged?: boolean }) {
+  // 승인 뒤 결과도 요약에 (반품 환불 예정·완료, 교환 승인) → 처리한 뒤 카드만 봐도 상태를 알 수 있게
+  const refund = (o.payments ?? []).filter((p) => p.kind === "환불").at(-1);
   const ret = o.order_status === "취소" ? null
     : o.return_requested_at ? (o.picked_up_at ? "반품 회수 완료" : "반품 회수 중")
       : o.return_until ? (o.returnable ? `반품 ${daysLeft(o.return_until)}` : "반품 기한 지남") : null;
@@ -145,6 +152,8 @@ export function OrderStatusLine({ o }: { o: OrderCard }) {
     `${o.order_status}${o.shipping_status && o.shipping_status !== o.order_status ? ` (${o.shipping_status})` : ""}`,
     o.order_status === "취소" ? null : o.cancellable ? "취소 가능" : "취소 불가",
     ret,
+    refund ? `환불 ${refund.status === "완료" ? "완료" : "예정"} ${won(refund.amount)}` : null,
+    exchanged ? "교환 승인됨 (회수 후 새 상품 출고)" : null,
   ].filter(Boolean);
   return <p className="mb-2 rounded-lg bg-surface-soft px-3 py-1.5 text-sm font-medium text-ink">{parts.join(" · ")}</p>;
 }

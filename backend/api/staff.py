@@ -18,7 +18,7 @@ from backend.core.security import hash_password
 from backend.database.models import AdminUser, AnalysisResult, Inquiry, RefreshToken, utcnow
 from backend.schemas.auth import StaffOut
 from backend.schemas.users import PasswordReset, UserCreate, UserDetail, UserUpdate
-from backend.services.assignment import OPEN_STATUSES, auto_assign
+from backend.services.assignment import OPEN_STATUSES, pick_assignee
 from backend.services.audit import add_audit
 
 router = APIRouter(prefix="/admin", tags=["계정 관리"])
@@ -90,17 +90,20 @@ def update_user(user_id: int, body: UserUpdate, request: Request, admin: AdminOn
     if changes.get("is_active") is False:
         _revoke_tokens(db, user.id)  # access_token(30분)은 요청마다 is_active 를 확인하므로 바로 막힘
         db.flush()   # 비활성 상태를 먼저 반영해야 아래 자동 배정에서 이 사람이 빠짐
-        # 맡던 미처리 문의: 아무도 처리하지 못한 채 남지 않게 다른 상담원에게 자동 배정 (맞는 사람이 없으면 미배정 → 관리자 알림)
+        # 맡던 미처리 문의: 아무도 처리하지 못한 채 남지 않게 다른 상담원에게 자동 배정 규칙대로 다시 배정.
+        # 맞는 사람이 없으면 미배정으로 둠 (문의 목록 '미배정'·대시보드 '미배정' 카드에 보임, 관리자가 직접 배정)
+        # 기록은 '배정 변경' 한 줄만 (자동 배정 기록까지 남기면 새 담당자 알림·처리 이력이 두 번 생김)
         for inquiry in db.scalars(select(Inquiry).options(selectinload(Inquiry.analysis))
                                   .where(Inquiry.assigned_to == user.id, Inquiry.status.in_(OPEN_STATUSES))).all():
-            inquiry.assigned_to = None
+            old_status = inquiry.status
             if inquiry.status == "접수":
                 inquiry.status = "담당자 처리"
-            moved = auto_assign(db, inquiry, inquiry.analysis.category if inquiry.analysis else None)
+            moved, rule, _ = pick_assignee(db, inquiry.analysis.category if inquiry.analysis else None)
+            inquiry.assigned_to = moved.id if moved else None
             add_audit(db, request, "assign", admin, "inquiry", inquiry.id,
-                      before={"assigned_to": user.id, "status": inquiry.status},
-                      after={"assigned_to": moved.id if moved else None, "status": inquiry.status},
-                      reason=f"{user.display_name} 계정 비활성화")
+                      before={"assigned_to": user.id, "status": old_status},
+                      after={"assigned_to": inquiry.assigned_to, "status": inquiry.status},
+                      reason=f"{user.display_name} 계정 비활성화" + (f", {rule}" if moved else ", 맞는 상담원 없음"))
     if before != changes:
         add_audit(db, request, "user_update", admin, "admin_user", user.id, before=before, after=changes)
     db.commit()

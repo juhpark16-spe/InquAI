@@ -20,7 +20,7 @@ from backend.schemas.inquiry_admin import (AnalysisCorrection, AnalysisOut, Assi
                                            NoteOut, Page, StatusRequest)
 from backend.services import inquiry_context as ctx
 from backend.services import recheck as recheck_svc
-from backend.services import sla, uploads
+from backend.services import refund_account, sla, uploads
 from backend.services.audit import add_audit
 from backend.services.corrections import apply_correction
 from backend.training.labels import CATEGORY_LABELS
@@ -255,6 +255,9 @@ def get_inquiry(inquiry_id: int, user: LoginUser, db: DB):
         "order_hints": ctx.order_hints(db, inquiry),   # 고객 글에 적힌 다른 주문번호 ([이 번호로 확인])
         "customer_history": ctx.customer_history(db, inquiry, user),
         "customer_history_hidden": ctx.hidden_history(db, inquiry, user),
+        # 환불 계좌: 기본은 가려서 (전체 번호는 GET /refund-account, 볼 때마다 작업 기록)
+        "refund_account": refund_account.masked(inquiry),
+        "refund_account_needed": refund_account.needed(db, inquiry),
         "customer_profile": ctx.customer_profile(db, inquiry),
         "faq_titles": ctx.faq_titles(db, inquiry),
         "history": ctx.history(db, inquiry),
@@ -309,6 +312,18 @@ def add_note(inquiry_id: int, body: NoteCreate, request: Request, user: LoginUse
     add_audit(db, request, "note_create", user, "inquiry", inquiry.id, note_id=note.id)
     db.commit()
     return {"id": note.id, "author": user.display_name, "author_id": user.id, "text": note.text, "created_at": note.created_at}
+
+
+@router.get("/{inquiry_id}/refund-account", summary="환불 계좌 전체 번호 보기 (로그인, 볼 때마다 작업 기록)")
+def get_refund_account(inquiry_id: int, request: Request, user: LoginUser, db: DB):
+    """무통장입금 환불을 처리하려고 상담원이 [번호 보기]를 누를 때만 전체 번호를 줌. 누가 언제 봤는지 남김 (개인 금융정보)"""
+    inquiry = get_inquiry_for_user(db, inquiry_id, user)   # 맡은 문의만 (미배정 미리 보기로는 볼 수 없음)
+    data = refund_account.full(inquiry)
+    if data is None:
+        raise AppError(404, "등록된 환불 계좌가 없습니다.", "NOT_FOUND")
+    add_audit(db, request, "refund_account_view", user, "inquiry", inquiry.id)
+    db.commit()
+    return data
 
 
 @router.get("/{inquiry_id}/attachments/{attachment_id}", summary="첨부 사진 보기 (로그인)")

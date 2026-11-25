@@ -186,6 +186,14 @@
 | 답변 시간 안내 | `/lookup` 응답의 `notice` | "영업일 기준 1일 이내에 답변드립니다 (평일 10:00~17:00)" |
 | 답변 알림 | (자동) | 자동 답변·상담원 발송 때 "답변이 등록되었습니다" 메일 (`services/notify.py`). 본문에는 답변 내용 대신 링크만: 비회원 문의는 문의 조회(`/inquiry/lookup`), 회원 문의(조회 비밀번호 없음)는 내 쇼핑(`/my`) |
 
+**환불 계좌** (2026-11-25, `backend/services/refund_account.py`): 무통장입금 주문을 취소·반품할 때 환불받을 계좌.
+- 문의 등록(`POST /api/inquiries`)·추가 문의(`POST /api/inquiries/follow-up`, `POST /api/shop/inquiries/{번호}/follow-up`)에
+  `refund_account: {bank, holder, number}` (은행은 목록에서, 계좌번호 숫자 10~16자리, 아니면 422). **문의 글과 따로 저장**하고
+  대화에는 '(환불 계좌 등록: 은행)'만 남김. 글 없이 계좌만 보내도 됨 ('(환불 계좌 보냄)').
+- 조회 응답: `refund_account`(가림: `****4321`, 예금주 가운데 `*`), `refund_account_needed`(무통장입금 + 취소·반품인데 아직 없음 → 고객 화면이 칸을 펼침).
+- 관리 화면 상세에도 가려서. 전체 번호는 `GET /api/inquiries/{id}/refund-account` (맡은 문의만, 볼 때마다 작업 기록 `refund_account_view` '환불 계좌 보기').
+- **AI 분석·초안에는 넘기지 않음**: 초안 입력에는 '환불 계좌 받음 / 아직 없음(칸에 입력해 달라고 안내)'만. 시연이라 저장 시 암호화는 하지 않음.
+
 **답변 알림 메일** (`backend/services/notify.py`, 설정은 `.env.example`)
 - 기본 `MAIL_ENABLED=false`: 보내지 않고 `notifications`에 기록만 (status `기록`). 테스트·CI·화면 자동 테스트는 항상 꺼짐
 - 켜면(SMTP 설정): 답변이 DB에 **커밋된 뒤** 따로 보냄 → 메일 서버가 느리거나 실패해도 답변 발송은 그대로. 저장이 취소되면(오류) 메일도 안 나감
@@ -282,7 +290,7 @@
 - `email_orders`: 문의 이메일과 같은 이메일로 주문한 내역 최근 5건 (`order`의 주문은 제외, 각 항목은 `order`와 같은 형식). 주문번호를 적지 않은 문의도 어떤 주문인지 짐작할 수 있게 함. 문의 이메일은 본인 인증 전이라 화면에 "본인 확인 후 안내" 경고를 함께 표시하며, 관리자 화면에만 보이고 고객에게는 나가지 않음
 - `customer_history`: 같은 이메일의 다른 문의 최근 5건. 상담원은 자신에게 배정된 것만
 - `customer_history_hidden`: 상담원에게 보이지 않는(남이 맡았거나 미배정) 같은 고객 문의 수 `{total, open}` (내용은 숨김, 관리자는 0)
-- `order.carrier_info` `{name, phone, tracking_url}`: 택배사 고객센터 대표번호와 송장번호를 넣은 배송조회 주소 (`services/carriers.py`, 번호·주소 형식은 택배사 홈페이지에서 확인 필요). `order.driver` `{name, phone}`: '배송 출발' 뒤 담당 기사 (시연은 택배사 조회 API 대신 가짜 기사, 연락처 가운데 가림). 상담원 화면 전용이라 AI 초안·고객 답변에는 넣지 않음
+- `order.carrier_info` `{name, phone, tracking_url}`: 택배사 고객센터 대표번호와 송장번호를 넣은 배송조회 주소 (`services/carriers.py`, 번호·주소 모두 각 택배사 홈페이지에서 확인함 2026-11-25). `order.driver` `{name, phone}`: '배송 출발' 뒤 담당 기사 (시연은 택배사 조회 API 대신 가짜 기사, 연락처 가운데 가림). 상담원 화면 전용이라 AI 초안·고객 답변에는 넣지 않음
 - `order.return_reason`·`order.refund_preview`: [반품 회수 접수] 뒤 반품 사유와 환불 예정 금액 (반품 승인 확인창)
 - `customer_profile`: 고객 카드 (같은 이메일 기준). `member`=쇼핑몰 회원 로그인 가능 고객, `phone`은 가운데를 가림,
   `orders`·`inquiries`=주문·문의 수, 불만 신호 `negative_ratings`(이전 답변에 👎 수)·`negative_inquiries`(부정 감정 문의 수).
@@ -357,7 +365,7 @@
 | action | 추가 값 | 조건 | 결과 |
 | --- | --- | --- | --- |
 | `address` | `address` | 출고 전 | 배송지 변경 |
-| `option` | `option` | 출고 전, 같은 상품의 다른 옵션, 재고 ≥ 주문 수량 (아니면 409 `SOLD_OUT`) | 옵션 변경 (가격 같음), 재고 이동 (새 옵션 -수량, 원래 옵션 +수량) |
+| `option` | `option` | 출고 전, 같은 상품의 다른 옵션, 재고 ≥ 주문 수량 (아니면 409 `SOLD_OUT`) | 옵션 변경 (가격 같음), 재고 이동 (새 옵션 -수량, 원래 옵션 +수량), 열린 취소 요청은 "취소 대신 옵션 변경으로 처리"로 승인 |
 | `partial_cancel` | `count` | 출고 전, 1 ≤ count < 수량 | 수량·금액 줄임 + 결제 '승인 취소'(부분) + 열린 취소 티켓 승인 |
 | `duplicate_cancel` | - | 정리되지 않은 중복 승인 (같은 금액 10분 안 두 번) | 결제 '승인 취소' 1건 |
 | `points` | `amount`, `reason` | 쇼핑몰 고객, 상담원 3,000원 / 관리자 50,000원까지 (넘으면 403) | 적립금 +amount |

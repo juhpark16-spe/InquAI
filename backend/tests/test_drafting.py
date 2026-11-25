@@ -201,6 +201,8 @@ def test_with_greeting_replaces_ai_greeting():
     assert with_greeting("안녕하세요, 고객님. 문의 주셔서 감사합니다.", g) == f"{g}\n\n문의 주셔서 감사합니다."
     assert with_greeting("안녕하세요. InquAI 쇼핑 고객센터입니다. 확인해 보겠습니다.", g) == f"{g}\n\n확인해 보겠습니다."
     assert with_greeting("불편을 드려 죄송합니다.", g) == f"{g}\n\n불편을 드려 죄송합니다."
+    # 인사와 같은 문장의 사과·본론은 지우지 않음
+    assert with_greeting("안녕하세요 고객님, 배송이 늦어져 죄송합니다. 확인할게요.", g) == f"{g}\n\n배송이 늦어져 죄송합니다. 확인할게요."
 
 
 def test_follow_up_photos_and_greeting_in_draft(client, db, ai):

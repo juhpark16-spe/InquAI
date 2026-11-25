@@ -28,7 +28,7 @@ from backend.database.models import AdminUser, Inquiry, Order, Payment, Ticket, 
 from backend.schemas.inquiry_admin import TicketOut
 from backend.services import inventory, sla
 from backend.services import inquiry_context as ctx
-from backend.services.policy import CANCELLABLE, DEFECT_RETURN_DAYS, REFUND_BUSINESS_DAYS, RETURN_FEE
+from backend.services.policy import CANCELLABLE, DEFECT_RETURN_DAYS, REFUND_BUSINESS_DAYS, RETURN_FEE, SHIPPING_FEE
 from backend.services.audit import add_audit
 
 
@@ -87,9 +87,15 @@ def decide(ticket_id: int, body: TicketDecision, request: Request, user: LoginUs
         order_change = {"order_number": order.order_number, "before": order.order_status, "after": "취소"}
         order.order_status, order.shipping_status = "취소", None
         inventory.restock(db, order.product_name, order.quantity or 1)   # 취소한 수량은 재고로
+        # 앞서 부분 취소 때 '3만원 미만'으로 뺀 배송비는, 주문을 모두 취소하면 출고되지 않았으니 돌려줌
+        fee_back = SHIPPING_FEE * sum(1 for p in order.payments if p.kind == "승인 취소" and "배송비" in (p.memo or ""))
         # 결제 내역에 승인 취소 (카드는 3~5영업일 안에 반영, 주문 정보 카드의 '결제·환불 내역'에 보임)
-        db.add(Payment(order_id=order.id, kind="승인 취소", method=order.payment_method, amount=order.amount,
-                       at=utcnow(), memo="주문 취소 (티켓 승인)"))
+        db.add(Payment(order_id=order.id, kind="승인 취소", method=order.payment_method, amount=order.amount + fee_back,
+                       at=utcnow(), memo="주문 취소 (티켓 승인)"
+                       + (f" · 부분 취소 때 뺀 배송비 {fee_back:,}원 함께 환불" if fee_back else "")))
+    if body.status == "승인" and ticket.ticket_type in ("환불", "교환") and order is None:
+        # 주문 연결이 끊긴 요청(주문번호를 없는 번호로 바꾼 경우 등): 환불 기록 없이 승인되지 않게 (취소와 같은 기준)
+        raise AppError(409, "연결된 주문이 없어 승인할 수 없습니다. 주문번호를 확인해 주세요.", "INVALID_STATE")
     if body.status == "승인" and ticket.ticket_type == "환불" and order is not None:
         # 환불 예정 (실제 환불은 쇼핑몰 결제 시스템의 일. 상담원이 고객에게 예정일을 안내할 수 있게 기록)
         if order.order_status == "취소":
@@ -131,7 +137,8 @@ def list_tickets(
     page: int = Query(1, ge=1), size: int = Query(30, ge=1, le=100),
 ):
     """AI가 접수한 취소·교환·반품 요청을 한곳에서 (승인·반려는 문의 상세에서, 주문 정보를 보고 판단)."""
-    stmt = (select(Ticket).join(Inquiry, Ticket.inquiry_id == Inquiry.id)
+    # 승인·반려하는 요청만 (AI의 '상담원 확인 요청'(이관)은 문의 목록에서 다루므로 여기 섞이지 않게, 대시보드 숫자와도 같게)
+    stmt = (select(Ticket).join(Inquiry, Ticket.inquiry_id == Inquiry.id).where(Ticket.ticket_type.in_(ACTIONABLE))
             .options(selectinload(Ticket.inquiry).selectinload(Inquiry.assignee), selectinload(Ticket.order)))
     if user.role != "admin":
         stmt = stmt.where(Inquiry.assigned_to == user.id)

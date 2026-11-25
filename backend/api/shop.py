@@ -26,7 +26,7 @@ from backend.core.rate_limit import FailureLock, rate_limit
 from backend.core.security import clear_shop_cookies, create_shop_token, set_shop_cookies, verify_password
 from backend.database.models import Customer, Inquiry
 from backend.schemas.common import UTCDateTime
-from backend.schemas.inquiry import InquiryLookupResult, fill_follow_up, normalize_order_number
+from backend.schemas.inquiry import InquiryLookupResult, RefundAccountIn, fill_follow_up, normalize_order_number
 from backend.services import sla
 from backend.services.inquiries import add_follow_up, find_customer_inquiries, public_view, rate_answer
 
@@ -61,12 +61,14 @@ class ShopOrder(BaseModel):
     ordered_at: UTCDateTime
     delivered_at: UTCDateTime | None
     inquiry_count: int
+    payment_method: str | None = None   # 무통장입금이면 문의하기에서 환불 계좌 칸을 펼침
 
 
 class FollowUpBody(BaseModel):
     content: str = Field(default="", max_length=2000)   # 사진·주문번호만 보낼 때는 비워도 됨
     attachment_tokens: list[str] = Field(default_factory=list, max_length=3)
     order_number: str | None = Field(default=None, max_length=30)   # 처음 문의에 주문번호가 없을 때만
+    refund_account: RefundAccountIn | None = None   # 환불 계좌 (무통장입금 주문 취소·반품, 글과 따로)
 
     @field_validator("order_number", mode="before")
     @classmethod
@@ -129,7 +131,7 @@ def my_orders(customer: ShopCustomer, db: DB):
                                                                    Inquiry.order_number.is_not(None))))
     orders = sorted(customer.orders, key=lambda o: o.ordered_at, reverse=True)
     return [{**{k: getattr(o, k) for k in ("order_number", "product_name", "amount", "order_status",
-                                            "shipping_status", "ordered_at", "delivered_at")},
+                                            "shipping_status", "ordered_at", "delivered_at", "payment_method")},
              "inquiry_count": counts[o.order_number]} for o in orders]
 
 
@@ -145,7 +147,7 @@ def follow_up(inquiry_number: str, body: FollowUpBody, customer: ShopCustomer, d
     inquiry = _my_inquiry(db, customer, inquiry_number)
     if body.order_number and not any(o.order_number == body.order_number for o in customer.orders):
         raise AppError(422, "내 주문 목록에 없는 주문번호입니다.", "ORDER_NOT_FOUND")
-    add_follow_up(db, inquiry, body.content, body.attachment_tokens, body.order_number)
+    add_follow_up(db, inquiry, body.content, body.attachment_tokens, body.order_number, body.refund_account)
     return {"inquiry_number": inquiry.inquiry_number, "status": inquiry.status,
             "message": "추가 문의가 접수되었습니다. " + sla.CUSTOMER_NOTICE}
 

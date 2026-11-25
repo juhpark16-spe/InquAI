@@ -141,12 +141,19 @@ test("회원 주문 취소 요청 → 상담원이 취소 티켓 승인·문구 
   const approve = staff.getByRole("alertdialog");
   await expect(approve).toContainText("전액 환불");
   await approve.getByRole("button", { name: "취소 승인" }).click();
-  await expect(staff.getByText(/티켓을 승인했습니다/)).toBeVisible();
+  await expect(staff.getByText(/요청을 승인했습니다/)).toBeVisible();
+  await expect(staff.getByRole("button", { name: "AI 초안 다시 만들기" }).first()).toBeVisible();   // 안내 안에 바로 누르는 버튼
   await expect(staff.getByText("이미 취소된 주문").first()).toBeVisible();               // 승인하면 주문이 바로 취소됨
 
   // 답변: 관리자가 정한 '취소 완료' 문구를 넣고 발송
   await staff.getByRole("button", { name: /문구·주문 정보/ }).click();
   await staff.getByRole("button", { name: "취소 완료", exact: true }).click();
+  await expect(staff.getByPlaceholder(/고객에게 보낼 답변/)).toHaveValue(/주문 취소가 완료되었습니다/);
+  // 쓰던 답변이 있으면 '문의 목록' 같은 링크를 눌러도 먼저 물음 → [머무르기]면 그대로
+  await staff.getByRole("link", { name: "← 문의 목록" }).click();
+  const leave = staff.getByRole("alertdialog");
+  await expect(leave).toContainText("작성 중인 답변이 있어요");
+  await leave.getByRole("button", { name: "머무르기" }).click();
   await expect(staff.getByPlaceholder(/고객에게 보낼 답변/)).toHaveValue(/주문 취소가 완료되었습니다/);
   await staff.getByRole("button", { name: "발송", exact: true }).click();
   await expect(staff.getByText(/답변을 보냈습니다/)).toBeVisible();

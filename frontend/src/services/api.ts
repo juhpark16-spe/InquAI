@@ -7,7 +7,7 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 import type {
   AgentLogPage, DraftStats, RetrainingStatus, FaqSuggestResult, ShopCustomer, ShopOrder, FaqAdmin, FaqPublic, FaqSearchTest, InquiryCreate, ResponseItem, InquiryCreated, InquiryDetail, InquiryListItem, InquiryPublic, InquiryState, Page, Role, User,
   UserDetail,
-  OrderCard,
+  OrderCard, RefundAccountInput,
 } from "./types";
 
 export const http = axios.create({ baseURL: "/api", withCredentials: true });
@@ -86,9 +86,10 @@ export const customerApi = {
     return http.post<{ token: string; filename: string; size: number }>("/inquiries/uploads", form).then((r) => r.data);
   },
   followUp: (customer_email: string, password: string, inquiry_number: string, content: string, attachment_tokens: string[],
-    order_number?: string | null) =>
+    order_number?: string | null, refund_account?: RefundAccountInput | null) =>
     http.post<{ status: string; message: string }>("/inquiries/follow-up",
-      { customer_email, password, inquiry_number, content, attachment_tokens, order_number: order_number || null }).then((r) => r.data),
+      { customer_email, password, inquiry_number, content, attachment_tokens, order_number: order_number || null,
+        refund_account: refund_account ?? null }).then((r) => r.data),
   rate: (answerId: number, inquiry_number: string, customer_email: string, password: string, helpful: boolean) =>
     http.post<{ rating: number }>(`/inquiries/answers/${answerId}/rating`, { customer_email, password, helpful },
       { params: { inquiry_number } }).then((r) => r.data),
@@ -192,6 +193,9 @@ export const inquiryApi = {
   // waiveReturnFee: 반품 승인 때 검수 결과 불량 → 단순 변심 왕복 배송비를 빼지 않고 전액 환불
   decideTicket: (ticketId: number, status: "승인" | "반려", memo?: string, waiveReturnFee = false) =>
     http.patch(`/tickets/${ticketId}`, { status, memo: memo || null, waive_return_fee: waiveReturnFee }).then((r) => r.data),
+  // 환불 계좌 전체 번호 (무통장입금 환불 처리용, 볼 때마다 작업 기록)
+  refundAccount: (id: number) =>
+    http.get<{ bank: string; holder: string; number: string; registered_at: string }>(`/inquiries/${id}/refund-account`).then((r) => r.data),
   // 주문번호 입력·변경 (고객이 빠뜨렸거나 잘못 적었을 때, 없는 주문이면 409)
   setOrderNumber: (id: number, order_number: string | null) =>
     http.patch<{ order_number: string | null }>(`/inquiries/${id}/order-number`, { order_number }).then((r) => r.data),
@@ -333,9 +337,10 @@ export const shopApi = {
   me: () => http.get<ShopCustomer>("/shop/me").then((r) => r.data),
   orders: () => http.get<ShopOrder[]>("/shop/orders").then((r) => r.data),
   inquiries: () => http.get<{ items: InquiryPublic[]; notice: string }>("/shop/inquiries").then((r) => r.data),
-  followUp: (inquiry_number: string, content: string, attachment_tokens: string[], order_number?: string | null) =>
+  followUp: (inquiry_number: string, content: string, attachment_tokens: string[], order_number?: string | null,
+    refund_account?: RefundAccountInput | null) =>
     http.post<{ status: string; message: string }>(`/shop/inquiries/${inquiry_number}/follow-up`,
-      { content, attachment_tokens, order_number: order_number || null }).then((r) => r.data),
+      { content, attachment_tokens, order_number: order_number || null, refund_account: refund_account ?? null }).then((r) => r.data),
   rate: (answerId: number, inquiry_number: string, helpful: boolean) =>
     http.post<{ rating: number }>(`/shop/answers/${answerId}/rating`, { helpful }, { params: { inquiry_number } }).then((r) => r.data),
 };

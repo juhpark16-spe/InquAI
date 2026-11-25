@@ -41,6 +41,34 @@ class _Email(BaseModel):
         return _clean_email(v) if isinstance(v, str) else v
 
 
+class RefundAccountIn(BaseModel):
+    """환불 계좌 (무통장입금 주문의 취소·반품, services/refund_account.py). 문의 글과 따로 받고 AI에는 넘기지 않음"""
+    bank: str = Field(max_length=20)
+    holder: str = Field(min_length=2, max_length=30)
+    number: str = Field(max_length=30)
+
+    @field_validator("bank")
+    @classmethod
+    def _bank(cls, v):
+        from backend.services.refund_account import BANKS
+        if v not in BANKS:
+            raise ValueError("은행을 목록에서 골라 주세요.")
+        return v
+
+    @field_validator("holder")
+    @classmethod
+    def _holder(cls, v):
+        return v.strip()
+
+    @field_validator("number")
+    @classmethod
+    def _number(cls, v):
+        digits = "".join(ch for ch in v if ch.isdigit())
+        if not 10 <= len(digits) <= 16 or any(ch not in "0123456789- " for ch in v):
+            raise ValueError("계좌번호는 숫자 10~16자리로 적어 주세요 (하이픈 가능).")
+        return digits
+
+
 class InquiryCreate(_Email):
     customer_name: str = Field(min_length=1, max_length=50)
     customer_email: str = Field(max_length=255, pattern=EMAIL_PATTERN)
@@ -61,6 +89,7 @@ class InquiryCreate(_Email):
     damage_report: bool | None = None
     client_request_id: str | None = Field(default=None, max_length=64)   # 화면이 만든 값: 같은 값이면 같은 문의   # 파손 체크: None = 내용으로 판단, true/false = 고객이 고른 그대로
     photos_later: bool = False
+    refund_account: RefundAccountIn | None = None   # 무통장입금 주문 취소·반품: 환불 계좌 (글과 따로)
 
     @field_validator("customer_name", "title", "content", mode="before")
     @classmethod
@@ -98,6 +127,7 @@ class FollowUpCreate(InquiryLookup):
     content: str = Field(default="", max_length=2000)   # 사진·주문번호만 보낼 때는 비워도 됨 (fill_follow_up)
     attachment_tokens: list[str] = Field(default_factory=list, max_length=3)
     # 처음 문의에 주문번호가 없을 때만 받음 (있으면 무시). 형식은 문의 등록과 같음
+    refund_account: RefundAccountIn | None = None   # 환불 계좌 (무통장입금 주문 취소·반품, 글과 따로)
     order_number: str | None = Field(default=None, max_length=30)
 
     @field_validator("order_number", mode="before")
@@ -120,7 +150,8 @@ def fill_follow_up(body):
     글이 짧으면 무엇을 보냈는지 대화에 남도록 채움 (쇼핑몰 로그인 추가 문의 api/shop.py FollowUpBody 도 같이 씀)"""
     if len(body.content) >= 2:
         return body
-    sent = [x for x, ok in (("사진", body.attachment_tokens), ("주문번호", body.order_number)) if ok]
+    sent = [x for x, ok in (("사진", body.attachment_tokens), ("주문번호", body.order_number),
+                            ("환불 계좌", getattr(body, "refund_account", None))) if ok]
     if not sent:
         raise ValueError("내용을 2자 이상 적거나 사진을 올려 주세요.")
     body.content = (body.content + " " if body.content else "") + f"({'·'.join(sent)} 보냄)"
@@ -176,6 +207,8 @@ class InquiryPublic(BaseModel):
     order_needs_fix: bool = False     # 적은 주문번호로 내 주문을 찾지 못함 → 추가 문의에서 다시 받음
     closed_note: str | None = None    # 답변 없이 종료된 문의 → '종료됨'과 이 문장
     photos_requested: bool = False    # 파손 사진을 나중에 보내기로 함
+    refund_account: dict | None = None      # 보낸 환불 계좌 (가림: 은행·끝 4자리·예금주 가운데)
+    refund_account_needed: bool = False     # 무통장입금 주문 취소·반품인데 환불 계좌가 아직 없음 → 추가 문의에 칸
 
 
 class InquiryLookupResult(BaseModel):

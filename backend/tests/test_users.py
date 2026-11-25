@@ -168,4 +168,6 @@ def test_deactivate_moves_open_inquiries(admin, db):
     db.expire_all()
     assert [db.get(Inquiry, r.id).assigned_to for r in rows] == [other.id, other.id, 2]   # 미처리만 agent2 에게
     history = [e["text"] for e in admin.get(f"/api/inquiries/{rows[0].id}").json()["history"]]
-    assert any("계정 비활성화" in t for t in history)                               # 처리 이력에 이유가 남음
+    moved = [t for t in history if "계정 비활성화" in t]
+    assert len(moved) == 1 and "상담원2" in moved[0]                     # 처리 이력에 한 줄만, 이유와 함께
+    assert not any(t.startswith("자동 배정") for t in history)           # 자동 배정 기록이 겹치지 않음 (알림도 한 번)

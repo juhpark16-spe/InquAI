@@ -6,11 +6,12 @@ import { Link, useSearchParams } from "react-router";
 import { useShop } from "../../auth/ShopProvider";
 import { Bubble, Note, Thumbs } from "../../components/Chat";
 import FaqSuggestions from "../../components/FaqSuggestions";
+import { EMPTY_REFUND, REFUND_WORDS, RefundAccountToggle, refundValue } from "../../components/RefundAccountFields";
 import InquiryThreads from "../../components/InquiryThreads";
 import PhotoPicker, { PhotoSlot, type PickedPhoto } from "../../components/PhotoPicker";
 import { Alert, Button, Card, Field, Input, MemberBadge, Select, Spinner, Textarea, cx } from "../../components/ui";
 import { customerApi, errorCode, errorMessage, shopApi } from "../../services/api";
-import type { InquiryCreated, InquiryPublic, ShopOrder } from "../../services/types";
+import type { InquiryCreated, InquiryPublic, RefundAccountInput, ShopOrder } from "../../services/types";
 
 const EMPTY = { customer_name: "", customer_email: "", order_number: "", title: "", content: "", password: "", password2: "" };
 // 주문과 관련된 문의로 보이는 표현 (주문번호 입력 권유용, 판단이 틀려도 입력은 선택이라 영향 없음)
@@ -84,6 +85,9 @@ export default function InquiryFormPage() {
   const [photosLater, setPhotosLater] = useState(false);
   const [photoTried, setPhotoTried] = useState(false);
   const [agreed, setAgreed] = useState(false);
+  // 환불 계좌 (무통장입금 주문 취소·반품): 회원이 고른 주문이 무통장입금이면 펼침, 비회원은 [무통장입금으로 결제했어요]로 펼침
+  const [refund, setRefund] = useState<RefundAccountInput>(EMPTY_REFUND);
+  const [refundChoice, setRefundChoice] = useState<boolean | null>(null);   // null = 고른 주문을 보고 자동 (무통장입금이면 체크)
 
   useEffect(() => {
     if (!sending) return;
@@ -107,6 +111,11 @@ export default function InquiryFormPage() {
 
   const needsOrder = !form.order_number.trim() && ORDER_WORDS.test(`${form.title} ${form.content}`);
   const orderNumber = customer ? form.order_number : normalizeOrder(form.order_number);
+  const bankTransfer = !!customer && orders.find((o) => o.order_number === form.order_number)?.payment_method === "무통장입금";
+  const showRefund = refundChoice ?? bankTransfer;
+  // 필요한 문의에서만 보임: 회원은 무통장입금 주문을 골랐을 때, 비회원은 제목·내용에 취소·반품·환불이 있을 때 (이미 체크했으면 계속 보임)
+  const refundRelevant = customer ? bankTransfer : REFUND_WORDS.test(`${form.title} ${form.content}`);
+  const refundSend = showRefund ? refundValue(refund) : null;
   // 다 적기 전(8자리 미만)에는 재촉하지 않음
   const orderError = !customer && orderNumber === null && form.order_number.replace(/\s/g, "").length >= 8 ? ORDER_HELP : "";
   const damageWords = DAMAGE_WORDS.test(`${form.title} ${form.content}`);
@@ -128,6 +137,10 @@ export default function InquiryFormPage() {
       setError(ORDER_HELP);
       return;
     }
+    if (refundSend === "invalid") {
+      setError("환불 계좌의 은행·예금주·계좌번호를 모두 적어 주세요. (필요 없으면 칸을 비워 두세요)");
+      return;
+    }
     if (allPhotos.length > 3) {
       setError("사진은 모두 3장까지 올릴 수 있어요. 다른 사진을 빼 주세요.");
       return;
@@ -146,7 +159,8 @@ export default function InquiryFormPage() {
         privacy_agreed: agreed, attachment_tokens: allPhotos.map((p) => p.token),
         photo_labels: damageMode
           ? Object.fromEntries(SLOTS.flatMap((s) => (evidence[s.label] ? [[evidence[s.label]!.token, s.label]] : []))) : {},
-        damage_report: damageChoice, photos_later: damageMode && photosLater, client_request_id: requestId }));
+        damage_report: damageChoice, photos_later: damageMode && photosLater, client_request_id: requestId,
+        refund_account: refundSend }));
       clearDraft();
       setShowRestored(false);
       setRequestId(newRequestId());
@@ -190,10 +204,10 @@ export default function InquiryFormPage() {
           {thread ? (
             <InquiryThreads items={[thread]} notice="" reload={loadThread} actions={customer ? {
               rate: (n, id, helpful) => shopApi.rate(id, n, helpful),
-              followUp: (n, text, tokens, order) => shopApi.followUp(n, text, tokens, order),
+              followUp: (n, text, tokens, order, refund) => shopApi.followUp(n, text, tokens, order, refund),
             } : {
               rate: (n, id, helpful) => customerApi.rate(id, n, lookupEmail, form.password, helpful),
-              followUp: (n, text, tokens, order) => customerApi.followUp(lookupEmail, form.password, n, text, tokens, order),
+              followUp: (n, text, tokens, order, refund) => customerApi.followUp(lookupEmail, form.password, n, text, tokens, order, refund),
             }} />
           ) : (
           <div className="space-y-4 rounded-xl bg-slate-50 p-4">
@@ -214,7 +228,7 @@ export default function InquiryFormPage() {
         <div className="flex gap-2">
           <Button variant="ghost" onClick={() => {
             // 주문 화면에서 들어왔으면(?order=) 같은 주문으로 새 문의를 쓰기 쉽게 그대로 둠
-            setResult(null); setThread(null); setForm({ ...EMPTY, order_number: presetOrder }); setPhotos([]); setAgreed(false);
+            setResult(null); setThread(null); setForm({ ...EMPTY, order_number: presetOrder }); setPhotos([]); setRefund(EMPTY_REFUND); setRefundChoice(null); setAgreed(false);
             setEvidence({ "송장": null, "파손 부위": null }); setDamageChoice(null); setPhotosLater(false); setPhotoTried(false);
           }}>새 문의 작성</Button>
           {/* 이메일은 주소(URL)에 남기지 않고 화면 이동 상태로만 넘김 */}
@@ -291,6 +305,11 @@ export default function InquiryFormPage() {
             onBlur={() => { if (orderNumber) setForm((f) => ({ ...f, order_number: orderNumber })); }}
             className={cx(orderError ? "border-rose-400 ring-2 ring-rose-100" : needsOrder && "border-amber-400 bg-amber-50/50 ring-2 ring-amber-100")} />
         </Field>
+        )}
+        {/* 무통장입금 주문의 취소·반품: 환불 계좌를 글과 따로 받음 (AI에 넘기지 않음) */}
+        {(refundRelevant || showRefund) && (
+          <RefundAccountToggle checked={showRefund} onToggle={setRefundChoice} value={refund} onChange={setRefund} disabled={sending}
+            autoNote={bankTransfer && refundChoice === null ? "고르신 주문이 무통장입금이라 체크했어요" : undefined} />
         )}
         {/* 파손·불량·오배송: 체크 하나로 (내용에 그런 표현이 보이면 자동으로 체크, 고객이 풀 수 있음) → 송장·파손 부위 사진 두 칸 */}
         <div className="space-y-2">

@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from backend.ai.prompts import DRAFT_PROMPT, DRAFT_SCHEMA, customer_text, find_promises
 from backend.database.models import (AdminAuditLog, Attachment, CustomerMessage, Inquiry, ReplyTemplate, Response, Ticket,
                                      as_utc)
-from backend.services import inventory
+from backend.services import inventory, refund_account
 from backend.services.inquiry_context import order_card
 from backend.services.reply_templates import DEFAULTS as TEMPLATE_DEFAULTS
 
@@ -32,7 +32,9 @@ CHECK_MARK = "[확인 필요"
 # 답변에 FAQ 번호가 섞여 나오면 지움: "(F27)", "[F05, F06]", "(FAQ F27)"
 FAQ_REF = re.compile(r"\s?[(\[](?:FAQ\s*)?F\d{2}(?:\s*[,·/]\s*F\d{2})*[)\]]")
 # AI가 스스로 쓴 인사 (첫 답변에는 정해진 첫인사를 붙이므로 겹치지 않게 지움): "안녕하세요(, 고객님)." + "…고객센터입니다."
-GREETING = re.compile(r"^\s*안녕하세요[^.!?\n]*[.!?]?\s*(?:[^.!?\n]{0,30}고객센터입니다[.!]?\s*)?")
+# 인사말만 지움: "안녕하세요(,) (고객님|○○님)(.)" + 바로 뒤의 짧은 "…고객센터입니다." 문장. 같은 문장에 이어지는 사과·본론은 남김
+# (예: "안녕하세요 고객님, 배송이 늦어져 죄송합니다." → "배송이 늦어져 죄송합니다.")
+GREETING = re.compile(r"^\s*안녕하세요[,\s]*(?:[가-힣]{1,6}\s?님|고객님)?\s*[.!,]?\s*(?:[^.!?\n]{0,30}고객센터입니다[.!]?\s*)?")
 DEFAULT_GREETING = dict(TEMPLATE_DEFAULTS)["첫인사"]
 
 
@@ -136,6 +138,12 @@ def build_input(db: Session, inquiry: Inquiry, faqs: list[dict], analysis: dict 
                                                      AdminAuditLog.action == "order_action").order_by(AdminAuditLog.id)).all()
     lines = [_ticket_line(t) for t in tickets]
     lines += [f"상담원 처리 완료: {(a.detail or {}).get('summary', '')}" for a in actions]
+    # 환불 계좌: 번호는 넘기지 않고 받았는지만 (계좌번호를 다시 묻거나 글로 적어 달라고 하지 않게)
+    if inquiry.refund_account:
+        lines.append("환불 계좌 받음 (무통장입금 환불용, 번호는 상담원만 확인 → 답변에 계좌번호를 쓰거나 다시 묻지 말 것)")
+    elif refund_account.needed(db, inquiry):
+        lines.append("환불 계좌 아직 없음 (무통장입금 주문): 계좌번호를 글로 적지 말고 문의 조회·내 쇼핑의 "
+                     "[내용 보충 · 추가 문의] '환불 계좌' 칸에 입력해 달라고 안내할 것")
     if inquiry.recheck_note:  # "확인 후 다시 안내드리겠습니다"를 이미 보냈고, 이번 답변이 그 확인 결과 안내
         lines.append(f"다시 안내하기로 한 내용: {inquiry.recheck_note} (확인 결과는 상담원이 채움)")
     parts.append("[처리 기록]\n" + ("\n".join(lines) or "없음"))
@@ -206,7 +214,7 @@ def generate_draft(db: Session, inquiry: Inquiry, faq_search, llm, timeout: floa
     # 안전장치: 지급·승인을 확정하는 말이 있으면 상담원이 꼭 보도록 확인할 것에 올림 (프롬프트를 어겨도 걸러지게)
     checks += [f"지급·승인을 확정하는 표현이 있습니다: '{p}' (사실인지 확인 후 고치세요)" for p in find_promises(answer)]
     # 안전장치: 내부 용어가 고객 글에 남았으면 상담원이 고치도록 (프롬프트를 어겨도 걸러지게)
-    checks += [f"내부 용어가 들어 있습니다: '{w}' (고객이 알아듣는 말로 고치세요)" for w in INTERNAL_TERMS.findall(answer)]
+    checks += [f"내부 용어가 들어 있습니다: '{w}' (고객이 알아듣는 말로 고치세요)" for w in sorted(set(INTERNAL_TERMS.findall(answer)))]   # 같은 단어는 한 번만
     return DraftResult(
         answer=answer,
         used_faq_ids=[i for i in data["used_faq_ids"] if i in known],   # 넘기지 않은 FAQ 번호는 버림

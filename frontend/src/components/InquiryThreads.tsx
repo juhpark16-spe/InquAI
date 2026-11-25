@@ -5,13 +5,15 @@ import { useState } from "react";
 
 import { Bubble, Note, Thumbs } from "./Chat";
 import PhotoPicker, { type PickedPhoto } from "./PhotoPicker";
+import { EMPTY_REFUND, REFUND_WORDS, RefundAccountToggle, refundValue } from "./RefundAccountFields";
 import { Alert, Button, Input, Spinner, Textarea, cx, formatDate } from "./ui";
 import { errorMessage } from "../services/api";
-import type { InquiryPublic } from "../services/types";
+import type { InquiryPublic, RefundAccountInput } from "../services/types";
 
 export interface ThreadActions {
   rate: (inquiryNumber: string, answerId: number, helpful: boolean) => Promise<unknown>;
-  followUp: (inquiryNumber: string, content: string, tokens: string[], orderNumber?: string | null) => Promise<unknown>;
+  followUp: (inquiryNumber: string, content: string, tokens: string[], orderNumber?: string | null,
+    refundAccount?: RefundAccountInput | null) => Promise<unknown>;
 }
 
 function RateButtons({ answerId, rating, onRate }: { answerId: number; rating: number | null; onRate: (id: number, helpful: boolean) => void }) {
@@ -58,13 +60,18 @@ function FollowUp({ inquiry, actions, onDone, open, setOpen, prompt }: {
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  // 환불 계좌: 무통장입금 취소·반품인데 아직 없으면 펼쳐 둠, 아니면 [환불 계좌 입력]으로 펼침 (글과 따로, AI에 안 넘김)
+  const [refund, setRefund] = useState<RefundAccountInput>(EMPTY_REFUND);
+  const [showRefund, setShowRefund] = useState(!!inquiry.refund_account_needed);
 
   if (!inquiry.can_follow_up) return <p className="text-xs text-slate-500">이 문의에는 더 이상 추가 문의를 남길 수 없어요. 새 문의로 남겨 주세요.</p>;
   if (!open) return <Button variant="ghost" onClick={() => setOpen(true)}>{text ? "쓰던 추가 문의 이어 쓰기" : "내용 보충 · 추가 문의"}</Button>;
   // 주문번호가 없거나, 적은 번호로 내 주문을 찾지 못했으면 다시 받음
   const needsOrder = !inquiry.order_number || !!inquiry.order_needs_fix;
   const orderNumber = needsOrder ? normalizeOrder(order) : "";
-  const ready = text.trim().length >= 2 || photos.length > 0 || !!orderNumber;
+  const refundSend = showRefund ? refundValue(refund) : null;
+  const ready = (text.trim().length >= 2 || photos.length > 0 || !!orderNumber || !!(refundSend && refundSend !== "invalid"))
+    && refundSend !== "invalid";
   const orderError = needsOrder && orderNumber === null && order.replace(/\s/g, "").length >= 8
     ? "주문번호는 20261103-0042처럼 숫자 8자리-4자리예요." : "";
 
@@ -72,8 +79,10 @@ function FollowUp({ inquiry, actions, onDone, open, setOpen, prompt }: {
     setError("");
     setBusy(true);
     try {
-      await actions.followUp(inquiry.inquiry_number, text, photos.map((p) => p.token), orderNumber || null);
+      await actions.followUp(inquiry.inquiry_number, text, photos.map((p) => p.token), orderNumber || null,
+        refundSend && refundSend !== "invalid" ? refundSend : null);
       setText("");
+      setRefund(EMPTY_REFUND);
       setOrder("");
       setPhotos([]);
       setOpen(false);
@@ -107,6 +116,17 @@ function FollowUp({ inquiry, actions, onDone, open, setOpen, prompt }: {
         </label>
       )}
       <PhotoPicker value={photos} onChange={setPhotos} disabled={busy} />
+      {inquiry.refund_account && (
+        <p className="text-xs text-muted">환불 계좌 등록됨: {inquiry.refund_account.bank} {inquiry.refund_account.number} · {inquiry.refund_account.holder}
+          {" "}(바꾸려면 아래를 체크하고 다시 입력)</p>
+      )}
+      {/* 문의하기의 '파손·불량' 체크와 같은 모양: 체크하면 열리고, 풀면 닫힘.
+          필요한 문의에서만 보임: 무통장입금 취소·반품인데 계좌가 없음 / 이미 보낸 계좌를 바꿀 때 / 취소·반품·환불 이야기를 쓸 때 */}
+      {(inquiry.refund_account_needed || !!inquiry.refund_account || showRefund
+        || REFUND_WORDS.test(`${inquiry.title} ${inquiry.content} ${text}`)) && (
+        <RefundAccountToggle checked={showRefund} onToggle={setShowRefund} value={refund} onChange={setRefund} disabled={busy}
+          autoNote={inquiry.refund_account_needed ? "무통장입금 주문이라 환불받을 계좌가 필요해요" : undefined} />
+      )}
       {error && <Alert>{error}</Alert>}
       <div className="flex flex-wrap items-center justify-end gap-2">
         {/* 글 2자 이상, 또는 사진·주문번호만 있어도 보낼 수 있음 (서버 fill_follow_up 과 같은 조건) */}

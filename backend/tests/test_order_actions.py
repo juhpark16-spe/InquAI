@@ -212,3 +212,13 @@ def test_refund_fee_waived_when_inspection_finds_defect(client, db, ids):
     assert refund.amount == 79000 and "배송비 차감 안 함" in refund.memo
     history = [e["text"] for e in client.get(f"/api/inquiries/{ids['delivered']}").json()["history"]]
     assert any("환불 예정 79,000원 (검수 결과 불량으로 배송비 차감 안 함)" in h for h in history)
+
+
+def test_option_change_resolves_open_cancel_request(client, db, ids):
+    """색상·사이즈를 잘못 골라 들어온 취소 요청: [옵션 변경]으로 해결하면 그 취소 요청도 처리됨 (승인 대기에 남지 않게)"""
+    login(client, "agent1")
+    assert act(client, ids["ready"], action="option", option="진청, 28").status_code == 200
+    t = db.query(Ticket).filter_by(inquiry_id=ids["ready"], ticket_type="취소").one()
+    db.refresh(t)
+    assert t.status == "승인" and "옵션 변경" in t.memo
+    assert order(db, "R-1").order_status == "상품 준비 중"                    # 주문은 취소되지 않음

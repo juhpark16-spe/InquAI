@@ -64,7 +64,13 @@ export interface InquiryCreate {
   damage_report?: boolean | null;   // 파손 체크: null = 내용으로 자동 판단
   client_request_id?: string;     // 이 화면에서 만든 값: 다시 눌러도 같은 문의 (중복 등록 방지)
   photos_later?: boolean;
+  refund_account?: RefundAccountInput | null;   // 무통장입금 주문 취소·반품: 환불 계좌 (글과 따로, AI에 안 넘김)
 }
+
+/** 환불 계좌 입력 (은행·예금주·계좌번호) */
+export interface RefundAccountInput { bank: string; holder: string; number: string }
+/** 보낸 환불 계좌 (가림) */
+export interface RefundAccountMasked { bank: string; holder: string; number: string; registered_at: string }
 
 export interface InquiryCreated {
   inquiry_number: string;
@@ -91,6 +97,8 @@ export interface InquiryPublic {
   order_needs_fix?: boolean;     // 적은 주문번호로 내 주문을 찾지 못함 → 추가 문의에서 다시 받음
   closed_note?: string | null;   // 답변 없이 종료된 문의 → '종료됨'과 이 문장
   photos_requested?: boolean;    // 파손 사진을 나중에 보내기로 함 → 추가 문의에 안내
+  refund_account?: RefundAccountMasked | null;   // 보낸 환불 계좌 (가림)
+  refund_account_needed?: boolean;                // 무통장입금 취소·반품인데 환불 계좌가 아직 없음
 }
 
 // ---- 관리 ----
@@ -214,7 +222,9 @@ export interface InquiryDetail {
   // 고객이 처음 글·추가 문의에 적은 다른 주문번호 (상담원이 [이 번호로 확인]으로 바로 적용)
   order_hints?: { order_number: string; found: boolean; email_match: boolean; product_name: string | null }[];
   customer_history: { id: number; inquiry_number: string; title: string; status: string; created_at: string }[];
-  customer_history_hidden?: { total: number; open: number };   // 상담원: 다른 상담원이 맡은(또는 미배정) 같은 고객 문의 수
+  customer_history_hidden?: { total: number; open: number };
+  refund_account?: RefundAccountMasked | null;   // 환불 계좌 (가림), 전체 번호는 inquiryApi.refundAccount (작업 기록)
+  refund_account_needed?: boolean;   // 상담원: 다른 상담원이 맡은(또는 미배정) 같은 고객 문의 수
   faq_titles: Record<string, string>;
   history: { at: string; actor: string; text: string; kind: "received" | "followup" | "ai" | "assign" | "status" | "draft" | "sent" | "correct" | "ticket" | "recheck" | "mail" }[];
   due_at: string;
@@ -336,6 +346,7 @@ export interface ShopOrder {
   ordered_at: string;
   delivered_at: string | null;
   inquiry_count: number;
+  payment_method?: string | null;
 }
 
 // ---- FAQ 자동 추천 ----

@@ -98,7 +98,7 @@ def view_my_photo(attachment_id: int, exp: int, sig: str, db: DB):
              dependencies=[Depends(rate_limit("follow_up", 5, 60))])
 def follow_up(body: FollowUpCreate, db: DB):
     inquiry = _owned_or_404(db, body, body.inquiry_number.strip())
-    add_follow_up(db, inquiry, body.content, body.attachment_tokens, body.order_number)
+    add_follow_up(db, inquiry, body.content, body.attachment_tokens, body.order_number, body.refund_account)
     return {"inquiry_number": inquiry.inquiry_number, "status": inquiry.status,
             "message": "추가 문의가 접수되었습니다. " + sla.CUSTOMER_NOTICE}
 

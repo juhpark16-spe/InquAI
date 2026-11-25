@@ -208,6 +208,12 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged, onDirtyCh
       ask.trim() ? `요청("${ask.trim()}")을 반영해 AI 초안을 다시 만들었습니다. 확인한 뒤 보내 주세요.`
         : "AI 초안을 만들었습니다. [확인 필요] 표시와 아래 확인할 것을 살펴본 뒤 고쳐서 보내 주세요.");
   };
+  // 위쪽 처리 결과 안내의 [AI 초안 다시 만들기] 버튼 → 여기서 만듦 (쓰던 글이 있으면 위 확인창이 그대로 물음)
+  useEffect(() => {
+    const onRedraft = () => { if (!busy) void aiDraft(); };
+    window.addEventListener("inquai:redraft", onRedraft);
+    return () => window.removeEventListener("inquai:redraft", onRedraft);
+  });
   const checks = draft?.generated_by === "llm" ? draft.check_points ?? [] : [];
   const marks = text.split(CHECK_MARK).length - 1;
 
