@@ -301,6 +301,8 @@ def history(db: Session, inquiry: Inquiry) -> list[dict]:
             text = f"배정 변경: {names.get(before.get('assigned_to'), '미배정')} → {names.get(after.get('assigned_to'), '미배정')}"
             if before.get("status") != after.get("status"):
                 text += f" · 상태 {before.get('status')} → {after.get('status')}"
+            if d.get("reason"):   # 예: 담당자 계정 비활성화로 다시 배정
+                text += f" ({d['reason']})"
         elif a.action == "status_change":
             text = f"상태 변경: {d.get('before')} → {d.get('after')}" + (f" (사유: {d['reason']})" if d.get("reason") else "")
         elif a.action == "response_create":

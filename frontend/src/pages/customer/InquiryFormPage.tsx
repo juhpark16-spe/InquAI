@@ -1,15 +1,16 @@
 // 고객 문의 폼 (/inquiry): 등록하면 그 자리에서 자동 답변 또는 접수 안내를 보여 줍니다 (동기 방식).
 // 쇼핑몰에 로그인한 고객은 이름·이메일·조회 비밀번호를 쓰지 않고, 주문을 목록에서 고릅니다 (/inquiry?order=… 로 미리 선택)
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { useShop } from "../../auth/ShopProvider";
 import { Bubble, Note, Thumbs } from "../../components/Chat";
 import FaqSuggestions from "../../components/FaqSuggestions";
+import InquiryThreads from "../../components/InquiryThreads";
 import PhotoPicker, { PhotoSlot, type PickedPhoto } from "../../components/PhotoPicker";
 import { Alert, Button, Card, Field, Input, MemberBadge, Select, Spinner, Textarea, cx } from "../../components/ui";
 import { customerApi, errorCode, errorMessage, shopApi } from "../../services/api";
-import type { InquiryCreated, ShopOrder } from "../../services/types";
+import type { InquiryCreated, InquiryPublic, ShopOrder } from "../../services/types";
 
 const EMPTY = { customer_name: "", customer_email: "", order_number: "", title: "", content: "", password: "", password2: "" };
 // 주문과 관련된 문의로 보이는 표현 (주문번호 입력 권유용, 판단이 틀려도 입력은 선택이라 영향 없음)
@@ -58,6 +59,22 @@ export default function InquiryFormPage() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<InquiryCreated | null>(null);
   const [lookupEmail, setLookupEmail] = useState("");
+  const errorBox = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (error) errorBox.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [error]);
+  // AI가 바로 답한 문의: 이 자리에서 👍/👎·추가 문의까지 (문의 조회와 같은 대화 화면).
+  // 비회원은 방금 입력한 이메일·비밀번호를 화면 메모리에서만 다시 씀 (주소·저장소에 남기지 않음)
+  const [thread, setThread] = useState<InquiryPublic | null>(null);
+  async function loadThread() {
+    if (!result) return;
+    const r = customer ? await shopApi.inquiries() : await customerApi.lookup(lookupEmail, form.password);
+    setThread(r.items.find((i) => i.inquiry_number === result.inquiry_number) ?? null);
+  }
+  useEffect(() => {
+    setThread(null);
+    if (result?.answer) loadThread().catch(() => setThread(null));   // 못 불러오면 지금처럼 답변만 보여 줌
+  }, [result]); // eslint-disable-line react-hooks/exhaustive-deps
   const [sentAt, setSentAt] = useState<string | null>(null);
   const [photos, setPhotos] = useState<PickedPhoto[]>([]);
   // 파손·불량·오배송 문의: 송장·파손 부위 사진 두 칸 (지금 사진이 없으면 '나중에' 체크)
@@ -169,7 +186,16 @@ export default function InquiryFormPage() {
               ? <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">답변 완료</span>
               : <span className="rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">답변 준비 중</span>}</dd>
           </dl>
-          {/* 대화형: 내가 보낸 문의(오른쪽) → AI 답변 또는 접수 안내(왼쪽) */}
+          {/* 대화형: 내가 보낸 문의(오른쪽) → AI 답변 또는 접수 안내(왼쪽). 답변이 있으면 평가·추가 문의가 되는 대화 화면으로 */}
+          {thread ? (
+            <InquiryThreads items={[thread]} notice="" reload={loadThread} actions={customer ? {
+              rate: (n, id, helpful) => shopApi.rate(id, n, helpful),
+              followUp: (n, text, tokens, order) => shopApi.followUp(n, text, tokens, order),
+            } : {
+              rate: (n, id, helpful) => customerApi.rate(id, n, lookupEmail, form.password, helpful),
+              followUp: (n, text, tokens, order) => customerApi.followUp(lookupEmail, form.password, n, text, tokens, order),
+            }} />
+          ) : (
           <div className="space-y-4 rounded-xl bg-slate-50 p-4">
             <Bubble side="right" tone="customer" name="나" at={sentAt}
               footer={<Thumbs photos={allPhotos.map((p) => ({ url: p.preview, filename: p.name }))} />}>{form.content}</Bubble>
@@ -177,6 +203,7 @@ export default function InquiryFormPage() {
               ? <Bubble side="left" tone="ai" name="AI 상담원" at={sentAt}>{result.answer}</Bubble>
               : <Note>{result.message}</Note>}
           </div>
+          )}
           {result.answer && <p className="mt-3 text-xs text-slate-500">{result.message}</p>}
           {damageMode && photosLater && missingSlots.length > 0 && (
             <p className="mt-3 rounded-lg bg-primary-soft px-3 py-2 text-sm text-ink">
@@ -187,7 +214,7 @@ export default function InquiryFormPage() {
         <div className="flex gap-2">
           <Button variant="ghost" onClick={() => {
             // 주문 화면에서 들어왔으면(?order=) 같은 주문으로 새 문의를 쓰기 쉽게 그대로 둠
-            setResult(null); setForm({ ...EMPTY, order_number: presetOrder }); setPhotos([]); setAgreed(false);
+            setResult(null); setThread(null); setForm({ ...EMPTY, order_number: presetOrder }); setPhotos([]); setAgreed(false);
             setEvidence({ "송장": null, "파손 부위": null }); setDamageChoice(null); setPhotosLater(false); setPhotoTried(false);
           }}>새 문의 작성</Button>
           {/* 이메일은 주소(URL)에 남기지 않고 화면 이동 상태로만 넘김 */}
@@ -226,11 +253,12 @@ export default function InquiryFormPage() {
           <Field label="이메일" hint="주문할 때 쓴 이메일로 적어 주세요. 그래야 주문 내용을 확인해 드릴 수 있어요. (문의 조회에도 씁니다)">
             <Input required type="email" maxLength={255} value={form.customer_email} onChange={set("customer_email")} disabled={sending} />
           </Field>
-          <Field label="조회 비밀번호" hint="6자 이상 · 이메일과 함께 문의 조회에 써요. 찾을 수 없으니 기억해 두세요.">
+          <Field label="조회 비밀번호" hint="6자 이상 · 이메일과 함께 문의 조회에 써요. 찾을 수 없으니 기억해 두세요. 이전 문의와 같은 비밀번호를 쓰면 한 번에 조회돼요.">
             <Input required type="password" minLength={6} maxLength={64} autoComplete="new-password"
               value={form.password} onChange={set("password")} disabled={sending} />
           </Field>
-          <Field label="비밀번호 확인">
+          {/* 입력하는 동안 바로 알려 줌 (등록을 눌러야 아래에서 알게 되지 않게) */}
+          <Field label="비밀번호 확인" error={form.password2 && form.password2 !== form.password ? "위 비밀번호와 달라요." : undefined}>
             <Input required type="password" minLength={6} maxLength={64} autoComplete="new-password"
               value={form.password2} onChange={set("password2")} disabled={sending} />
           </Field>
@@ -321,7 +349,8 @@ export default function InquiryFormPage() {
             </ul>
           </details>
         </div>
-        {error && <Alert>{error}</Alert>}
+        {/* 오류는 등록 버튼 바로 위: 휴대폰에서 안 보일 수 있으니 생기면 이 자리로 화면을 옮김 */}
+        {error && <div ref={errorBox} className="scroll-mt-28"><Alert>{error}</Alert></div>}
         <Button type="submit" disabled={sending} className="w-full py-2.5">
           {sending ? <span className="inline-flex items-center gap-2"><Spinner />{WAIT_MESSAGES[waitStep]}</span> : "문의 등록"}
         </Button>

@@ -111,6 +111,8 @@ export default function TemplatesPage() {
         <p className="mt-1 text-sm text-muted">
           상담원이 답변을 쓸 때 [문구·주문 정보 넣기]에서 한 번에 넣는 문장입니다. FAQ·쇼핑몰 정책과 같은 내용만 써 주세요
           (기간·금액을 잘못 적으면 고객에게 그대로 안내됩니다). 바꾼 내용은 작업 기록에 남습니다.
+          <span className="mt-1 block">문장에 <code>{"{고객명}"}</code> <code>{"{주문번호}"}</code> <code>{"{상품명}"}</code> <code>{"{송장번호}"}</code> <code>{"{택배사}"}</code>를
+            쓰면 넣을 때 그 문의의 값으로 바뀌어요 (주문을 확인하지 못했으면 [확인 필요]로 남아요).</span>
         </p>
       </div>
       {error && <Alert>{error}</Alert>}

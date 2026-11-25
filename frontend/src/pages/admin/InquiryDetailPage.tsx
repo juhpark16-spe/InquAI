@@ -19,6 +19,7 @@ import { TICKET_KIND, TOOL_LABEL, byLabel, failReason, ticketKind, toolLabel } f
 import { Alert, Badge, Button, Input, Select, Spinner, cx, formatDate } from "../../components/ui";
 import { errorMessage, inquiryApi, type QuickAction } from "../../services/api";
 import type { AgentLog, InquiryDetail, OrderCard, User } from "../../services/types";
+import { staffLabel } from "../../services/types";
 
 const OPEN = ["접수", "검토 대기", "담당자 처리"];
 const LOW_CONFIDENCE = 0.8;
@@ -365,7 +366,7 @@ function HandoverDialog({ staff, meId, onClose, onDone }: {
         <span className="font-semibold text-ink">받는 사람</span>
         <Select value={to} onChange={(e) => setTo(e.target.value)} className="w-full" aria-label="받는 사람">
           <option value="">고르기</option>
-          {others.map((u) => <option key={u.id} value={u.id}>{u.display_name}</option>)}
+          {others.map((u) => <option key={u.id} value={u.id}>{staffLabel(u)}</option>)}
         </Select>
       </label>
       <label className="block space-y-1">
@@ -961,7 +962,11 @@ export default function InquiryDetailPage() {
               <Select disabled={busy} value={data.assigned_to?.id ?? ""} aria-label="담당자"
                 onChange={(e) => run(() => inquiryApi.assign(id, e.target.value ? Number(e.target.value) : null))}>
                 <option value="">미배정</option>
-                {staff.map((s) => <option key={s.id} value={s.id}>{s.display_name}</option>)}
+                {staff.map((s) => <option key={s.id} value={s.id}>{staffLabel(s)}</option>)}
+                {/* 담당자가 비활성 계정이면 목록에 없어 '미배정'으로 잘못 보이지 않게 */}
+                {data.assigned_to && !staff.some((s) => s.id === data.assigned_to!.id) && (
+                  <option value={data.assigned_to.id}>{data.assigned_to.display_name} (비활성 계정)</option>
+                )}
               </Select>
             ) : (
               <>

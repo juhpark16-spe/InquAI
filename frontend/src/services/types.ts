@@ -15,7 +15,13 @@ export interface User {
   display_name: string;
   role: Role;
   must_change_password?: boolean; // 관리자가 정한 임시 비밀번호: 새 비밀번호를 정하기 전까지 다른 화면을 못 씀
+  open_count?: number;            // 배정·넘기기 상대 목록(/admin/staff): 지금 맡은 미처리
+  urgent_open?: number;           //   그중 긴급
 }
+
+/** 배정·넘기기 목록의 이름: "김상담 · 상담원 · 미처리 3 (긴급 1)" */
+export const staffLabel = (u: User) =>
+  `${u.display_name} · ${u.role === "admin" ? "관리자" : "상담원"} · 미처리 ${u.open_count ?? 0}${u.urgent_open ? ` (긴급 ${u.urgent_open})` : ""}`;
 
 export interface UserDetail extends User {
   categories: string[]; // 담당 유형 (빈 목록 = 전체 담당)

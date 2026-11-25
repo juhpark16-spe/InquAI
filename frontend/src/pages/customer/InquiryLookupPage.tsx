@@ -119,7 +119,7 @@ export default function InquiryLookupPage() {
             <Field label="문의할 때 쓴 이메일">
               <Input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
             </Field>
-            <Field label="조회 비밀번호" hint="문의할 때 정한 비밀번호입니다. 비밀번호가 다르게 작성된 문의는 따로 조회됩니다.">
+            <Field label="조회 비밀번호" hint="문의할 때 정한 비밀번호예요. 문의마다 비밀번호를 다르게 정했다면, 그 비밀번호로 각각 조회돼요.">
               <Input required type="password" autoComplete="current-password" autoFocus={!!fromForm || (!!email && !password)}
                 value={password} onChange={(e) => setPassword(e.target.value)} />
             </Field>

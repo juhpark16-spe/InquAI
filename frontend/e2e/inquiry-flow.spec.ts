@@ -38,6 +38,7 @@ async function createInquiry(page: Page, email: string, title: string, content: 
 
   await expect(page.getByText("문의가 등록되었습니다")).toBeVisible();
   await expect(page.getByText("답변 준비 중")).toBeVisible();               // 내부 상태(검토 대기 등) 대신 고객 말로
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/created.png` });
   const number = (await page.getByText(/^INQ-\d{8}-\d{4}$/).textContent())!.trim();
   return number;
 }
@@ -160,6 +161,8 @@ test("회원 주문 취소 요청 → 상담원이 취소 티켓 승인·문구 
   await expect(page.locator("section").filter({ hasText: title }).getByText("답변 완료")).toBeVisible();
   // 회원이 문의 조회 화면에 오면: 회원 문의는 여기서 찾을 수 없으니 내 쇼핑으로 안내
   await page.goto("/inquiry/lookup");
+  await expect(page.getByRole("link", { name: "내 문의 보기" })).toBeVisible();
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/member-lookup.png` });
   await page.getByRole("link", { name: "내 문의 보기" }).click();
   await expect(page).toHaveURL(/\/my$/);
 });
@@ -437,4 +440,13 @@ test("조회 메뉴: 취소·교환·반품(환불 진행) · 주문·배송 · 
   await page.getByRole("tab", { name: /품절/ }).click();
   await expect(page.locator("tbody tr").filter({ hasText: /품절/ }).first()).toBeVisible();   // 품절 옵션 줄
   if (shots) await page.screenshot({ path: `${shots}/inventory.png`, fullPage: true });
+});
+
+test("비밀번호 확인이 다르면 입력하는 동안 칸 아래에 바로 알려 줌", async ({ page }) => {
+  await page.goto("/inquiry");
+  await page.getByLabel("조회 비밀번호").fill("abc12345");
+  await page.getByLabel("비밀번호 확인").fill("abc1234");
+  await expect(page.getByText("위 비밀번호와 달라요.")).toBeVisible();
+  await page.getByLabel("비밀번호 확인").fill("abc12345");
+  await expect(page.getByText("위 비밀번호와 달라요.")).toHaveCount(0);
 });

@@ -146,3 +146,26 @@ def test_reset_password_requires_change_again(admin, client):
 def test_seeded_and_existing_accounts_are_not_forced(admin):
     assert admin.get("/api/inquiries").status_code == 200
     assert all(u["must_change_password"] is False for u in admin.get("/api/admin/users").json())
+
+
+def test_deactivate_moves_open_inquiries(admin, db):
+    """비활성화하면 맡던 미처리 문의는 다른 상담원에게 자동 배정 (없으면 미배정), 끝난 문의는 그대로"""
+    from backend.core.security import hash_password
+    from backend.database.models import AdminUser, AnalysisResult, Inquiry
+    other = AdminUser(username="agent2", role="agent", display_name="상담원2", password_hash=hash_password(TEST_PASSWORD))
+    db.add(other)
+    rows = [Inquiry(inquiry_number=f"INQ-U-{n}", customer_name="c", customer_email="c@example.com", title="t", content="c",
+                    status=s, assigned_to=2) for n, s in enumerate(["담당자 처리", "검토 대기", "완료"])]
+    db.add_all(rows)
+    db.flush()
+    db.add(AnalysisResult(inquiry_id=rows[0].id, category="배송", confidence=0.9, sentiment="중립", sentiment_confidence=0.9,
+                          urgency="높음", route="조회형", decision="담당자 연결", decided_by="규칙", model_version="t", scores={}))
+    db.commit()
+    staff = {u["username"]: u for u in admin.get("/api/admin/staff").json()}
+    assert staff["agent1"]["open_count"] == 2 and staff["agent1"]["urgent_open"] == 1      # 배정·넘기기 목록의 미처리 수
+
+    assert admin.patch("/api/admin/users/2", json={"is_active": False}, headers=csrf(admin)).status_code == 200
+    db.expire_all()
+    assert [db.get(Inquiry, r.id).assigned_to for r in rows] == [other.id, other.id, 2]   # 미처리만 agent2 에게
+    history = [e["text"] for e in admin.get(f"/api/inquiries/{rows[0].id}").json()["history"]]
+    assert any("계정 비활성화" in t for t in history)                               # 처리 이력에 이유가 남음

@@ -10,13 +10,15 @@
 
 from fastapi import APIRouter, Request
 from sqlalchemy import select, update
+from sqlalchemy.orm import selectinload
 
 from backend.core.dependencies import DB, AdminOnly, LoginUser
 from backend.core.errors import AppError
 from backend.core.security import hash_password
-from backend.database.models import AdminUser, RefreshToken, utcnow
-from backend.schemas.auth import UserOut
+from backend.database.models import AdminUser, AnalysisResult, Inquiry, RefreshToken, utcnow
+from backend.schemas.auth import StaffOut
 from backend.schemas.users import PasswordReset, UserCreate, UserDetail, UserUpdate
+from backend.services.assignment import OPEN_STATUSES, auto_assign
 from backend.services.audit import add_audit
 
 router = APIRouter(prefix="/admin", tags=["계정 관리"])
@@ -35,10 +37,22 @@ def _get_user(db, user_id: int) -> AdminUser:
     return user
 
 
-@router.get("/staff", response_model=list[UserOut], summary="배정할 수 있는 계정 목록 (로그인: 상담원은 넘길 상대를 고를 때)")
+@router.get("/staff", response_model=list[StaffOut], summary="배정할 수 있는 계정 목록 (로그인: 상담원은 넘길 상대를 고를 때)")
 def list_staff(_: LoginUser, db: DB):
-    return db.scalars(select(AdminUser).where(AdminUser.is_active.is_(True))
-                      .order_by(AdminUser.role.desc(), AdminUser.id)).all()  # 상담원(agent) 먼저
+    users = db.scalars(select(AdminUser).where(AdminUser.is_active.is_(True))
+                       .order_by(AdminUser.role.desc(), AdminUser.id)).all()  # 상담원(agent) 먼저
+    # 지금 맡은 미처리 문의 수 (긴급도 높음 따로): 배정·넘기기 때 일이 몰린 사람을 피하게
+    rows = db.execute(select(Inquiry.assigned_to, AnalysisResult.urgency)
+                      .outerjoin(AnalysisResult, AnalysisResult.inquiry_id == Inquiry.id)
+                      .where(Inquiry.status.in_(OPEN_STATUSES), Inquiry.assigned_to.is_not(None))).all()
+    load: dict[int, list[int]] = {}
+    for uid, urgency in rows:
+        n = load.setdefault(uid, [0, 0])
+        n[0] += 1
+        n[1] += urgency == "높음"
+    return [StaffOut(id=u.id, username=u.username, display_name=u.display_name, role=u.role,
+                     must_change_password=u.must_change_password, categories=u.categories,
+                     open_count=load.get(u.id, [0, 0])[0], urgent_open=load.get(u.id, [0, 0])[1]) for u in users]
 
 
 @router.get("/users", response_model=list[UserDetail], summary="계정 목록 (관리자)")
@@ -75,6 +89,18 @@ def update_user(user_id: int, body: UserUpdate, request: Request, admin: AdminOn
         setattr(user, k, v)
     if changes.get("is_active") is False:
         _revoke_tokens(db, user.id)  # access_token(30분)은 요청마다 is_active 를 확인하므로 바로 막힘
+        db.flush()   # 비활성 상태를 먼저 반영해야 아래 자동 배정에서 이 사람이 빠짐
+        # 맡던 미처리 문의: 아무도 처리하지 못한 채 남지 않게 다른 상담원에게 자동 배정 (맞는 사람이 없으면 미배정 → 관리자 알림)
+        for inquiry in db.scalars(select(Inquiry).options(selectinload(Inquiry.analysis))
+                                  .where(Inquiry.assigned_to == user.id, Inquiry.status.in_(OPEN_STATUSES))).all():
+            inquiry.assigned_to = None
+            if inquiry.status == "접수":
+                inquiry.status = "담당자 처리"
+            moved = auto_assign(db, inquiry, inquiry.analysis.category if inquiry.analysis else None)
+            add_audit(db, request, "assign", admin, "inquiry", inquiry.id,
+                      before={"assigned_to": user.id, "status": inquiry.status},
+                      after={"assigned_to": moved.id if moved else None, "status": inquiry.status},
+                      reason=f"{user.display_name} 계정 비활성화")
     if before != changes:
         add_audit(db, request, "user_update", admin, "admin_user", user.id, before=before, after=changes)
     db.commit()

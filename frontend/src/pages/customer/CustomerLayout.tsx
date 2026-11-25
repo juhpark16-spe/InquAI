@@ -22,7 +22,7 @@ function ShopMenu() {
     <span className="flex items-center gap-2 text-sm">
       <span className="flex items-center gap-1.5" title={customer.email}>
         <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-sm font-bold text-white" aria-hidden>{customer.name.slice(0, 1)}</span>
-        <span className="whitespace-nowrap font-semibold text-ink">{customer.name}님</span>
+        <span className="hidden whitespace-nowrap font-semibold text-ink sm:inline">{customer.name}님</span>
       </span>
       <NavLink to="/my" className={({ isActive }) => cx("whitespace-nowrap rounded-full px-4 py-1.5 font-semibold",
         isActive ? "bg-primary text-white shadow-sm shadow-primary/25" : "border border-primary/40 bg-white text-primary hover:bg-primary-soft")}>내 쇼핑</NavLink>
@@ -42,14 +42,15 @@ function CustomerShell() {
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-20 border-b border-white/60 bg-white/55 backdrop-blur">
-        <div className="mx-auto flex min-h-16 max-w-3xl flex-wrap items-center justify-between gap-2 px-4 py-2">
-          <span className="flex items-center gap-2 font-semibold text-ink"><span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-pink text-sm font-bold text-white" aria-hidden>Q</span>InquAI 고객센터</span>
-          <nav className="flex gap-1">
+        {/* 휴대폰: 1줄 = 로고 + 로그인·내 쇼핑, 2줄 = 메뉴 (예전엔 3줄로 접혀 화면을 많이 가림). 넓은 화면은 한 줄 */}
+        <div className="mx-auto flex min-h-16 max-w-3xl flex-wrap items-center justify-between gap-x-2 gap-y-1.5 px-4 py-2">
+          <span className="order-1 flex items-center gap-2 font-semibold text-ink"><span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-pink text-sm font-bold text-white" aria-hidden>Q</span>InquAI 고객센터</span>
+          <nav className="order-3 flex w-full justify-between gap-1 sm:order-2 sm:w-auto sm:justify-start">
             <NavLink to="/faq" className={link}>자주 묻는 질문</NavLink>
             <NavLink to="/inquiry" end className={link}>문의하기</NavLink>
             <NavLink to="/inquiry/lookup" className={link}>문의 조회</NavLink>
           </nav>
-          <ShopMenu />
+          <span className="order-2 sm:order-3"><ShopMenu /></span>
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-4 py-8">

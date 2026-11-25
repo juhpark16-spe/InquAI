@@ -664,6 +664,7 @@ InquAI는 상담 시스템이라 고객·주문·재고를 **바꾸지 않고 �
 
 상담원이 답변 칸의 [문구·주문 정보 넣기]로 넣는 자주 쓰는 문장. 관리자가 '답변 문구' 화면(`/admin/templates`)에서 편집합니다.
 서버가 켜질 때 표가 비어 있으면 기본 문구 8개(`backend/services/reply_templates.py`)를 넣습니다.
+문장에 `{고객명}` `{주문번호}` `{상품명}` `{송장번호}` `{택배사}`를 쓰면 상담원이 넣을 때 화면이 그 문의의 값으로 바꿉니다 (본인 확인된 주문이 없으면 `[확인 필요: 주문번호]`로 남아 발송 전 확인창이 뜸). AI 초안의 첫 답변 첫인사도 이 표의 '첫인사'를 씁니다.
 
 | 메서드 · 경로 | 권한 | 설명 |
 | --- | --- | --- |
@@ -749,7 +750,7 @@ InquAI는 상담 시스템이라 고객·주문·재고를 **바꾸지 않고 �
 
 | 메서드 | 경로 | 설명 |
 | --- | --- | --- |
-| GET | /api/admin/staff | 배정·넘기기 선택 상자용 (로그인한 상담원도): 활성 계정만 `[{id, username, display_name, role}]` |
+| GET | /api/admin/staff | 배정·넘기기 선택 상자용 (로그인한 상담원도): 활성 계정만 `[{id, username, display_name, role, categories, open_count, urgent_open}]` (지금 맡은 미처리·긴급 수: 선택 상자에 '김상담 · 상담원 · 미처리 3 (긴급 1)') |
 | GET | /api/admin/users | 계정 목록 (비활성 포함). `is_active`, `locked_until`, `last_login_at`, `created_at` 포함, 비밀번호 해시는 내보내지 않음 |
 | POST | /api/admin/users | `{ "username": "agent3", "display_name": "상담원 박서준", "role": "agent", "password": "8자 이상", "categories": ["배송", "교환"] }` → 201 |
 | PATCH | /api/admin/users/{id} | 바꿀 것만: `display_name`, `role`, `is_active`, `categories` |
@@ -758,6 +759,7 @@ InquAI는 상담 시스템이라 고객·주문·재고를 **바꾸지 않고 �
 | POST | /api/admin/users/{id}/reset-password | `{ "password": "..." }`. 실패 횟수·잠금도 풀림 |
 
 - 아이디: 영문 소문자·숫자·밑줄 3~30자. 이미 있으면 409 `USERNAME_TAKEN`
+- 비활성화하면 그 계정이 맡던 미처리 문의를 다른 상담원에게 자동 배정합니다 (규칙은 자동 배정과 같음, 맞는 사람이 없으면 미배정). 처리 이력에 '(○○ 계정 비활성화)'.
 - 비활성화·비밀번호 초기화 시 그 계정의 refresh_token을 모두 무효화합니다. access_token은 요청마다 `is_active`를 확인하므로 바로 막힙니다.
 - 자기 계정을 비활성화하거나 상담원으로 바꾸면 400 `INVALID_STATE` (관리자가 없어지는 것 방지)
 - 작업 기록: `user_create`, `user_update`(바뀌기 전·후 값), `user_password_reset`(비밀번호는 기록하지 않음)

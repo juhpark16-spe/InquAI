@@ -163,7 +163,8 @@ function UserRow({ u, isMe, onChanged }: { u: UserDetail; isMe: boolean; onChang
               onClick={async () => {
                 if (u.is_active && !(await confirmDialog({
                   title: "계정 비활성화", confirmLabel: "비활성화", tone: "danger",
-                  message: `${u.display_name} 계정을 비활성화할까요?\n바로 로그아웃되고 로그인할 수 없게 됩니다. 다시 활성화할 수 있습니다.`,
+                  message: `${u.display_name} 계정을 비활성화할까요?\n바로 로그아웃되고 로그인할 수 없게 됩니다. 다시 활성화할 수 있습니다.\n`
+                    + "맡던 미처리 문의는 다른 상담원에게 자동으로 다시 배정돼요 (맞는 상담원이 없으면 미배정으로 돌아가요).",
                 }))) return;
                 run(() => userApi.update(u.id, { is_active: !u.is_active }),
                   `${u.display_name}: ${u.is_active ? "비활성화했습니다." : "다시 활성화했습니다."}`);

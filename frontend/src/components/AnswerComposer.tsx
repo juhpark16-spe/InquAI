@@ -264,9 +264,20 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged, onDirtyCh
     ["송장번호", o.tracking_number ?? ""],
   ] as [string, string][]).filter(([, v]) => v) : [];
 
+  // 참고 FAQ 답변도 문구처럼 커서 자리에 (예전엔 맨 끝에만 붙음)
   function insertFaq(code: string) {
     const answer = faqs[code]?.answer;
-    if (answer) setText((t) => (t.trim() ? `${t.trim()}\n\n${answer}` : answer));
+    if (answer) insertAt(answer, true);
+  }
+
+  /** 답변 문구의 자리 표시 채우기: {고객명} {주문번호} {상품명} {송장번호} {택배사}.
+   *  값이 없으면(주문 미확인 등) [확인 필요: …]로 남겨 보내기 전에 확인하게 함 */
+  function fillTemplate(piece: string) {
+    const values: Record<string, string | null | undefined> = {
+      고객명: data.customer.name, 주문번호: o?.order_number, 상품명: o?.product_name,
+      송장번호: o?.tracking_number, 택배사: o?.carrier,
+    };
+    return piece.replace(/\{(고객명|주문번호|상품명|송장번호|택배사)\}/g, (_, k: string) => values[k] || `[확인 필요: ${k}]`);
   }
 
   return (
@@ -368,7 +379,7 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged, onDirtyCh
                   {templates === null && <Spinner />}
                   {templates?.length === 0 && <span className="text-muted">등록된 문구가 없어요 (관리자 &gt; 답변 문구)</span>}
                   {templates?.map(({ id, label, text: piece }) => (
-                    <button key={id} type="button" onClick={() => insertAt(piece, true)} title={piece} disabled={!!busy}
+                    <button key={id} type="button" onClick={() => insertAt(fillTemplate(piece), true)} title={fillTemplate(piece)} disabled={!!busy}
                       className="rounded-full border border-slate-300 bg-white px-2 py-0.5 text-slate-700 hover:border-indigo-400 hover:text-indigo-700">
                       {label}
                     </button>
