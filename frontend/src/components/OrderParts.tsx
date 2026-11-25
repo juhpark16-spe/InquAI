@@ -64,17 +64,15 @@ export function RefundLine({ o }: { o: OrderCard }) {
   );
 }
 
-/** 주문 한 건의 상세: 상태·결제·배송·반품·환불·취소/반품 가능 기한 */
-export function OrderRows({ o }: { o: OrderCard }) {
+/** 배송 묶음: 배송 단계 · 송장번호[복사] · 택배사 확인(배송조회·고객센터) · 담당 기사 (services/carriers.py) */
+function ShippingRows({ o }: { o: OrderCard }) {
   return (
-    <dl className="grid grid-cols-[5.5rem_1fr] items-center gap-x-3 gap-y-1.5 text-sm">
-      <Row label="주문 상태"><Badge value={o.order_status} /></Row>
+    <>
       <Row label="배송">
         {o.shipping_status ?? "-"}
         {o.carrier && <span className="text-muted"> · {o.carrier}</span>}
       </Row>
       {o.tracking_number && <Row label="송장번호"><span className="font-mono font-semibold">{o.tracking_number}</span> <CopyButton text={o.tracking_number} /></Row>}
-      {/* 택배사에 진행 상황 확인: 배송조회 바로가기 + 고객센터 대표번호, 배송 출발 뒤 담당 기사 (services/carriers.py) */}
       {o.carrier_info && (
         <Row label="택배사 확인">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -82,37 +80,114 @@ export function OrderRows({ o }: { o: OrderCard }) {
               className="inline-flex items-center gap-1 rounded-lg border border-hairline px-2 py-0.5 text-xs font-semibold text-primary hover:border-primary">
               배송조회 열기 <Icon name="external" className="h-3.5 w-3.5" />
             </a>
-            <span className="text-xs text-muted">{o.carrier_info.name} 고객센터 <span className="font-mono text-body">{o.carrier_info.phone}</span></span>
+            <span className="text-xs text-muted">고객센터 <span className="font-mono text-body">{o.carrier_info.phone}</span></span>
           </span>
+          {o.driver && (
+            <span className="mt-1 block text-xs text-muted">
+              담당 기사 <span className="text-body">{o.driver.name}</span> <span className="font-mono">{o.driver.phone}</span> · 상담원 확인용 (고객 답변에 넣지 않기)
+            </span>
+          )}
         </Row>
       )}
-      {o.driver && (
-        <Row label="담당 기사">
-          {o.driver.name} <span className="font-mono text-muted">{o.driver.phone}</span>
-          <span className="block text-xs text-muted">상담원 확인용 · 고객 답변에는 넣지 마세요</span>
-        </Row>
-      )}
+    </>
+  );
+}
+
+function CancelRow({ o }: { o: OrderCard }) {
+  return (
+    <Row label="취소">
+      {o.order_status === "취소" ? <span className="font-semibold text-slate-700">이미 취소된 주문</span>
+        : <YesNo ok={o.cancellable} yes="가능 (출고 전)" no="불가 (출고됨)" />}
+    </Row>
+  );
+}
+
+function ReturnRow({ o }: { o: OrderCard }) {
+  return (
+    <Row label="반품·교환">
+      {/* 기한은 쇼핑몰 정책 기준 (단순 변심 7일, 불량·오배송 30일) */}
+      {o.return_until ? (
+        <span>
+          <YesNo ok={o.returnable} yes={`가능 ${daysLeft(o.return_until)}`} no="단순 변심 기한 지남" />
+          {!o.returnable && o.defect_return_until && (
+            <span className="mt-1 block text-xs text-muted">불량·오배송은 {daysLeft(o.defect_return_until)}</span>
+          )}
+        </span>
+      ) : <span className="text-slate-600">배송 완료 후 판단</span>}
+    </Row>
+  );
+}
+
+/** 주문 한 건의 상세 (전체): 상태·결제·배송·반품·환불·취소/반품 가능 기한. 주문·배송·고객 조회 화면, 문의 상세의 '주문 전체 정보' */
+export function OrderRows({ o }: { o: OrderCard }) {
+  return (
+    <dl className="grid grid-cols-[5.5rem_1fr] items-center gap-x-3 gap-y-1.5 text-sm">
+      <Row label="주문 상태"><Badge value={o.order_status} /></Row>
+      <ShippingRows o={o} />
       {o.payment_method && <Row label="결제">{o.payment_method} <span className="text-muted">· {shortDate(o.paid_at)}</span></Row>}
       <Row label="주문일">{formatDate(o.ordered_at)}</Row>
       {o.delivered_at && <Row label="배송 완료">{formatDate(o.delivered_at)}</Row>}
       <RefundLine o={o} />
-      <Row label="취소">
-        {o.order_status === "취소" ? <span className="font-semibold text-slate-700">이미 취소된 주문</span>
-          : <YesNo ok={o.cancellable} yes="가능 (출고 전)" no="불가 (출고됨)" />}
-      </Row>
-      <Row label="반품·교환">
-        {/* 기한은 쇼핑몰 정책 기준 (단순 변심 7일, 불량·오배송 30일) */}
-        {o.return_until ? (
-          <span>
-            <YesNo ok={o.returnable} yes={`가능 ${daysLeft(o.return_until)}`} no="단순 변심 기한 지남" />
-            {!o.returnable && o.defect_return_until && (
-              <span className="mt-1 block text-xs text-muted">불량·오배송은 {daysLeft(o.defect_return_until)}</span>
-            )}
-          </span>
-        ) : <span className="text-slate-600">배송 완료 후 판단</span>}
-      </Row>
+      <CancelRow o={o} />
+      <ReturnRow o={o} />
+      {o.shipping_address && <Row label="배송지">{o.shipping_address}</Row>}
     </dl>
   );
+}
+
+/** 한 줄 요약: 택배사 · 주문 상태(배송 단계) · 취소 가능 · 반품 기한 (문의 상세 주문 정보 맨 위) */
+export function OrderStatusLine({ o }: { o: OrderCard }) {
+  const ret = o.order_status === "취소" ? null
+    : o.return_requested_at ? (o.picked_up_at ? "반품 회수 완료" : "반품 회수 중")
+      : o.return_until ? (o.returnable ? `반품 ${daysLeft(o.return_until)}` : "반품 기한 지남") : null;
+  const parts = [
+    o.carrier,
+    `${o.order_status}${o.shipping_status && o.shipping_status !== o.order_status ? ` (${o.shipping_status})` : ""}`,
+    o.order_status === "취소" ? null : o.cancellable ? "취소 가능" : "취소 불가",
+    ret,
+  ].filter(Boolean);
+  return <p className="mb-2 rounded-lg bg-surface-soft px-3 py-1.5 text-sm font-medium text-ink">{parts.join(" · ")}</p>;
+}
+
+/** 문의 유형에 맞춘 핵심 칸 (3~4줄). 나머지는 '주문 전체 정보'로 접음 */
+export function OrderFocus({ o, category }: { o: OrderCard; category: string | null }) {
+  const qty = o.quantity ?? 1;
+  const rows = (() => {
+    switch (category) {
+      case "배송":
+        return <ShippingRows o={o} />;
+      case "주문 취소":
+        return (<>
+          <CancelRow o={o} />
+          <Row label="결제">{won(o.amount)}{o.payment_method && <span className="text-muted"> · {o.payment_method}</span>}</Row>
+          {qty > 1 && <Row label="수량">{qty}개 <span className="text-xs text-muted">· 출고 전이면 일부만 취소 가능 ([부분 취소])</span></Row>}
+        </>);
+      case "반품·환불":
+      case "교환":
+        return (<>
+          <ReturnRow o={o} />
+          <RefundLine o={o} />
+          {o.refund_preview != null && !(o.payments ?? []).some((p) => p.kind === "환불") && (
+            <Row label="환불 예정">{won(o.refund_preview)}{o.return_reason && <span className="text-muted"> · {o.return_reason}</span>}</Row>
+          )}
+          {!o.return_requested_at && <Row label="배송">{o.shipping_status ?? "-"}{o.delivered_at && <span className="text-muted"> · 완료 {shortDate(o.delivered_at)}</span>}</Row>}
+        </>);
+      case "결제":
+        return (<>
+          <Row label="결제">{won(o.amount)}{o.payment_method && <span className="text-muted"> · {o.payment_method} · {shortDate(o.paid_at)}</span>}</Row>
+          <RefundLine o={o} />
+          <CancelRow o={o} />
+        </>);
+      default:
+        return (<>
+          <Row label="주문일">{formatDate(o.ordered_at)}</Row>
+          <ShippingRows o={o} />
+        </>);
+    }
+  })();
+  // 배송지: 배송 문의이거나 출고 전(아직 바꿀 수 있음)이면 핵심 칸에 (배송지 변경 문의를 바로 처리하게)
+  const address = o.shipping_address && (category === "배송" || o.cancellable) ? <Row label="배송지">{o.shipping_address}</Row> : null;
+  return <dl className="grid grid-cols-[5.5rem_1fr] items-center gap-x-3 gap-y-1.5 text-sm">{rows}{address}</dl>;
 }
 
 /** 작은 복사 버튼 (송장번호: 택배사에 전화할 때 바로 불러 주게) */

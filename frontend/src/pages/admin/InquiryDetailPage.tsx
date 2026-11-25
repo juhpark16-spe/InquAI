@@ -14,7 +14,7 @@ import AnswerComposer from "../../components/AnswerComposer";
 import InternalNotes from "../../components/InternalNotes";
 import { confirmDialog } from "../../components/ConfirmDialog";
 import Modal from "../../components/Modal";
-import { OrderHead, OrderRows, PaymentList, Row, ShipmentList, StockList, SubFold, stockText, won } from "../../components/OrderParts";
+import { OrderFocus, OrderHead, OrderRows, OrderStatusLine, PaymentList, Row, ShipmentList, StockList, SubFold, stockText, won } from "../../components/OrderParts";
 import { TICKET_KIND, TOOL_LABEL, byLabel, failReason, ticketKind, toolLabel } from "../../services/labels";
 import { Alert, Badge, Button, Input, Select, Spinner, cx, formatDate } from "../../components/ui";
 import { errorMessage, inquiryApi, type QuickAction } from "../../services/api";
@@ -91,7 +91,7 @@ function Fold({ id, title, summary, children, defaultOpen = true }: {
     <section className="overflow-hidden rounded-2xl border border-hairline bg-white">
       <button type="button" onClick={toggle} aria-expanded={open}
         className={cx("flex w-full items-center justify-between gap-3 px-5 py-3 text-left hover:bg-surface-soft", open && "border-b border-hairline")}>
-        <span className="text-lg font-semibold text-ink">{title}</span>
+        <span className="shrink-0 whitespace-nowrap text-lg font-semibold text-ink">{title}</span>
         <span className="flex min-w-0 items-center gap-2 text-sm text-muted">
           {!open && summary && <span className="truncate text-body">{summary}</span>}
           <span className="shrink-0">{open ? "접기 ▴" : "펼치기 ▾"}</span>
@@ -514,8 +514,12 @@ function OrderInfo({ o, others, hints, category, needsOrder, inquiryId, onDone }
             <OrderHead o={o} />
             {o.option && <p className="text-xs text-muted">옵션: {o.option}</p>}
           </div>
-          <OrderRows o={o} />
-          {o.shipping_address && <p className="mt-1.5 text-sm"><span className="text-muted">배송지 </span>{o.shipping_address}</p>}
+          {/* 한 줄 요약 → 문의 유형에 맞춘 핵심 3~4줄 → 나머지는 '주문 전체 정보'로 접음 (상담에 필요한 것만 먼저) */}
+          <OrderStatusLine o={o} />
+          <OrderFocus o={o} category={category} />
+          <SubFold title="주문 전체 정보 (결제·날짜·배송지 등)">
+            <OrderRows o={o} />
+          </SubFold>
           {o.email_match !== false && <OrderActions key={`${o.order_number}-${o.order_status}-${o.quantity}-${o.product_name}-${payments.length}`} o={o} inquiryId={inquiryId} onDone={onDone} />}
           {payments.length > 0 && (
             <SubFold title={`결제·환불 내역 (${payments.length})`}

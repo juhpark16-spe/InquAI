@@ -132,14 +132,17 @@ test("회원 주문 취소 요청 → 상담원이 취소 티켓 승인·문구 
   await staff.getByLabel("문의 검색").fill(number);
   await staff.keyboard.press("Enter");
   await expect(staff.getByRole("heading", { name: title })).toBeVisible();
-  await expect(staff.getByText("가능 (출고 전)")).toBeVisible();                 // 주문 정보: 출고 전이라 취소 가능
+  await expect(staff.getByText("가능 (출고 전)").first()).toBeVisible();
+  // 주문 정보: 한 줄 요약 + 취소 문의에 맞춘 핵심 칸, 나머지는 '주문 전체 정보'로 접힘
+  await expect(staff.getByText(/결제 완료.*취소 가능|상품 준비 중.*취소 가능/).first()).toBeVisible();
+  if (process.env.E2E_SHOTS) await staff.screenshot({ path: `${process.env.E2E_SHOTS}/order-card.png`, fullPage: true });                 // 주문 정보: 출고 전이라 취소 가능
   await staff.getByRole("button", { name: "취소 승인" }).click();
   // 승인 전 확인창: 주문·전액 환불 안내 → [취소 승인]
   const approve = staff.getByRole("alertdialog");
   await expect(approve).toContainText("전액 환불");
   await approve.getByRole("button", { name: "취소 승인" }).click();
   await expect(staff.getByText(/티켓을 승인했습니다/)).toBeVisible();
-  await expect(staff.getByText("이미 취소된 주문")).toBeVisible();               // 승인하면 주문이 바로 취소됨
+  await expect(staff.getByText("이미 취소된 주문").first()).toBeVisible();               // 승인하면 주문이 바로 취소됨
 
   // 답변: 관리자가 정한 '취소 완료' 문구를 넣고 발송
   await staff.getByRole("button", { name: /문구·주문 정보/ }).click();
@@ -200,7 +203,7 @@ test("출고 전 배송지 변경 요청 → 상담원이 [바로 처리]로 배
   await confirm.getByRole("button", { name: "배송지 변경" }).click();
   await expect(confirm).toHaveCount(0);
   await expect(staff.getByText(/배송지 변경: 경기 성남시 분당구 판교역로 166/).first()).toBeVisible();   // 결과 안내·처리 이력
-  await expect(staff.getByText(`배송지 ${address}`, { exact: true })).toBeVisible();                     // 주문 정보의 배송지
+  await expect(staff.getByText(address, { exact: true }).first()).toBeVisible();                       // 주문 정보 핵심 칸의 배송지 (출고 전)
 });
 
 test("확인 후 다시 안내를 체크해 발송 → 다시 안내 표시·목록 필터 → 고객에게 '추가 안내 예정'", async ({ page }) => {
