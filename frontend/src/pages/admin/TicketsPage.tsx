@@ -1,11 +1,12 @@
-// 취소·교환·반품 (/admin/tickets): AI가 접수한 취소·교환·환불(반품) 요청을 한곳에서 (backend/api/tickets.py)
+// 취소·교환·반품 (/admin/tickets): AI가 접수한 취소·교환·반품(서버 값 '환불') 요청을 한곳에서 (backend/api/tickets.py)
 // - 기본은 '승인 대기'(오래된 것부터). 승인·반려는 문의 상세에서 주문 정보를 보고 함 → 줄을 누르면 그 문의로
 // - '환불 진행' 탭: 승인한 뒤 돈이 돌아가는 상황 (결제 내역의 환불 예정·완료, 예정일 지남은 빨강). 조회 전용
 // - 상담원은 내가 맡은 문의의 요청·주문만 보임
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useEffect, useState } from "react";
 
-import { Alert, Badge, Button, Select, Spinner, cx, formatDate } from "../../components/ui";
+import { won } from "../../components/OrderParts";
+import { Alert, Badge, Button, Select, Spinner, cx, formatDate, monthDay } from "../../components/ui";
 import { errorMessage, opsApi } from "../../services/api";
 import { TICKET_KIND, ticketKind } from "../../services/labels";
 
@@ -23,7 +24,6 @@ const TYPE_STYLE: Record<string, string> = {
 const STATUS_STYLE: Record<string, string> = {
   접수: "bg-primary-soft text-primary", 승인: "bg-emerald-50 text-emerald-700", 반려: "bg-slate-100 text-slate-600",
 };
-const won = (n: number) => `${n.toLocaleString()}원`;
 
 /** 접수 뒤 지난 시간 (승인 대기가 오래되면 주황 → 빨강) */
 function waited(iso: string) {
@@ -182,7 +182,7 @@ const REFUND_STATES = [
   { value: "완료", label: "완료" },
   { value: "all", label: "전체" },
 ];
-const day = (iso: string) => new Date(iso).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric", weekday: "short" });
+const day = (iso: string) => monthDay(iso, true);
 
 /** 환불 진행: 승인 뒤 결제 내역의 '환불'(반품)·'승인 취소'(출고 전 취소) 줄. 실제 환불은 쇼핑몰 결제 시스템이 함 */
 function RefundView() {

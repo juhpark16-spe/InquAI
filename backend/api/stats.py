@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 from backend.core.dependencies import DB, AdminOnly
 from backend.core.errors import AppError
 from backend.services import draft_quality, sla
+from backend.services.sla import OPEN_STATUSES
 from backend.services.inquiry_context import history
 from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminAuditLog, AdminUser, Inquiry,
                                      LabelCorrection, Order, Response, Ticket, as_utc, utcnow)
@@ -23,7 +24,6 @@ from backend.training.labels import CATEGORY_LABELS
 router = APIRouter(prefix="/stats", tags=["통계"])
 
 KST = timezone(timedelta(hours=9))
-OPEN_STATUSES = ("접수", "검토 대기", "담당자 처리")  # 미처리 (자동 처리·완료는 처리됨)
 MAX_DAYS = 92
 LOW_CONFIDENCE = 0.8
 

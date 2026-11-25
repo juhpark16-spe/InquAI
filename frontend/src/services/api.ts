@@ -195,7 +195,6 @@ export const inquiryApi = {
   setOrderNumber: (id: number, order_number: string | null) =>
     http.patch<{ order_number: string | null }>(`/inquiries/${id}/order-number`, { order_number }).then((r) => r.data),
   // 확인 후 다시 안내 표시: 정하기·바꾸기 / 답변 없이 풀기 (다음 답변을 보내면 자동으로 풀림)
-  setRecheck: (id: number, recheck: RecheckInput) => http.put(`/inquiries/${id}/recheck`, recheck).then((r) => r.data),
   clearRecheck: (id: number) => http.delete(`/inquiries/${id}/recheck`).then((r) => r.data),
 };
 
@@ -245,21 +244,11 @@ export function kstDate(offsetDays = 0): string {
   return d.toISOString().slice(0, 10);
 }
 
-export interface ActivityItem {
-  at: string;
-  actor: string;
-  text: string;
-  kind: "received" | "followup" | "ai" | "assign" | "status" | "draft" | "sent" | "correct";
-  inquiry_id: number;
-  inquiry_number: string;
-  title: string;
-}
 
 export const statsApi = {
   summary: (days: number) =>
     http.get<StatsSummary>("/stats/summary", { params: { from: kstDate(days - 1), to: kstDate(0) } }).then((r) => r.data),
   priorities: (limit = 5) => http.get<Priorities>("/stats/priorities", { params: { limit } }).then((r) => r.data),
-  activity: (limit = 8) => http.get<ActivityItem[]>("/stats/activity", { params: { limit } }).then((r) => r.data),
   products: (days: number, limit = 5) =>
     http.get<ProductStats>("/stats/products", { params: { from: kstDate(days - 1), to: kstDate(0), limit } }).then((r) => r.data),
   drafts: (days: number, examples = 6) =>
@@ -355,7 +344,7 @@ export const retrainingApi = {
   status: () => http.get<RetrainingStatus>("/admin/retraining").then((r) => r.data),
 };
 
-/** 처리 요청(티켓) 목록 · 고객 조회 · 재고 현황 (조회 전용, backend/api/tickets.py · customers.py) */
+/** 취소·교환·반품 요청(티켓) · 주문·배송 · 고객 조회 · 재고 현황 (조회 전용, backend/api/tickets.py · customers.py) */
 /** 환불 진행 (승인 뒤 결제 내역의 환불·승인 취소 줄) */
 export interface RefundRow {
   id: number; kind: string; status: string; amount: number; method: string | null; at: string; memo: string | null; overdue: boolean;

@@ -33,7 +33,7 @@ URGENCIES = ("높음", "보통", "낮음")
 RESPONSE_STATUSES = ("초안", "발송")
 ORDER_STATUSES = ("결제 완료", "상품 준비 중", "출고", "배송 중", "배송 완료", "취소")
 TICKET_TYPES = ("환불", "교환", "취소", "이관")
-TICKET_STATUSES = ("접수", "처리 중", "승인", "반려")
+TICKET_STATUSES = ("접수", "승인", "반려")   # 접수 = 승인 대기
 TOOLS = ("FAQ 검색", "배송 조회", "티켓 접수", "상담원 이관")
 # 작업 기록(admin_audit_logs.action) 종류와 화면 이름은 backend/api/audit_logs.py 의 ACTIONS 에서 관리
 

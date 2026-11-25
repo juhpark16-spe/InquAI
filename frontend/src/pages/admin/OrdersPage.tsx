@@ -7,7 +7,7 @@ import { Link, useSearchParams } from "react-router";
 import { Fragment, useEffect, useState, type FormEvent } from "react";
 
 import { OrderRows, PaymentList, ShipmentList, StockList, SubFold, won } from "../../components/OrderParts";
-import { Alert, Badge, Button, Input, Spinner, cx, formatDate } from "../../components/ui";
+import { Alert, Badge, Button, Input, Spinner, cx, formatDate, monthDay } from "../../components/ui";
 import { errorMessage, opsApi } from "../../services/api";
 
 const SIZE = 30;
@@ -20,7 +20,7 @@ const GROUPS = [
   { value: "return", label: "반품" },
   { value: "cancel", label: "취소" },
 ];
-const day = (iso: string) => new Date(iso).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric", weekday: "short" });
+const day = (iso: string) => monthDay(iso, true);
 
 export default function OrdersPage() {
   const [params, setParams] = useSearchParams();

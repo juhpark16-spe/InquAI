@@ -1,5 +1,5 @@
 // AI 실행 로그 (/admin/agent-logs): 문의마다 AI가 무엇을 판단했고 무슨 일을 했는지(도구), 해냈는지
-// 화면 말은 관리자가 읽는 말로 (services/labels.ts): 도구 → 'AI 처리 작업', 티켓 접수 → '처리 요청 접수', 도구 실패 → 미완료 · 이유
+// 화면 말은 관리자가 읽는 말로 (services/labels.ts): 도구 → 'AI 처리 작업', 티켓 접수 → '취소·교환·반품 접수', 도구 실패 → 미완료 · 이유
 // 관리자는 전체, 상담원은 자신에게 배정된 문의만 봅니다. 줄을 누르면 처리 경로·근거 FAQ·답변·도구 원본이 펼쳐집니다.
 import { Fragment, useCallback, useEffect, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -116,7 +116,7 @@ function Flags({ log }: { log: AgentLogRow }) {
 function Glossary() {
   const items: [string, string][] = [
     ["AI 처리 작업", "AI가 판단한 뒤 실제로 한 일이에요. " + Object.values(TOOL_LABEL).map((t) => `${t.label}: ${t.help}`).join(" · ")],
-    ["처리 요청(티켓)", "취소·교환·환불처럼 사람이 승인해야 하는 일을 적은 요청서예요. 문의 상세 오른쪽 '접수된 티켓'에서 승인·반려해요."],
+    ["취소·교환·반품 요청(티켓)", "사람이 승인해야 하는 취소·교환·반품을 적은 요청서예요. 문의 상세의 요청 카드나 '취소·교환·반품' 메뉴에서 승인·반려해요."],
     ["미완료", "AI가 작업을 끝내지 못하고 상담원에게 남긴 경우예요. 고장이 아니라 대부분 주문번호가 없어서예요 → 상담원이 고객에게 주문번호를 받아 주세요."],
     [LOW_CONFIDENCE_TEXT, LOW_CONFIDENCE_HELP],
     ["AI가 판단 / 규칙으로 바로", "AI(GPT)가 내용을 읽고 정했는지, 긴급·확신 낮음처럼 정해 둔 규칙으로 AI를 기다리지 않고 바로 정했는지예요."],

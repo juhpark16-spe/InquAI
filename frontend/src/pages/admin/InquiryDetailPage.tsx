@@ -589,7 +589,7 @@ function OrderInfo({ o, others, hints, category, needsOrder, inquiryId, onDone }
 
 const TICKET_ACTIONABLE = ["취소", "교환", "환불"];
 
-/** 접수된 티켓: 취소·교환·환불은 상담원이 승인·반려 (취소 승인 → 주문 취소, 출고된 주문은 서버가 막음) */
+/** 접수된 티켓: 취소·교환·반품(서버 값 환불)은 상담원이 승인·반려 (취소 승인 → 주문 취소, 출고된 주문은 서버가 막음) */
 function Tickets({ data, onChanged }: { data: InquiryDetail; onChanged: (msg: string) => void }) {
   const [busy, setBusy] = useState<number | null>(null);
   const [rejecting, setRejecting] = useState<number | null>(null);

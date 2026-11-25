@@ -16,7 +16,6 @@ SLA_HOURS = {"높음": 4}
 DEFAULT_HOURS = 24
 OPEN_STATUSES = ("접수", "검토 대기", "담당자 처리")
 CUSTOMER_NOTICE = "영업일 기준 1일 이내에 답변드립니다. (상담 시간: 평일 10:00~17:00, 점심 12:00~13:00 제외)"
-RULE_TEXT = "주말 제외 · 긴급 4시간 · 그 외 24시간"   # 화면 안내용
 
 KST = timezone(timedelta(hours=9))
 WEEKEND = timedelta(days=2)

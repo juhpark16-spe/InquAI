@@ -100,6 +100,12 @@ export function formatDate(iso: string | null | undefined) {
   return new Date(iso).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
 }
 
+/** 월·일만 ("11. 24."), weekday면 요일까지 ("11. 24. (화)"). 없으면 빈 글 */
+export function monthDay(iso: string | null | undefined, weekday = false) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric", ...(weekday ? { weekday: "short" } : {}) });
+}
+
 function PersonIcon() {   // 글자색을 따라가는 사람 모양 (이모지는 진한 배지 위에서 안 보임)
   return (
     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>

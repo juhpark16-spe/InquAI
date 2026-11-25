@@ -1,6 +1,7 @@
-"""티켓 처리 API (로그인, docs/api_spec.md 6장, 4주차 구현): AI가 접수한 취소·교환·환불 티켓을 상담원이 승인·반려합니다.
+"""티켓 처리 API (로그인, docs/api_spec.md 6장, 4주차 구현): AI가 접수한 취소·교환·반품 요청(티켓)을 상담원이 승인·반려합니다.
+(서버 값 ticket_type '환불'은 반품 후 환불이라 화면에서는 '반품'으로 보임)
 
-    GET   /api/tickets          처리 요청 목록 (상태·종류 조건, 상태별 건수)
+    GET   /api/tickets          취소·교환·반품 요청 목록 (상태·종류 조건, 상태별 건수)
     GET   /api/tickets/refunds  환불 진행 (승인 뒤 환불 예정·완료, 예정일 지남 표시)
     PATCH /api/tickets/{id}   { "status": "승인" | "반려", "memo": "..." }
 
@@ -27,14 +28,13 @@ from backend.database.models import AdminUser, Inquiry, Order, Payment, Ticket, 
 from backend.schemas.inquiry_admin import TicketOut
 from backend.services import inventory, sla
 from backend.services import inquiry_context as ctx
-from backend.services.order_actions import DEFECT_RETURN_DAYS, RETURN_FEE
+from backend.services.policy import CANCELLABLE, DEFECT_RETURN_DAYS, REFUND_BUSINESS_DAYS, RETURN_FEE
 from backend.services.audit import add_audit
 
 
 
 router = APIRouter(prefix="/tickets", tags=["티켓 처리"])
 ACTIONABLE = ("취소", "교환", "환불")
-CANCELLABLE = ("결제 완료", "상품 준비 중")   # 출고 전 (docs/shop_policy.md: 취소는 출고 전만)
 
 
 class TicketDecision(BaseModel):
@@ -102,7 +102,7 @@ def decide(ticket_id: int, body: TicketDecision, request: Request, user: LoginUs
         if amount < order.amount:   # 단순 변심: 안내한 대로 왕복 배송비 차감
             memo += f" · 단순 변심 왕복 배송비 {RETURN_FEE:,}원 차감"
         db.add(Payment(order_id=order.id, kind="환불", status="예정", method=order.payment_method, amount=amount,
-                       at=sla.add_weekday_time(utcnow(), timedelta(days=3)), memo=memo))   # 3영업일 (주말 제외)
+                       at=sla.add_weekday_time(utcnow(), timedelta(days=REFUND_BUSINESS_DAYS)), memo=memo))   # 3영업일 (주말 제외)
 
     ticket.status, ticket.memo = body.status, body.memo
     ticket.handled_by, ticket.handled_at = user.id, utcnow()
@@ -115,14 +115,14 @@ def decide(ticket_id: int, body: TicketDecision, request: Request, user: LoginUs
 TICKET_STATUSES = ("접수", "승인", "반려")
 
 
-@router.get("", summary="처리 요청(티켓) 목록 (로그인: 상담원은 내가 맡은 문의의 것만)")
+@router.get("", summary="취소·교환·반품 요청(티켓) 목록 (로그인: 상담원은 내가 맡은 문의의 것만)")
 def list_tickets(
     user: LoginUser, db: DB,
     status: str | None = Query("접수", description="접수(승인 대기) / 승인 / 반려 / all"),
     ticket_type: str | None = Query(None, description="취소 / 교환 / 환불"),
     page: int = Query(1, ge=1), size: int = Query(30, ge=1, le=100),
 ):
-    """AI가 접수한 취소·교환·환불 요청을 한곳에서 (승인·반려는 문의 상세에서, 주문 정보를 보고 판단)."""
+    """AI가 접수한 취소·교환·반품 요청을 한곳에서 (승인·반려는 문의 상세에서, 주문 정보를 보고 판단)."""
     stmt = (select(Ticket).join(Inquiry, Ticket.inquiry_id == Inquiry.id)
             .options(selectinload(Ticket.inquiry).selectinload(Inquiry.assignee), selectinload(Ticket.order)))
     if user.role != "admin":
@@ -164,7 +164,7 @@ def list_refunds(
     state: str | None = Query("예정", description="예정 / 완료 / all"),
     page: int = Query(1, ge=1), size: int = Query(30, ge=1, le=100),
 ):
-    """처리 요청을 승인한 뒤의 단계: 결제 내역의 '환불'·'승인 취소' 줄을 모아 봄 (조회 전용).
+    """취소·반품 요청을 승인한 뒤의 단계: 결제 내역의 '환불'·'승인 취소' 줄을 모아 봄 (조회 전용).
     실제 환불은 쇼핑몰 결제 시스템이 하므로, 예정일이 지났는데 '예정'이면 결제 시스템 확인이 필요하다는 표시(overdue)."""
     where = [Payment.kind.in_(REFUND_KINDS)]
     if user.role != "admin":

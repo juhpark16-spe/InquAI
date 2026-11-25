@@ -4,7 +4,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 
-import { Alert, Card, Spinner, cx, formatDate } from "../../components/ui";
+import { Alert, Card, Spinner, cx, formatDate, monthDay } from "../../components/ui";
 import { errorMessage, retrainingApi } from "../../services/api";
 import type { ModelVersion, RetrainingStatus } from "../../services/types";
 
@@ -39,7 +39,7 @@ function versionNames(history: ModelVersion[]) {
   }));
 }
 
-const shortDate = (iso?: string) => (iso ? new Date(iso).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" }) : "");
+const shortDate = (iso?: string) => monthDay(iso);
 
 export default function RetrainingPage() {
   const [data, setData] = useState<RetrainingStatus | null>(null);

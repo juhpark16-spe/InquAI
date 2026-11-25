@@ -1,4 +1,4 @@
-"""고객 조회·재고 현황 API (로그인, 조회 전용, docs/api_spec.md "고객 조회·처리 요청·재고").
+"""주문·배송·고객 조회·재고 현황 API (로그인, 조회 전용, docs/api_spec.md 7-1).
 
     GET /api/customers?q=          고객 찾기: 이름·이메일·전화번호 뒷자리·주문번호
     GET /api/customers/{id}        고객 한 명: 주문(결제·배송 기록), 문의, 적립금·쿠폰, 불만 신호
@@ -7,7 +7,7 @@
     GET /api/inventory?only=       상품 옵션별 재고: 품절·재고 적음·재입고 예정
 
 - InquAI는 상담 시스템이라 고객·주문·재고를 **바꾸지 않고 보기만** 합니다. 고치는 일(배송지·옵션 변경, 취소 등)은
-  지금처럼 문의 상세의 [바로 처리]·처리 요청 승인에서 하고, 기록이 그 문의에 남습니다.
+  지금처럼 문의 상세의 [바로 처리]·취소·교환·반품 요청 승인에서 하고, 기록이 그 문의에 남습니다.
 - 권한: 관리자는 모든 고객, 상담원은 **내가 맡은 문의의 고객만** (다른 고객은 404, 문의 권한과 같은 원칙).
 - 고객 상세를 열면 작업 기록에 '고객 정보 조회'(customer_view)를 남깁니다 (개인정보 조회 기록). 전화번호는 가운데를 가립니다.
 """
@@ -23,10 +23,11 @@ from backend.core.errors import AppError
 from backend.database.models import AdminUser, Customer, Inquiry, Order, ProductOption, Response, as_utc, utcnow
 from backend.services import inquiry_context as ctx
 from backend.services import inventory
+from backend.services.policy import CANCELLABLE, DELAY_DAYS, SHIPPING
+from backend.services.sla import OPEN_STATUSES as OPEN
 from backend.services.audit import add_audit
 
 router = APIRouter(tags=["고객 조회·재고"])
-OPEN = ("검토 대기", "담당자 처리", "접수")
 
 
 def _visible(user: AdminUser):
@@ -109,10 +110,9 @@ def get_customer(customer_id: int, request: Request, user: LoginUser, db: DB):
 
 # 주문 묶음 (화면 탭). 배송 지연 = 출고됐는데 주문 후 DELAY_DAYS 일이 지나도 배송 완료가 아님
 # (정책: 평일 출고 + 출고 후 1~2일, 주말을 넉넉히 잡아 4일. docs/shop_policy.md)
-DELAY_DAYS = 4
 ORDER_GROUPS = {
-    "ready": ("출고 전", Order.order_status.in_(("결제 완료", "상품 준비 중"))),
-    "shipping": ("배송 중", Order.order_status.in_(("출고", "배송 중"))),
+    "ready": ("출고 전", Order.order_status.in_(CANCELLABLE)),
+    "shipping": ("배송 중", Order.order_status.in_(SHIPPING)),
     "delayed": ("배송 지연", None),   # 아래에서 시간 조건으로
     "delivered": ("배송 완료", Order.order_status == "배송 완료"),
     "return": ("반품", Order.return_requested_at.is_not(None)),
@@ -122,7 +122,7 @@ ORDER_GROUPS = {
 
 def _group_cond(key: str):
     if key == "delayed":
-        return Order.order_status.in_(("출고", "배송 중")) & (Order.ordered_at < utcnow() - timedelta(days=DELAY_DAYS))
+        return Order.order_status.in_(SHIPPING) & (Order.ordered_at < utcnow() - timedelta(days=DELAY_DAYS))
     return ORDER_GROUPS[key][1]
 
 
@@ -165,7 +165,7 @@ def list_orders(user: LoginUser, db: DB, q: str | None = Query(None, max_length=
             "order_number": o.order_number, "product_name": o.product_name, "amount": o.amount, "quantity": o.quantity or 1,
             "order_status": o.order_status, "shipping_status": o.shipping_status, "carrier": o.carrier,
             "tracking_number": o.tracking_number, "ordered_at": as_utc(o.ordered_at), "delivered_at": as_utc(o.delivered_at),
-            "delayed": o.order_status in ("출고", "배송 중") and as_utc(o.ordered_at) < late,
+            "delayed": o.order_status in SHIPPING and as_utc(o.ordered_at) < late,
             "returning": o.return_requested_at is not None, "picked_up": o.picked_up_at is not None,
             "customer": {"id": o.customer.id, "name": o.customer.name},
             "inquiries": len(inq.get(o.order_number, [])),

@@ -4,23 +4,9 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router";
 
 import { AuthProvider, useAuth } from "./auth/AuthProvider";
 import ConfirmHost from "./components/ConfirmDialog";
-import AccountPage from "./pages/admin/AccountPage";
 import AdminLayout from "./pages/admin/AdminLayout";
-import AgentLogsPage from "./pages/admin/AgentLogsPage";
-import AuditLogPage from "./pages/admin/AuditLogPage";
 import ChangePasswordPage from "./pages/admin/ChangePasswordPage";
-import FaqsPage from "./pages/admin/FaqsPage";
-import RetrainingPage from "./pages/admin/RetrainingPage";
-import TemplatesPage from "./pages/admin/TemplatesPage";
-import DraftQualityPage from "./pages/admin/DraftQualityPage";
-import InquiryDetailPage from "./pages/admin/InquiryDetailPage";
-import InquiryListPage from "./pages/admin/InquiryListPage";
 import LoginPage from "./pages/admin/LoginPage";
-import UsersPage from "./pages/admin/UsersPage";
-import TicketsPage from "./pages/admin/TicketsPage";
-import CustomersPage from "./pages/admin/CustomersPage";
-import InventoryPage from "./pages/admin/InventoryPage";
-import OrdersPage from "./pages/admin/OrdersPage";
 import CustomerLayout from "./pages/customer/CustomerLayout";
 import FaqPage from "./pages/customer/FaqPage";
 import InquiryFormPage from "./pages/customer/InquiryFormPage";
@@ -31,6 +17,21 @@ import ProtectedRoute from "./routes/ProtectedRoute";
 
 // 대시보드는 차트 라이브러리(Recharts)가 커서, 고객 화면이 이 코드를 받지 않도록 필요할 때만 불러옴
 const DashboardPage = lazy(() => import("./pages/admin/DashboardPage"));
+// 관리 화면들도 필요할 때만 불러옴: 고객 화면(첫 방문)이 관리 화면 코드를 받지 않게 (AdminLayout 의 Suspense 가 기다림 표시)
+const AccountPage = lazy(() => import("./pages/admin/AccountPage"));
+const AgentLogsPage = lazy(() => import("./pages/admin/AgentLogsPage"));
+const AuditLogPage = lazy(() => import("./pages/admin/AuditLogPage"));
+const FaqsPage = lazy(() => import("./pages/admin/FaqsPage"));
+const RetrainingPage = lazy(() => import("./pages/admin/RetrainingPage"));
+const TemplatesPage = lazy(() => import("./pages/admin/TemplatesPage"));
+const DraftQualityPage = lazy(() => import("./pages/admin/DraftQualityPage"));
+const InquiryDetailPage = lazy(() => import("./pages/admin/InquiryDetailPage"));
+const InquiryListPage = lazy(() => import("./pages/admin/InquiryListPage"));
+const UsersPage = lazy(() => import("./pages/admin/UsersPage"));
+const TicketsPage = lazy(() => import("./pages/admin/TicketsPage"));
+const CustomersPage = lazy(() => import("./pages/admin/CustomersPage"));
+const InventoryPage = lazy(() => import("./pages/admin/InventoryPage"));
+const OrdersPage = lazy(() => import("./pages/admin/OrdersPage"));
 
 // 첫 화면: 관리자는 대시보드, 상담원은 자기에게 배정된 문의 목록 (통계는 관리자만, 기획서 6장)
 function AdminHome() {

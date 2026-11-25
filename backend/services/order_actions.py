@@ -27,10 +27,8 @@ from backend.services import inventory
 from backend.services.audit import add_audit
 from backend.services.inventory import split_product
 
-CANCELLABLE = ("결제 완료", "상품 준비 중")       # 출고 전 (docs/shop_policy.md 2장)
-RETURN_DAYS, DEFECT_RETURN_DAYS = 7, 30
-RETURN_FEE = 6000   # 단순 변심 반품·교환 왕복 배송비 (shop_policy.md F17·F19)
-FREE_SHIPPING_MIN, SHIPPING_FEE = 30000, 3000   # 3만원 이상 무료배송, 아니면 3,000원 (shop_policy.md F15·F28)
+from backend.services.policy import (CANCELLABLE, DEFECT_RETURN_DAYS, FREE_SHIPPING_MIN, RETURN_DAYS, RETURN_FEE,  # noqa: F401
+                                     SHIPPING_FEE)
 POINT_LIMIT = {"agent": 3000, "admin": 50000}     # 1회 보상 적립금 한도
 DUPLICATE_WINDOW = timedelta(minutes=10)
 

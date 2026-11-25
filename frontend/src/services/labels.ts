@@ -5,7 +5,7 @@
 export const TOOL_LABEL: Record<string, { label: string; help: string }> = {
   "FAQ 검색": { label: "FAQ로 답변", help: "FAQ를 근거로 자동 답변하거나 답변 초안을 씀" },
   "배송 조회": { label: "배송 조회", help: "주문의 배송 상태를 확인함" },
-  "티켓 접수": { label: "처리 요청 접수", help: "취소·교환·환불 처리 요청서(티켓)를 만들어 상담원이 승인하게 함" },
+  "티켓 접수": { label: "취소·교환·반품 접수", help: "취소·교환·반품 요청서(티켓)를 만들어 상담원이 승인하게 함" },
   "상담원 이관": { label: "상담원 이관", help: "AI가 처리하지 않고 상담원에게 넘김" },
 };
 export const toolLabel = (tool: string | null | undefined) => (tool ? TOOL_LABEL[tool]?.label ?? tool : "-");
@@ -25,7 +25,7 @@ export function failReason(output: Record<string, unknown> | null | undefined): 
   return message.replace(/\s*\(.*\)\s*$/, "") || "이유 기록 없음";
 }
 
-/** 처리 요청(티켓) 종류: 서버 값 '환불'은 반품 후 환불이라 화면에서는 '반품'으로.
+/** 취소·교환·반품 요청(티켓) 종류: 서버 값 '환불'은 반품 후 환불이라 화면에서는 '반품'으로.
  *  취소·반품 모두 승인하면 환불이 진행됨 (취소 = 카드 승인 취소로 바로 전액, 반품 = 회수·검수 뒤 3영업일 안) */
 export const TICKET_KIND: Record<string, { label: string; refund: string }> = {
   취소: { label: "취소", refund: "바로 전액 환불" },

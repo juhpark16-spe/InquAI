@@ -3,7 +3,7 @@
 from sqlalchemy import select
 
 from backend.agents.graph import AGENT_GRAPH
-from backend.database.models import AgentLog, Response
+from backend.database.models import Response
 from backend.tests.test_drafting import DRAFT
 from backend.tests.test_inquiries import ai, post, route_reply, saved  # noqa: F401  (fixture 재사용)
 

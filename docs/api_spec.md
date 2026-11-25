@@ -446,8 +446,8 @@
 - `ticket_type`: 환불 / 교환 / 취소 / 이관
 - 정책 확인 (`docs/shop_policy.md`): 취소는 출고 전만, 반품·교환은 배송 완료 7일 이내(불량 30일). 조건에 맞지 않아도 접수는 하고(고객 글 그대로 `reason`), 승인할 때 서버가 조건을 다시 확인해 맞지 않으면 409로 막습니다 (아래 PATCH).
 
-### GET /api/tickets — 처리 요청(티켓) 목록 (로그인, 2026-11-24 구현)
-파라미터: `status`(기본 `접수` = 승인 대기, `승인`·`반려`·`all`), `ticket_type`(취소·교환·환불), `page`, `size`. 상담원은 내가 맡은 문의의 티켓만.
+### GET /api/tickets — 취소·교환·반품 요청(티켓) 목록 (로그인, 2026-11-24 구현)
+파라미터: `status`(기본 `접수` = 승인 대기, `승인`·`반려`·`all`), `ticket_type`(취소·교환·환불, 화면 이름은 환불 → 반품), `page`, `size`. 상담원은 내가 맡은 문의의 티켓만.
 ```json
 { "items": [ { "id": 8, "ticket_type": "취소", "status": "접수", "reason": "...", "memo": null,
                "created_at": "...", "handled_at": null, "handled_by": null,
@@ -704,7 +704,7 @@ InquAI는 상담 시스템이라 고객·주문·재고를 **바꾸지 않고 �
 파라미터: `inquiry_id`, `decision`, `decided_by`(규칙 / LLM), `selected_tool`, `tool_success`, `problem`(true: 오류·미완료(도구 실패)·확신도 0.8 미만만 = 화면 '검토 필요'), `from`, `to` (KST 날짜, 최대 92일), `page`, `size`(1~100, 기본 30)
 
 **화면 이름** (`frontend/src/services/labels.ts`, 처리 이력 문장도 같은 말): 값은 그대로 두고 관리자가 읽는 말로 보여 줍니다.
-`selected_tool`(도구) → 'AI 처리 작업': FAQ 검색 → **FAQ로 답변**, 티켓 접수 → **처리 요청 접수**, 배송 조회·상담원 이관은 그대로 · `decided_by` LLM → **AI가 판단**, 규칙 → **규칙으로 바로** · `tool_success=false` → **미완료 · 이유**(`tool_output.message`, 예: 주문번호 없음) · 확신도 0.8 미만 → **유형 판단 불확실** · 토큰 → **AI 사용량**. 화면 위쪽 '용어 설명'에 같은 설명이 있습니다.
+`selected_tool`(도구) → 'AI 처리 작업': FAQ 검색 → **FAQ로 답변**, 티켓 접수 → **취소·교환·반품 접수**, 배송 조회·상담원 이관은 그대로 · `decided_by` LLM → **AI가 판단**, 규칙 → **규칙으로 바로** · `tool_success=false` → **미완료 · 이유**(`tool_output.message`, 예: 주문번호 없음) · 확신도 0.8 미만 → **유형 판단 불확실** · 토큰 → **AI 사용량**. 화면 위쪽 '용어 설명'에 같은 설명이 있습니다.
 - `decision`: 자동 답변 / 답변 초안 / 담당자 연결
 - `selected_tool`: FAQ 검색 / 배송 조회 / 티켓 접수 / 상담원 이관 (값은 `backend/ai/prompts.py`의 `DECISIONS`, `TOOLS`와 같음)
 ```json

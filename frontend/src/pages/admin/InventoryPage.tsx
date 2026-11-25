@@ -3,7 +3,7 @@
 // - 재고를 바꾸는 일은 쇼핑몰 시스템의 몫. 취소·옵션 변경으로 생기는 재고 변화는 문의 처리에서 자동 반영
 import { useEffect, useState } from "react";
 
-import { Alert, Input, Spinner, cx } from "../../components/ui";
+import { Alert, Input, Spinner, cx, monthDay } from "../../components/ui";
 import { errorMessage, opsApi } from "../../services/api";
 
 const FILTERS = [
@@ -79,7 +79,7 @@ export default function InventoryPage() {
                           : <span className="text-xs text-muted">충분</span>}
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-muted">
-                      {o.sold_out ? (o.restock_at ? `${new Date(o.restock_at).toLocaleDateString("ko-KR", { month: "numeric", day: "numeric" })} 예정` : "미정") : ""}
+                      {o.sold_out ? (o.restock_at ? `${monthDay(o.restock_at)} 예정` : "미정") : ""}
                     </td>
                   </tr>
                 ))}

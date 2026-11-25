@@ -42,3 +42,6 @@ requirements-audit.txt
 # 화면 자동 테스트 결과 (Playwright)
 frontend/test-results/
 frontend/playwright-report/
+
+# Claude Code 로컬 설정 (미리보기 서버 launch.json 등, 사람마다 다름)
+.claude/

@@ -1,13 +1,13 @@
 // 관리자 화면 틀: 왼쪽 사이드바(메뉴 + 미처리 건수) / 위쪽 문의 검색 · 알림 · 로그인한 사람·로그아웃 / 본문
 // 세 영역(사이드바 / 위쪽 검색·내 정보 / 본문)을 각각 둥근 판으로 나눠 구역이 한눈에 보이게 (2026-11-19)
 // 좁은 화면(lg 미만)에서는 사이드바가 위쪽 가로 막대로 바뀜
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Suspense, useEffect, useRef, useState, type FormEvent } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router";
 
 import { useAuth } from "../../auth/AuthProvider";
 import Icon, { type IconName } from "../../components/Icon";
 import NotificationBell from "../../components/NotificationBell";
-import { cx, initialOf } from "../../components/ui";
+import { Spinner, cx, initialOf } from "../../components/ui";
 import { inquiryApi, opsApi } from "../../services/api";
 
 function MenuLink({ to, icon, label, count, end }: { to: string; icon: IconName; label: string; count?: number | null; end?: boolean }) {
@@ -166,7 +166,10 @@ export default function AdminLayout() {
 
       {/* 본문 판: 연한 흰 판 안에 흰 카드들 */}
       <main className="min-h-[calc(100vh-7.5rem)] rounded-2xl border border-white/70 bg-white/35 p-4 shadow-sm shadow-primary/5 lg:rounded-3xl lg:p-6">
-        <Outlet />
+        {/* 관리 화면은 나눠서 불러옴 (App.tsx lazy): 처음 여는 화면이면 잠깐 기다림 표시 */}
+        <Suspense fallback={<p className="p-6 text-center text-muted"><Spinner /></p>}>
+          <Outlet />
+        </Suspense>
       </main>
       </div>
     </div>

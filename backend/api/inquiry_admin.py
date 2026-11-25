@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
-from backend.core.dependencies import DB, AdminOnly, LoginUser
+from backend.core.dependencies import DB, LoginUser
 from backend.core.errors import AppError
 from backend.database.models import (DECISIONS, INQUIRY_STATUSES, URGENCIES, AdminUser, AnalysisResult, Attachment,
                                      Inquiry, InquiryNote, LabelCorrection, Notification, Order, as_utc, utcnow)

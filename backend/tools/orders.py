@@ -1,4 +1,4 @@
-"""주문 도구: 본인 주문 확인, 배송 조회 (최소 버전. 3주차에 취소·반품 가능 여부 판단을 더함)."""
+"""주문 도구: 본인 주문 확인, 배송 조회. 취소·반품 가능 여부는 services/inquiry_context.order_detail (정책 값은 services/policy.py)."""
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session

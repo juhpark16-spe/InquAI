@@ -8,13 +8,12 @@
 관리자는 언제든 재배정할 수 있습니다 (PATCH /api/inquiries/{id}/assign).
 """
 
-from fastapi import Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from backend.database.models import AdminAuditLog, AdminUser, Inquiry
+from backend.services.sla import OPEN_STATUSES  # noqa: F401  (미처리 상태는 sla 한곳에, api/staff 도 여기서 가져감)
 
-OPEN_STATUSES = ("접수", "검토 대기", "담당자 처리")
 NEEDS_HUMAN = ("검토 대기", "담당자 처리")
 
 

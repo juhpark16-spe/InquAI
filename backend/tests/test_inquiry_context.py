@@ -132,7 +132,7 @@ def test_ai_history_reads_plainly():
 
     assert _fail_reason({"message": "주문번호 없음 (상담원이 고객에게 확인)"}) == "주문번호 없음"
     assert _fail_reason(None) == "이유 기록 없음"
-    assert TOOL_LABEL["티켓 접수"] == "처리 요청 접수" and BY_LABEL["규칙"] == "규칙으로 바로"
+    assert TOOL_LABEL["티켓 접수"] == "취소·교환·반품 접수" and BY_LABEL["규칙"] == "규칙으로 바로"
     labels_ts = (Path(__file__).resolve().parents[2] / "frontend/src/services/labels.ts").read_text(encoding="utf-8")
     for name in [*TOOL_LABEL.values(), *BY_LABEL.values()]:
         assert f'"{name}"' in labels_ts, name

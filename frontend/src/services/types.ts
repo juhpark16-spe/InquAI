@@ -5,7 +5,6 @@ export const CATEGORIES = ["배송", "주문 취소", "교환", "반품·환불"
 export const URGENCIES = ["높음", "보통", "낮음"] as const;
 export const STATUSES = ["접수", "자동 처리", "검토 대기", "담당자 처리", "완료"] as const;
 export const DECISIONS = ["자동 답변", "답변 초안", "담당자 연결"] as const;
-export const MANUAL_STATUSES = ["검토 대기", "담당자 처리", "완료"] as const;
 
 export type Role = "admin" | "agent";
 
@@ -85,7 +84,7 @@ export interface InquiryPublic {
   answers: { id: number; text: string; answered_at: string; by: string; rating: number | null }[]; // 보낸 답변 전부 (시간순)
   messages: { id: number; text: string; at: string }[]; // 고객 추가 문의
   attachment_count: number;
-  attachments: { url: string; filename: string; message_id: number | null }[]; // 30분짜리 사진 주소
+  attachments: { url: string; filename: string; message_id: number | null; label?: string | null }[]; // 30분짜리 사진 주소 (label: 파손 문의의 송장·파손 부위)
   can_follow_up: boolean;
   more_answer_coming?: boolean; // 상담원이 확인 후 다시 안내하기로 함 → '추가 안내 예정'
   order_number?: string | null;  // 내 문의의 주문번호 (없으면 추가 문의에서 받음)

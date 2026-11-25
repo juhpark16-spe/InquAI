@@ -12,13 +12,12 @@ from sqlalchemy.orm import Session
 from backend.database.models import (AdminAuditLog, AdminUser, Coupon, Customer, Faq, Inquiry, Notification, Order,
                                      PointHistory, Response, Ticket, as_utc, utcnow)
 from backend.services import inventory
-from backend.services.order_actions import RETURN_FEE, duplicates
+from backend.services.order_actions import duplicates
 
-CANCELLABLE = ("결제 완료", "상품 준비 중")   # 출고 전 (docs/shop_policy.md 2장)
-RETURN_DAYS, DEFECT_RETURN_DAYS = 7, 30      # 단순 변심 / 불량·오배송 (4장)
+from backend.services.policy import CANCELLABLE, DEFECT_RETURN_DAYS, RETURN_DAYS, RETURN_FEE
 HISTORY_LIMIT = 5
 
-# 처리 요청(티켓) 종류의 화면 이름: 서버 값 '환불'은 반품 후 환불 (frontend/src/services/labels.ts TICKET_KIND 와 같음)
+# 취소·교환·반품 요청(티켓) 종류의 화면 이름: 서버 값 '환불'은 반품 후 환불 (frontend/src/services/labels.ts TICKET_KIND 와 같음)
 TICKET_KIND = {"취소": "취소", "교환": "교환", "환불": "반품"}
 
 
@@ -80,9 +79,9 @@ def order_resolves(db: Session, inquiry: Inquiry) -> bool:
 
 
 def relink_open_tickets(db: Session, inquiry: Inquiry) -> None:
-    """문의의 주문번호가 바뀐 뒤: 아직 처리하지 않은 티켓(접수·처리 중)을 지금 주문번호의 주문으로 다시 연결 (없으면 연결을 뗌)"""
+    """문의의 주문번호가 바뀐 뒤: 아직 처리하지 않은 티켓(접수)을 지금 주문번호의 주문으로 다시 연결 (없으면 연결을 뗌)"""
     order_id = db.scalar(select(Order.id).where(Order.order_number == inquiry.order_number)) if inquiry.order_number else None
-    for t in db.scalars(select(Ticket).where(Ticket.inquiry_id == inquiry.id, Ticket.status.in_(("접수", "처리 중")))):
+    for t in db.scalars(select(Ticket).where(Ticket.inquiry_id == inquiry.id, Ticket.status == "접수")):
         t.order_id = order_id
 
 
@@ -262,7 +261,7 @@ def faq_titles(db: Session, inquiry: Inquiry) -> dict[str, str]:
 
 
 # AI 처리 기록을 관리자가 읽는 말로 (화면 frontend/src/services/labels.ts 와 같은 이름)
-TOOL_LABEL = {"FAQ 검색": "FAQ로 답변", "티켓 접수": "처리 요청 접수"}
+TOOL_LABEL = {"FAQ 검색": "FAQ로 답변", "티켓 접수": "취소·교환·반품 접수"}
 BY_LABEL = {"LLM": "AI가 판단", "규칙": "규칙으로 바로"}
 
 
@@ -284,8 +283,6 @@ def history(db: Session, inquiry: Inquiry) -> list[dict]:
                                + ((" · 초안 작성 실패" if log.error.startswith("초안 작성 실패") else " · 오류로 상담원 검토")
                                   if log.error else ""), "kind": "ai"})
     names = {u.id: u.display_name for u in db.scalars(select(AdminUser))}
-
-
     logs = db.scalars(select(AdminAuditLog).where(AdminAuditLog.target_type == "inquiry",
                                                   AdminAuditLog.target_id == inquiry.id)).all()
     for a in logs:
