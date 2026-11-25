@@ -103,3 +103,20 @@ def test_live_set_is_relative_to_now(client, db):
     expected = {"followup", "bad_rating", "recheck"} | (set() if sla.is_weekend(utcnow()) else {"due_soon"})
     assert expected <= kinds    # 최근 일이 새 알림으로 (주말에는 답변 기한이 멈춰 '기한 임박' 알림이 없음)
     assert 0 < r["unread"] < len(r["items"])                             # 3시간보다 오래된 알림은 읽은 상태
+
+
+def test_live_scenes_for_new_features(db):
+    """새 기능 시연 장면: 무통장입금 취소 → 환불 계좌 필요 / 반품 신청 → 회수 접수 전이라 요청 카드에서 회수 접수부터"""
+    from backend.services import refund_account
+    seeded(db)
+    bank = db.scalar(select(Inquiry).where(Inquiry.title == "무통장 입금한 주문 취소", Inquiry.status.in_(("검토 대기", "담당자 처리")))
+                     .order_by(Inquiry.created_at.desc()).limit(1))
+    order = db.scalar(select(Order).where(Order.order_number == bank.order_number))
+    assert order.payment_method == "무통장입금" and all(p.method == "무통장입금" for p in order.payments)
+    assert refund_account.needed(db, bank) and [t.ticket_type for t in bank.tickets] == ["취소"]
+
+    ret = db.scalar(select(Inquiry).where(Inquiry.title == "반품 신청할게요", Inquiry.status.in_(("검토 대기", "담당자 처리")))
+                    .order_by(Inquiry.created_at.desc()).limit(1))
+    order = db.scalar(select(Order).where(Order.order_number == ret.order_number))
+    assert order.order_status == "배송 완료" and order.return_requested_at is None              # 상담원이 회수 접수부터
+    assert [(t.ticket_type, t.status) for t in ret.tickets] == [("환불", "접수")]

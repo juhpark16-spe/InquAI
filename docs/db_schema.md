@@ -278,7 +278,7 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | 관리자·상담원 | 관리자 1, 상담원 2 | `seed_admin.py`. 비밀번호는 `.env`에서 읽음 |
 | 고객·주문 | 고객 20명, 주문 50건 | 주문 상태를 골고루 (출고 전, 배송 중, 배송 완료 7일 이내·이후) 만들어 취소·반품 가능 여부 시연 |
 | 상품 옵션·재고 | 상품 11개, 옵션 42개 | `services/inventory.py`의 CATALOG (품절 8개, 그중 재입고 예정일이 있는 것 6개) |
-| FAQ | 44개 | `data/faq/faqs.csv` |
+| FAQ | 47개 | `data/faq/faqs.csv` |
 | 시연 문의 | 최근 14일 50건 안팎 | `seed_demo.py --reset` (아래) |
 
 ### 시연 DB 만들기: `python -m backend.database.seed_demo --reset`
