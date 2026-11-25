@@ -231,3 +231,22 @@ def test_follow_up_photos_and_greeting_in_draft(client, db, ai):
     ai["llm"].replies = {"draft": {**DRAFT, "answer": "교환 접수 도와드리겠습니다.", "check_points": []}}
     d2 = client.post(f"/api/inquiries/{inquiry.id}/draft", headers=h, json={"replace": True}).json()
     assert d2["draft_text"] == "교환 접수 도와드리겠습니다." and "[답변 상황] 이어지는 답변 (보낸 답변 1건)" in rec.inputs["draft"]
+
+
+def test_ticket_lines_tell_ai_request_is_already_made(client, db, ai):
+    """[처리 기록]의 요청 줄: '이 문의로 이미 접수됨 → 다시 신청할 필요 없음'으로 풀어 써서,
+    AI가 FAQ대로 '마이페이지에서 반품 신청하세요'라고 하지 않게. 내부 용어가 남으면 확인할 것에 올림"""
+    from backend.agents.drafting import build_input
+    from backend.database.models import Ticket
+    ai["analyzer"].next = {"confidence": 0.6}
+    inquiry, _ = saved(db, post(client, content="받은 가방이 마음에 안 들어 반품하고 싶어요").json()["inquiry_number"])
+    db.add_all([Ticket(inquiry_id=inquiry.id, ticket_type="환불", reason="반품"),
+                Ticket(inquiry_id=inquiry.id, ticket_type="취소", reason="취소", status="반려", memo="이미 출고")])
+    db.commit()
+    text = build_input(db, inquiry, [], None)
+    assert "반품(환불) 요청 접수됨: 이 문의로 이미 요청이 접수돼 있음" in text and "다시 신청할 필요 없음" in text
+    assert "주문 취소 요청 반려됨 (상담원 메모: 이미 출고)" in text and "티켓 #" not in text
+
+    ai["llm"].replies = {"draft": {**DRAFT, "answer": "처리 기록상 반품 티켓이 접수되어 있습니다.", "check_points": []}}
+    d = client.post(f"/api/inquiries/{inquiry.id}/draft", headers=login(client)).json()
+    assert any("내부 용어" in c and "처리 기록" in c for c in d["check_points"]) and d["grounded"] is False

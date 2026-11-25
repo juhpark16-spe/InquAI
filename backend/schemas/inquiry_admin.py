@@ -305,6 +305,8 @@ class OrderCard(BaseModel):
     payments: list[PaymentRow] = []
     duplicate_payment: bool = False       # 같은 금액 승인이 10분 안에 두 번 (승인 취소로 정리되지 않음)
     carrier: str | None = None
+    carrier_info: dict | None = None        # {name, phone(대표번호), tracking_url(배송조회)} (services/carriers.py)
+    driver: dict | None = None              # 배송 출발 뒤 담당 기사 {name, phone(가운데 가림)}
     shipment_events: list[ShipmentStep] = []
     return_requested_at: UTCDateTime | None = None
     picked_up_at: UTCDateTime | None = None

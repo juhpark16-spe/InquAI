@@ -197,3 +197,18 @@ def test_partial_cancel_deducts_shipping_under_30000(client, db, ids):
     p = db.query(Payment).filter(Payment.kind == "승인 취소").one()
     assert p.amount == 22000 and "배송비 3,000원 차감" in p.memo        # 25,000 - 3,000
     assert order(db, "R-1").amount == 25000
+
+
+def test_refund_fee_waived_when_inspection_finds_defect(client, db, ids):
+    """회수 접수는 단순 변심이었지만 검수 결과 불량 → 체크하면 배송비 차감 없이 전액 (처리 이력에 남음)"""
+    login(client, "agent1")
+    assert act(client, ids["delivered"], action="return", reason="단순 변심").status_code == 200
+    d1 = db.query(Order).filter_by(order_number="D-1").one()
+    t = Ticket(inquiry_id=ids["delivered"], order_id=d1.id, ticket_type="환불", reason="환불", status="접수")
+    db.add(t)
+    db.commit()
+    assert client.patch(f"/api/tickets/{t.id}", json={"status": "승인", "waive_return_fee": True}).status_code == 200
+    refund = db.query(Payment).filter_by(order_id=d1.id, kind="환불").one()
+    assert refund.amount == 79000 and "배송비 차감 안 함" in refund.memo
+    history = [e["text"] for e in client.get(f"/api/inquiries/{ids['delivered']}").json()["history"]]
+    assert any("환불 예정 79,000원 (검수 결과 불량으로 배송비 차감 안 함)" in h for h in history)

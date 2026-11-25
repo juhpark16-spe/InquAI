@@ -254,6 +254,8 @@ export interface OrderCard {
   payments?: { kind: string; status: string; method: string | null; amount: number; approval_no: string | null; at: string; memo: string | null }[];
   duplicate_payment?: boolean;
   carrier?: string | null;
+  carrier_info?: { name: string; phone: string; tracking_url: string } | null;   // 택배사 대표번호·배송조회 바로가기
+  driver?: { name: string; phone: string } | null;                                // 배송 출발 뒤 담당 기사 (연락처 가운데 가림)
   shipment_events?: { at: string; status: string; location: string | null }[];
   return_requested_at?: string | null;
   picked_up_at?: string | null;

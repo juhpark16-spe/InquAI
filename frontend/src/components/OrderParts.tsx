@@ -1,8 +1,9 @@
 // 주문 정보 부품: 문의 상세의 '주문 정보' 카드와 고객 조회 화면이 함께 씀
 // (주문 상태·취소/반품 가능 기한·결제·환불·배송 추적·옵션별 재고)
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 
 import { Badge, cx, formatDate } from "./ui";
+import Icon from "./Icon";
 import type { OrderCard } from "../services/types";
 
 export function daysLeft(iso: string) {
@@ -72,7 +73,25 @@ export function OrderRows({ o }: { o: OrderCard }) {
         {o.shipping_status ?? "-"}
         {o.carrier && <span className="text-muted"> · {o.carrier}</span>}
       </Row>
-      {o.tracking_number && <Row label="송장번호"><span className="font-mono font-semibold">{o.tracking_number}</span></Row>}
+      {o.tracking_number && <Row label="송장번호"><span className="font-mono font-semibold">{o.tracking_number}</span> <CopyButton text={o.tracking_number} /></Row>}
+      {/* 택배사에 진행 상황 확인: 배송조회 바로가기 + 고객센터 대표번호, 배송 출발 뒤 담당 기사 (services/carriers.py) */}
+      {o.carrier_info && (
+        <Row label="택배사 확인">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <a href={o.carrier_info.tracking_url} target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 rounded-lg border border-hairline px-2 py-0.5 text-xs font-semibold text-primary hover:border-primary">
+              배송조회 열기 <Icon name="external" className="h-3.5 w-3.5" />
+            </a>
+            <span className="text-xs text-muted">{o.carrier_info.name} 고객센터 <span className="font-mono text-body">{o.carrier_info.phone}</span></span>
+          </span>
+        </Row>
+      )}
+      {o.driver && (
+        <Row label="담당 기사">
+          {o.driver.name} <span className="font-mono text-muted">{o.driver.phone}</span>
+          <span className="block text-xs text-muted">상담원 확인용 · 고객 답변에는 넣지 마세요</span>
+        </Row>
+      )}
       {o.payment_method && <Row label="결제">{o.payment_method} <span className="text-muted">· {shortDate(o.paid_at)}</span></Row>}
       <Row label="주문일">{formatDate(o.ordered_at)}</Row>
       {o.delivered_at && <Row label="배송 완료">{formatDate(o.delivered_at)}</Row>}
@@ -93,6 +112,17 @@ export function OrderRows({ o }: { o: OrderCard }) {
         ) : <span className="text-slate-600">배송 완료 후 판단</span>}
       </Row>
     </dl>
+  );
+}
+
+/** 작은 복사 버튼 (송장번호: 택배사에 전화할 때 바로 불러 주게) */
+function CopyButton({ text }: { text: string }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button type="button" className="ml-1 rounded-md border border-hairline px-1.5 py-px text-xs text-muted hover:text-ink"
+      onClick={() => navigator.clipboard?.writeText(text).then(() => { setDone(true); setTimeout(() => setDone(false), 1500); }).catch(() => {})}>
+      {done ? "복사됨 ✓" : "복사"}
+    </button>
   );
 }
 

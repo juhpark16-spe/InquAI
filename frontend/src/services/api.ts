@@ -189,8 +189,9 @@ export const inquiryApi = {
     http.get<{ total: number; position: number | null; prev_id: number | null; next_id: number | null }>(`/inquiries/${id}/queue`)
       .then((r) => r.data),
   // 티켓 승인·반려 (취소 승인은 출고 전 주문만 → 주문 취소). 반려는 사유 필수
-  decideTicket: (ticketId: number, status: "승인" | "반려", memo?: string) =>
-    http.patch(`/tickets/${ticketId}`, { status, memo: memo || null }).then((r) => r.data),
+  // waiveReturnFee: 반품 승인 때 검수 결과 불량 → 단순 변심 왕복 배송비를 빼지 않고 전액 환불
+  decideTicket: (ticketId: number, status: "승인" | "반려", memo?: string, waiveReturnFee = false) =>
+    http.patch(`/tickets/${ticketId}`, { status, memo: memo || null, waive_return_fee: waiveReturnFee }).then((r) => r.data),
   // 주문번호 입력·변경 (고객이 빠뜨렸거나 잘못 적었을 때, 없는 주문이면 409)
   setOrderNumber: (id: number, order_number: string | null) =>
     http.patch<{ order_number: string | null }>(`/inquiries/${id}/order-number`, { order_number }).then((r) => r.data),

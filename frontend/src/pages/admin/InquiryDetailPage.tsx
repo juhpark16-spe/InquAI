@@ -595,6 +595,8 @@ function Tickets({ data, onChanged }: { data: InquiryDetail; onChanged: (msg: st
   const [rejecting, setRejecting] = useState<number | null>(null);
   const [memo, setMemo] = useState("");
   const [error, setError] = useState("");
+  // 반품(단순 변심) 승인: 검수해 보니 불량이면 체크 → 배송비 차감 없이 전액 환불
+  const [waiveFee, setWaiveFee] = useState(false);
 
   async function decide(id: number, status: "승인" | "반려", note?: string) {
     const t = data.tickets.find((x) => x.id === id);
@@ -606,8 +608,10 @@ function Tickets({ data, onChanged }: { data: InquiryDetail; onChanged: (msg: st
         ? `${what}\n주문을 취소하고 결제 금액${order?.amount != null ? ` ${won(order.amount)}` : ""}을 전액 환불(카드 승인 취소)해요.\n되돌릴 수 없어요.`
         : t.ticket_type === "환불"
           // 서버가 계산한 환불 예정 금액·반품 사유 (inquiry_context.order_card: 회수 접수 때 고른 사유로 배송비 차감 여부)
-          ? `${what}\n반품 환불을 승인해요. 환불 예정 ${order?.refund_preview != null ? won(order.refund_preview) : "금액 확인 필요"}`
-            + (order?.return_reason ? ` (반품 사유: ${order.return_reason}, ${order.return_reason === "단순 변심" ? "왕복 배송비 6,000원 차감" : "배송비 쇼핑몰 부담"})` : "")
+          ? (waiveFee && order?.return_reason === "단순 변심"
+            ? `${what}\n반품 환불을 승인해요. 환불 예정 ${won(order.amount)} (검수 결과 불량: 왕복 배송비를 빼지 않고 전액)`
+            : `${what}\n반품 환불을 승인해요. 환불 예정 ${order?.refund_preview != null ? won(order.refund_preview) : "금액 확인 필요"}`
+              + (order?.return_reason ? ` (반품 사유: ${order.return_reason}, ${order.return_reason === "단순 변심" ? "왕복 배송비 6,000원 차감" : "배송비 쇼핑몰 부담"})` : ""))
             + "\n회수·검수 뒤 3영업일 안에 환불돼요."
           : `${what}\n교환을 승인해요. 새 상품 발송은 쇼핑몰에서 진행돼요.`;
       if (!(await confirmDialog({ title: `${ticketKind(t.ticket_type)} 승인`, message,
@@ -616,7 +620,8 @@ function Tickets({ data, onChanged }: { data: InquiryDetail; onChanged: (msg: st
     setError("");
     setBusy(id);
     try {
-      await inquiryApi.decideTicket(id, status, note);
+      await inquiryApi.decideTicket(id, status, note, status === "승인" && t?.ticket_type === "환불" && waiveFee);
+      setWaiveFee(false);
       setRejecting(null);
       setMemo("");
       onChanged(status === "승인"
@@ -660,6 +665,16 @@ function Tickets({ data, onChanged }: { data: InquiryDetail; onChanged: (msg: st
                       {refundBlocked ? "먼저 아래 주문 정보의 [반품 회수 접수]를 해 주세요 (배송 완료·반품 기한 확인, 반품 사유 기록)"
                         : "반품 회수가 접수돼 있어 승인하면 환불 예정이 기록돼요"}
                     </p>
+                  )}
+                  {/* 회수 접수 때 '단순 변심'이었어도 검수해 보니 불량이면 배송비는 쇼핑몰 부담 (정책 F17) */}
+                  {t.ticket_type === "환불" && !refundBlocked && o?.return_reason === "단순 변심" && (
+                    <label className="flex items-start gap-2 rounded-lg bg-white px-2.5 py-1.5 text-sm text-ink">
+                      <input type="checkbox" className="mt-0.5" checked={waiveFee} onChange={(e) => setWaiveFee(e.target.checked)} />
+                      <span>검수 결과 불량 → 배송비 차감 없이 전액 환불
+                        <span className="block text-xs text-muted">
+                          {waiveFee ? `환불 ${won(o.amount)} (전액)` : `지금: 환불 ${won(o.refund_preview ?? o.amount)} (왕복 배송비 6,000원 차감)`}
+                        </span></span>
+                    </label>
                   )}
                   {t.ticket_type === "취소" && o?.found && !cancelBlocked && (o.quantity ?? 1) > 1 && (
                     <p className="rounded-lg bg-amber-50 px-2.5 py-1.5 text-sm text-amber-900">

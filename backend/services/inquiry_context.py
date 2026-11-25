@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from backend.database.models import (AdminAuditLog, AdminUser, Coupon, Customer, Faq, Inquiry, Notification, Order,
                                      PointHistory, Response, Ticket, as_utc, utcnow)
-from backend.services import inventory
+from backend.services import carriers, inventory
 from backend.services.order_actions import duplicates
 
 from backend.services.policy import CANCELLABLE, DEFECT_RETURN_DAYS, RETURN_DAYS, RETURN_FEE
@@ -163,6 +163,9 @@ def order_detail(order: Order, customer: Customer, inquiry_email: str) -> dict:
         "payments": payments,
         "duplicate_payment": duplicate,
         "carrier": order.carrier,
+        # 택배사 확인: 대표번호·배송조회 바로가기, '배송 출발' 뒤 담당 기사 (상담원 화면 전용, AI 초안에는 넣지 않음)
+        "carrier_info": carriers.carrier_info(order),
+        "driver": carriers.driver_info(order),
         "shipment_events": [{"at": as_utc(e.at), "status": e.status, "location": e.location} for e in order.shipment_events],
         "shipping_address": order.shipping_address,
         "option_choices": inventory.choices(order),   # 옵션별 재고 (옵션 변경·교환 안내)
@@ -321,6 +324,9 @@ def history(db: Session, inquiry: Inquiry) -> list[dict]:
             text = f"{kind_name} 요청 #{d.get('ticket_id')} {result}"
             if d.get("order"):
                 text += f" · 주문 {d['order']['before']} → {d['order']['after']}"
+            if d.get("refund"):   # 반품 승인: 환불 예정 금액, 검수 결과 불량이면 배송비 차감 안 함
+                r = d["refund"]
+                text += f" · 환불 예정 {r['amount']:,}원" + (" (검수 결과 불량으로 배송비 차감 안 함)" if r.get("fee_waived") else "")
             if d.get("memo"):
                 text += f" ({d['memo']})"
             kind = "ticket"

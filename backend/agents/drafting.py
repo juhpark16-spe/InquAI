@@ -96,6 +96,26 @@ def _order_text(card: dict | None) -> str:
     return "\n".join(lines)
 
 
+INTERNAL_TERMS = re.compile(r"처리 기록|티켓|FAQ")   # 고객 답변에 나오면 안 되는 내부 용어
+
+TICKET_NAME = {"취소": "주문 취소", "교환": "교환", "환불": "반품(환불)"}   # 서버 값 '환불' = 반품 후 환불
+
+
+def _ticket_line(t: Ticket) -> str:
+    """[처리 기록]의 요청 한 줄을 AI가 오해하지 않게 풀어 씀.
+    예전엔 '티켓 #18 환불 접수'만 넘겨서, 이 문의로 이미 반품이 접수된 줄 모르고 'FAQ대로 마이페이지에서 신청하라'고 안내함"""
+    if t.ticket_type == "이관":
+        return "상담원 확인 요청됨 (사람이 확인 중)"
+    name = TICKET_NAME.get(t.ticket_type, t.ticket_type)
+    memo = f" (상담원 메모: {t.memo})" if t.memo else ""
+    if t.status == "접수":
+        return (f"{name} 요청 접수됨: 이 문의로 이미 요청이 접수돼 있음 → 고객이 마이페이지 등에서 따로 다시 신청할 필요 없음. "
+                f"상담원이 주문을 확인한 뒤 승인·처리 (아직 승인 전이라 처리됐다고 쓰지 말 것){memo}")
+    if t.status == "승인":
+        return f"{name} 요청 승인됨{memo}"
+    return f"{name} 요청 반려됨{memo or ' (사유는 상담원이 채움)'}"
+
+
 def build_input(db: Session, inquiry: Inquiry, faqs: list[dict], analysis: dict | None) -> str:
     """LLM에 넘길 글. 고객 이름·이메일은 넣지 않음"""
     parts = []
@@ -114,7 +134,7 @@ def build_input(db: Session, inquiry: Inquiry, faqs: list[dict], analysis: dict 
     # 상담원의 바로 처리(배송지·옵션 변경, 부분 취소, 중복 승인 취소, 보상, 반품 접수)도 처리 기록으로 → 초안에 결과를 안내
     actions = db.scalars(select(AdminAuditLog).where(AdminAuditLog.target_type == "inquiry", AdminAuditLog.target_id == inquiry.id,
                                                      AdminAuditLog.action == "order_action").order_by(AdminAuditLog.id)).all()
-    lines = [f"티켓 #{t.id} {t.ticket_type} {t.status}" + (f" (상담원 메모: {t.memo})" if t.memo else "") for t in tickets]
+    lines = [_ticket_line(t) for t in tickets]
     lines += [f"상담원 처리 완료: {(a.detail or {}).get('summary', '')}" for a in actions]
     if inquiry.recheck_note:  # "확인 후 다시 안내드리겠습니다"를 이미 보냈고, 이번 답변이 그 확인 결과 안내
         lines.append(f"다시 안내하기로 한 내용: {inquiry.recheck_note} (확인 결과는 상담원이 채움)")
@@ -185,6 +205,8 @@ def generate_draft(db: Session, inquiry: Inquiry, faq_search, llm, timeout: floa
     checks = [c.strip() for c in data["check_points"] if c.strip()][:10]
     # 안전장치: 지급·승인을 확정하는 말이 있으면 상담원이 꼭 보도록 확인할 것에 올림 (프롬프트를 어겨도 걸러지게)
     checks += [f"지급·승인을 확정하는 표현이 있습니다: '{p}' (사실인지 확인 후 고치세요)" for p in find_promises(answer)]
+    # 안전장치: 내부 용어가 고객 글에 남았으면 상담원이 고치도록 (프롬프트를 어겨도 걸러지게)
+    checks += [f"내부 용어가 들어 있습니다: '{w}' (고객이 알아듣는 말로 고치세요)" for w in INTERNAL_TERMS.findall(answer)]
     return DraftResult(
         answer=answer,
         used_faq_ids=[i for i in data["used_faq_ids"] if i in known],   # 넘기지 않은 FAQ 번호는 버림

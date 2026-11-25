@@ -126,3 +126,23 @@ def test_orders(client, db, setup):
     login(client, "agent1")
     assert [o["order_number"] for o in client.get("/api/orders").json()["items"]] == ["A-2", "A-1"]
     assert client.get("/api/orders/B-1").status_code == 404
+
+
+def test_carrier_info_and_driver(client, db, setup):
+    """주문 정보의 택배사 확인: 대표번호·배송조회 주소(송장번호 숫자만), '배송 출발' 뒤 담당 기사(연락처 가림).
+    AI 초안 입력에는 기사 정보가 들어가지 않음"""
+    from backend.agents.drafting import build_input
+    from backend.database.models import Inquiry, ShipmentEvent, utcnow
+    a1 = db.scalar(select(Order).where(Order.order_number == "A-1"))
+    a1.carrier, a1.tracking_number = "CJ대한통운", "6901-2345-6789"
+    db.commit()
+    login(client)
+    card = client.get(f"/api/inquiries/{setup['main']}").json()["order"]
+    assert card["carrier_info"]["phone"] == "1588-1255" and card["carrier_info"]["tracking_url"].endswith("wblNo=690123456789")
+    assert card["driver"] is None                                           # 아직 배송 출발 단계 없음
+    db.add(ShipmentEvent(order_id=a1.id, at=utcnow(), status="배송 출발", location="담당 기사 배정"))
+    db.commit()
+    driver = client.get(f"/api/inquiries/{setup['main']}").json()["order"]["driver"]
+    assert driver["name"].endswith("기사") and driver["phone"].startswith("010-****-")
+    assert client.get(f"/api/orders/A-1").json()["order"]["driver"] == driver      # 주문·배송 화면도 같은 기사
+    assert driver["name"] not in build_input(db, db.get(Inquiry, setup["main"]), [], None)

@@ -40,6 +40,8 @@ ACTIONABLE = ("취소", "교환", "환불")
 class TicketDecision(BaseModel):
     status: Literal["승인", "반려"]
     memo: str | None = Field(None, max_length=500)
+    # 반품 승인: 회수 접수 때 '단순 변심'이었지만 검수해 보니 불량이면 왕복 배송비를 빼지 않고 전액 환불 (정책 F17: 불량은 쇼핑몰 부담)
+    waive_return_fee: bool = False
 
     @field_validator("memo")
     @classmethod
@@ -75,6 +77,7 @@ def decide(ticket_id: int, body: TicketDecision, request: Request, user: LoginUs
         if utcnow() > as_utc(order.delivered_at) + timedelta(days=DEFECT_RETURN_DAYS):
             raise AppError(409, f"배송 완료 후 {DEFECT_RETURN_DAYS}일이 지나 교환할 수 없어요. 반려하고 안내해 주세요.", "INVALID_STATE")
     order_change = None
+    refund_note = None
     if body.status == "승인" and ticket.ticket_type == "취소":
         if order is None:
             raise AppError(409, "연결된 주문이 없어 취소할 수 없습니다. 주문번호를 확인해 주세요.", "INVALID_STATE")
@@ -98,16 +101,21 @@ def decide(ticket_id: int, body: TicketDecision, request: Request, user: LoginUs
             raise AppError(409, "먼저 주문 정보의 [반품 회수 접수]를 해 주세요. 배송 완료·반품 기한을 확인하고 반품 사유를 남긴 뒤 환불을 승인해요.",
                            "RETURN_NOT_REQUESTED")
         reason = ctx.return_reason(db, order.order_number)   # [반품 회수 접수]에서 고른 사유
-        amount, memo = ctx.refund_amount(order, reason), "반품 회수·검수 후 3영업일 이내 (티켓 승인)"
-        if amount < order.amount:   # 단순 변심: 안내한 대로 왕복 배송비 차감
+        waived = body.waive_return_fee and reason == "단순 변심"
+        amount = order.amount if waived else ctx.refund_amount(order, reason)
+        memo = "반품 회수·검수 후 3영업일 이내 (티켓 승인)"
+        if waived:
+            memo += " · 검수 결과 불량으로 배송비 차감 안 함 (전액)"
+        elif amount < order.amount:   # 단순 변심: 안내한 대로 왕복 배송비 차감
             memo += f" · 단순 변심 왕복 배송비 {RETURN_FEE:,}원 차감"
+        refund_note = {"amount": amount, "fee_waived": waived, "reason": reason}
         db.add(Payment(order_id=order.id, kind="환불", status="예정", method=order.payment_method, amount=amount,
                        at=sla.add_weekday_time(utcnow(), timedelta(days=REFUND_BUSINESS_DAYS)), memo=memo))   # 3영업일 (주말 제외)
 
     ticket.status, ticket.memo = body.status, body.memo
     ticket.handled_by, ticket.handled_at = user.id, utcnow()
     add_audit(db, request, "ticket_approve" if body.status == "승인" else "ticket_reject", user, "inquiry", inquiry.id,
-              ticket_id=ticket.id, ticket_type=ticket.ticket_type, memo=body.memo, order=order_change)
+              ticket_id=ticket.id, ticket_type=ticket.ticket_type, memo=body.memo, order=order_change, refund=refund_note)
     db.commit()
     return ticket
 
