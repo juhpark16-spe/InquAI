@@ -1,0 +1,207 @@
+{
+  "model_dir": "models/category_bal_s7",
+  "test_file": "data/test/page_error_eval.csv",
+  "num_samples": 30,
+  "accuracy": 0.8,
+  "macro_f1": 0.5518518518518518,
+  "accuracy_by_difficulty": {
+    "보통": 0.84,
+    "애매": 0.6
+  },
+  "avg_latency_ms": 17.761853333892457,
+  "classification_report": {
+    "배송": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 1.0
+    },
+    "주문 취소": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 0.0
+    },
+    "교환": {
+      "precision": 0.6666666666666666,
+      "recall": 1.0,
+      "f1-score": 0.8,
+      "support": 2.0
+    },
+    "반품·환불": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 2.0
+    },
+    "결제": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 0.0
+    },
+    "상품": {
+      "precision": 0.8,
+      "recall": 0.8,
+      "f1-score": 0.8,
+      "support": 10.0
+    },
+    "쿠폰·적립금·회원": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1-score": 0.0,
+      "support": 0.0
+    },
+    "기타": {
+      "precision": 0.9166666666666666,
+      "recall": 0.7333333333333333,
+      "f1-score": 0.8148148148148148,
+      "support": 15.0
+    },
+    "accuracy": 0.8,
+    "macro avg": {
+      "precision": 0.5479166666666666,
+      "recall": 0.5666666666666667,
+      "f1-score": 0.5518518518518518,
+      "support": 30.0
+    },
+    "weighted avg": {
+      "precision": 0.8694444444444444,
+      "recall": 0.8,
+      "f1-score": 0.8274074074074075,
+      "support": 30.0
+    }
+  },
+  "confusion_matrix": {
+    "labels": [
+      "배송",
+      "주문 취소",
+      "교환",
+      "반품·환불",
+      "결제",
+      "상품",
+      "쿠폰·적립금·회원",
+      "기타"
+    ],
+    "matrix": [
+      [
+        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        2,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        8,
+        1,
+        1
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        1,
+        0,
+        0,
+        2,
+        1,
+        11
+      ]
+    ]
+  },
+  "errors": [
+    {
+      "text": "할인 전 가격이 판매가보다 낮게 표시돼 있어요. 가격 표기가 이상해요.",
+      "category": "기타",
+      "pred": "쿠폰·적립금·회원",
+      "confidence": 0.8831
+    },
+    {
+      "text": "상품 설명에 세탁기 사용 가능이라고 했다가 아래에는 사용 불가라고 적혀 있네요.",
+      "category": "기타",
+      "pred": "상품",
+      "confidence": 0.9354
+    },
+    {
+      "text": "상품 이미지 속 글씨가 깨져서 사용 방법을 읽을 수가 없어요.",
+      "category": "기타",
+      "pred": "상품",
+      "confidence": 0.9362
+    },
+    {
+      "text": "무게가 2kg으로 나와 있다가 새로고침하니 2g으로 바뀌어 있어요.",
+      "category": "기타",
+      "pred": "교환",
+      "confidence": 0.8164
+    },
+    {
+      "text": "상세페이지에 방수라고 돼 있는데 샤워할 때도 써도 되나요?",
+      "category": "상품",
+      "pred": "기타",
+      "confidence": 0.9373
+    },
+    {
+      "text": "설명 보니 KC 인증을 받았다고 하던데 인증번호를 알 수 있을까요?",
+      "category": "상품",
+      "pred": "쿠폰·적립금·회원",
+      "confidence": 0.8743
+    }
+  ]
+}

@@ -57,7 +57,8 @@ from prepare_data import MIN_TEXT_LENGTH
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 SEED_FILE = "data/supplement/seed_inquiries.csv"
-EVAL_FILES = ["data/test/written_eval.csv", "data/test/written_eval2.csv"]   # 평가 문장 (LLM에 보내지 않음)
+EVAL_FILES = ["data/test/written_eval.csv", "data/test/written_eval2.csv",
+              "data/test/page_error_eval.csv"]   # 평가 문장 (LLM에 보내지 않음, 비슷한 생성 문장은 버림)
 EXISTING_FILES = ["data/raw/inquiries_with_qa.csv", "data/supplement/web_inquiries.csv",
                   "data/supplement/generated_other.csv", "data/supplement/generated_weak.csv", "data/supplement/generated_weak2.csv",
                   "data/test/real_inquiries_100.csv", "data/test/external_test.csv", "data/test/written_pool.csv",
@@ -171,8 +172,52 @@ SUBTYPES3 = [
      "반품 접수한 거 취소할게요 그냥 쓰려고요",
      r"교환|주문 취소", r"반품|환불"),
 ]
+# 4차 (2026-11-26): 상품 페이지 표기 오류(기타) ↔ 같은 주제의 상품 질문(상품)을 짝으로. 표기 오류 14문장만 더했더니
+# '상세페이지 + 다르다 = 기타'라는 겉모양을 배워 구매 전 실물 질문까지 기타로 봄 (docs/retraining.md). 주제마다 두 유형을 함께 만들어
+# 단어가 아니라 의도(잘못을 알림 vs 상품을 물음)로 가르게 함. 받은 상품 이야기는 원칙 1이라 둘 다에서 뺌
+PAGE_NOTICE = r"다르|달라|틀|잘못|어느|맞나|맞아|헷갈|깨져|깨지|오타|바뀌|이상|엉뚱|섞여|수정"
+NO_RECEIVED = r"교환|반품|환불|받았|받아 ?보|받은|왔어|왔는데|도착|배송 ?왔"
+PAGE_QUESTION_ONLY = r"틀렸|틀린|잘못 (나|적|표|된)|다르게 (나와|적혀|표시)|서로 달|어느 (게|쪽이) 맞|수정해|고쳐|오타|깨져"
+SUBTYPES4 = [
+    ("표기 오류: 색상·사진", "기타",
+     "구매 전에 상품 페이지를 보다가 상품명·옵션에 적힌 색과 상세 사진 색이 서로 다르다고 알림 (페이지의 잘못을 알림, 원칙 7)",
+     "옵션엔 아이보리라고 돼 있는데 상세컷은 다 크림색이에요 어느 쪽이 맞아요", NO_RECEIVED, PAGE_NOTICE),
+    ("짝 질문: 색상·사진", "상품",
+     "구매 전에 사진 색감·조명과 실물 색이 얼마나 다른지, 어떤 색에 가까운지 물음. 페이지가 틀렸다는 말은 없음 (상품 질문)",
+     "상세 사진이 좀 밝게 찍힌 것 같은데 실물은 더 어두운 편인가요", NO_RECEIVED + "|" + PAGE_QUESTION_ONLY, r"\?|나요|까요|인가요|되나요|해요|돼요"),
+    ("표기 오류: 용량·크기·단위", "기타",
+     "구매 전에 상품 페이지 두 곳(목록·상세·옵션·스펙표·이미지)의 용량·크기·무게·개수·단위가 서로 다르게 적혀 있다고 알림",
+     "목록에선 1kg인데 상세 스펙표엔 1g이라고 나와요 단위가 잘못된 것 같아요", NO_RECEIVED, PAGE_NOTICE),
+    ("짝 질문: 용량·크기", "상품",
+     "구매 전에 페이지에 적힌 용량·크기·무게를 근거로 실제로 얼마나 되는지, 무엇이 들어가는지, 몇 명이 쓰는지 물음. 표기가 틀렸다는 말은 없음",
+     "1.5L라고 적혀 있던데 라면 두 개 끓이기엔 충분한가요", NO_RECEIVED + "|" + PAGE_QUESTION_ONLY, r"\?|나요|까요|인가요|되나요|해요|돼요"),
+    ("표기 오류: 가격 표시", "기타",
+     "구매 전에 검색 목록·상세 페이지·장바구니 앞 단계에서 같은 상품 가격이 다르게 보이거나, 정가와 할인가 표시가 이상하다고 알림. 쿠폰·카드 할인 문제가 아님",
+     "목록에선 19,800원인데 상세에 들어가면 24,800원이라고 떠요 어느 가격이 맞나요", NO_RECEIVED + r"|쿠폰|적립|카드|할부|결제", PAGE_NOTICE),
+    ("짝 질문: 가격 구성", "상품",
+     "구매 전에 표시된 가격이 몇 개·몇 세트 기준인지, 구성에 무엇이 포함된 가격인지 물음. 가격 표시가 틀렸다는 말은 없음. 쿠폰·결제 질문이 아님",
+     "이 가격이 2개 묶음 가격인가요 아니면 1개 가격인가요", NO_RECEIVED + r"|쿠폰|적립|카드|할부|결제|" + PAGE_QUESTION_ONLY, r"\?|나요|까요|인가요|되나요|해요|돼요"),
+    ("표기 오류: 원산지·소재·성분", "기타",
+     "구매 전에 같은 상품 페이지 안에서 원산지·소재·성분·인증 정보가 서로 다르게 적혀 있다고 알림",
+     "소재가 위에는 면 100%라고 돼 있는데 아래 세탁 안내에는 폴리 혼방이라고 적혀 있어요", NO_RECEIVED, PAGE_NOTICE),
+    ("짝 질문: 원산지·소재·성분", "상품",
+     "구매 전에 페이지에 적힌 원산지·소재·성분에 대해 더 자세히 물음 (원료 원산지, 알레르기, 피부 자극, 촉감). 표기가 틀렸다는 말은 없음",
+     "면 100%라고 돼 있던데 여름에 입기에 두껍지 않나요", NO_RECEIVED + "|" + PAGE_QUESTION_ONLY, r"\?|나요|까요|인가요|되나요|해요|돼요"),
+    ("표기 오류: 설명끼리 다름", "기타",
+     "구매 전에 상세 설명과 스펙표·주의사항·FAQ 이미지가 서로 반대로 적혀 있다고 알림 (예: 한쪽은 가능, 다른 쪽은 불가)",
+     "상세 설명엔 식기세척기 사용 가능이라더니 주의사항엔 사용 불가라고 돼 있어요", NO_RECEIVED, PAGE_NOTICE),
+    ("짝 질문: 설명 근거 기능", "상품",
+     "구매 전에 설명에 적힌 기능(방수·무소음·식기세척기 가능 등)을 근거로 다른 상황에서도 쓸 수 있는지 물음. 표기가 틀렸다는 말은 없음",
+     "식기세척기 사용 가능이라고 돼 있던데 건조 기능까지 써도 되나요", NO_RECEIVED + "|" + PAGE_QUESTION_ONLY, r"\?|나요|까요|인가요|되나요|해요|돼요"),
+    ("표기 오류: 페이지 깨짐·다른 상품 설명", "기타",
+     "상품 페이지의 이미지가 깨지거나 글씨가 안 보임, 다른 상품 설명·사진이 섞여 들어감, 오타가 있음을 알림",
+     "이 가습기 페이지에 선풍기 사진이 섞여 있어요", NO_RECEIVED, PAGE_NOTICE + r"|안 ?보|안 ?나와|섞"),
+    ("짝 질문: 사용 방법·설명 이해", "상품",
+     "구매 전에 상세 설명을 읽어도 사용 방법·조립·관리 방법을 잘 모르겠어서 물음. 페이지가 깨졌거나 틀렸다는 말은 없음",
+     "설명 봐도 필터 교체를 어떻게 하는지 잘 모르겠어요 어렵나요", NO_RECEIVED + "|" + PAGE_QUESTION_ONLY + r"|깨|안 ?보", r"\?|나요|까요|인가요|되나요|해요|돼요|모르"),
+]
 ROUNDS = {1: (SUBTYPES, "data/supplement/generated_weak.csv"), 2: (SUBTYPES2, "data/supplement/generated_weak2.csv"),
-          3: (SUBTYPES3, "data/supplement/generated_weak3.csv")}
+          3: (SUBTYPES3, "data/supplement/generated_weak3.csv"), 4: (SUBTYPES4, "data/supplement/generated_weak4.csv")}
 
 # 생성 문장을 사람이 읽고 뺀 문장 (2026-11-17 검토). --refilter 때도 다시 빠집니다.
 REVIEWED_OUT = [
@@ -222,6 +267,12 @@ REVIEWED_OUT = [
     ("샐러드용 손질 채소 세트는 배송될 때 신선도가 어느 정도 유지되나요, 받자마자 바로 먹어도 괜찮을지 궁금합니다", "신선 배송 = 배송일 수 있음"),
     ("노트북 가방 받으면 내부에 15인치 수납 가능한지 실측 치수가 배송 안내에 같이 오나요?", "문장이 어색함"),
     ("삭제해달라고 했는데 카드승인취소가 안돼서 불편해요 빨리 처리좀", "무엇을 삭제했는지 모호"),
+    # 4차 짝 문장 검토 (2026-11-26)
+    ('상품페이지 이미지엔 30cm라 쓰여있고 스펙표엔 300mm라고 돼있던데 같은 사이즈 맞나요 헷갈려요 ㅠ', '30cm = 300mm라 표기 오류가 아니라 질문'),
+    ('이미지에 20cm, 스펙엔 200mm로 표기 달라요', '같은 값(20cm = 200mm)이라 틀린 표기의 예로 부적절'),
+    ('상품 설명에 있던 오타가 수정되어 깔끔해졌네요. 확인차 말씀드립니다.', '잘못을 알림이 아니라 칭찬'),
+    ('정가랑 할인가 표기가 섞여서요, 지금 어떤 가격으로 보이나요?', '무엇을 요청하는지 모호'),
+    ('자전거 페달조립 설명이랑 제 페달이 달라요 이게불량인가요 아니면 제가잘못끼운건가요', '받은 상품의 불량 의심 = 원칙 1'),
 ]
 # LLM이 실제 값 대신 넣은 자리 표시 → 보충 데이터 관례('ㅇㅇ')로
 PLACEHOLDERS = {"[새이름]": "ㅇㅇㅇ", "[새번호]": "010-ㅇㅇㅇㅇ-ㅇㅇㅇㅇ", "[새주소]": "ㅇㅇ동 ㅇㅇ아파트"}
@@ -298,7 +349,7 @@ def filter_rows(df: pd.DataFrame, out: Path | None = None) -> pd.DataFrame:
     for k, v in PLACEHOLDERS.items():
         df["text"] = df["text"].str.replace(k, v, regex=False)
     df["text"] = df["text"].map(clean_tail)
-    rules = {s[0]: (s[4], s[5]) for s in SUBTYPES + SUBTYPES2 + SUBTYPES3}
+    rules = {s[0]: (s[4], s[5]) for s in SUBTYPES + SUBTYPES2 + SUBTYPES3 + SUBTYPES4}
     reviewed = {key(t): f"사람 검토: {w}" for t, w in REVIEWED_OUT}
 
     def reason(row):
@@ -371,7 +422,7 @@ def save(kept: pd.DataFrame, out: Path, seed: int):
 
 def parse_args():
     p = argparse.ArgumentParser(description="약점 유형 문의 생성 (재학습 보강)")
-    p.add_argument("--round", type=int, default=1, choices=sorted(ROUNDS), help="1차·2차 약점 보강, 3차 대조 문장")
+    p.add_argument("--round", type=int, default=1, choices=sorted(ROUNDS), help="1차·2차 약점 보강, 3차 대조 문장, 4차 페이지 표기 오류 짝 문장")
     p.add_argument("--output", default=None, help="기본값: 1차 generated_weak.csv, 2차 generated_weak2.csv")
     p.add_argument("--model", default=None, help="기본값: .env의 OPENAI_MODEL, 없으면 gpt-5-mini")
     p.add_argument("--per-request", type=int, default=10, help="하위 유형·말투 조합마다 생성할 문장 수")
