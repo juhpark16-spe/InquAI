@@ -10,7 +10,8 @@ from pathlib import Path
 
 # backend 를 불러오기 전에 환경 변수를 정해야 설정·DB 연결에 반영됩니다 (.env 보다 우선)
 _tmp = Path(tempfile.mkdtemp(prefix="inquai_test_"))
-os.environ["DATABASE_URL"] = f"sqlite:///{(_tmp / 'test.db').as_posix()}"
+# TEST_DATABASE_URL 을 주면 그 DB로 (PostgreSQL 확인용, docs/production.md). 테스트마다 표를 지우고 다시 만드니 빈 DB만
+os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL") or f"sqlite:///{(_tmp / 'test.db').as_posix()}"
 os.environ["JWT_SECRET_KEY"] = "test-secret-key-only-for-pytest-0123456789"
 os.environ["COOKIE_SECURE"] = "false"
 os.environ["LOAD_MODELS"] = "false"   # 분류 모델·LLM은 테스트마다 가짜로 끼움 (test_inquiries.py)

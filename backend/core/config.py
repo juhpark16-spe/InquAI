@@ -39,6 +39,7 @@ class Settings(BaseSettings):
     password_min_length: int = 8
     # 환불 계좌(예금주·계좌번호) 암호화 열쇠 (backend/services/refund_account.py). 비우면 JWT_SECRET_KEY 에서 만들어 씀
     refund_account_key: str = ""
+    refund_account_old_keys: str = ""   # 열쇠를 바꿀 때 예전 열쇠 (쉼표로 여러 개). 서버가 켜지며 새 열쇠로 다시 잠근 뒤 지워도 됨
 
     # API 문서(/docs, /openapi.json) 공개 여부. 배포에서는 false (공격자에게 API 목록을 보여주지 않게)
     api_docs: bool = True

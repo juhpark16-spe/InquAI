@@ -7,15 +7,18 @@
   그때마다 작업 기록(refund_account_view)에 남김.
 - **예금주·계좌번호는 암호화해서 저장** (Fernet = AES-128-CBC + HMAC-SHA256, cryptography 패키지).
   DB 파일이 새어 나가도 번호를 읽을 수 없음. 은행 이름만 그대로 (그것만으로는 개인을 알 수 없음).
-  열쇠는 .env 의 REFUND_ACCOUNT_KEY, 비어 있으면 JWT_SECRET_KEY 에서 만들어 씀 → **열쇠를 바꾸면 예전 계좌는 못 읽음**.
-- 예전(암호화 전)에 평문으로 저장된 값은 서버가 켜질 때 encrypt_legacy() 가 암호화해 바꿈.
+  열쇠는 .env 의 REFUND_ACCOUNT_KEY, 비어 있으면 JWT_SECRET_KEY 에서 만들어 씀.
+- **열쇠 바꾸기**: 새 열쇠를 REFUND_ACCOUNT_KEY 에, 예전 열쇠를 REFUND_ACCOUNT_OLD_KEYS(쉼표로 여러 개)에 넣고 서버를 켜면
+  reencrypt() 가 예전 열쇠로 잠긴 계좌를 새 열쇠로 다시 잠금 → 그다음부터 예전 열쇠는 지워도 됨.
+  JWT_SECRET_KEY 에서 만든 열쇠는 늘 '예전 열쇠'로 함께 써서, 전용 열쇠로 옮겨도 그동안 받은 계좌를 읽을 수 있음.
+- 암호화 전에 평문으로 저장된 값도 서버가 켜질 때 reencrypt() 가 암호화해 바꿈.
 """
 
 import base64
 import hashlib
 from functools import lru_cache
 
-from cryptography.fernet import Fernet, InvalidToken
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -32,29 +35,46 @@ TOKEN_PREFIX = "gAAAAA"   # Fernet 암호문은 늘 이렇게 시작 (평문 계
 UNREADABLE = "(열 수 없음)"   # 열쇠가 바뀌어 풀 수 없을 때
 
 
-@lru_cache
-def _fernet() -> Fernet:
-    s = get_settings()
-    if s.refund_account_key:
-        return Fernet(s.refund_account_key.encode())
-    if len(s.jwt_secret_key) < 32:
+def _jwt_key(jwt_secret: str) -> str | None:
+    """JWT 열쇠에서 만든 환불 계좌용 열쇠 (같은 값을 그대로 쓰지 않게 앞에 용도 이름을 붙임)"""
+    if len(jwt_secret) < 32:
+        return None
+    return base64.urlsafe_b64encode(hashlib.sha256(b"inquai-refund-account:" + jwt_secret.encode()).digest()).decode()
+
+
+def build_keys(current: str, old: str, jwt_secret: str) -> tuple[Fernet, MultiFernet]:
+    """(새로 잠글 열쇠, 풀 때 써 볼 열쇠들: 새 열쇠 → 예전 열쇠 → JWT에서 만든 열쇠)"""
+    derived = _jwt_key(jwt_secret)
+    names = [k.strip() for k in [current, *old.split(",")] if k.strip()]
+    if derived and derived not in names:
+        names.append(derived)
+    if not names:
         raise RuntimeError(".env 의 REFUND_ACCOUNT_KEY(또는 JWT_SECRET_KEY)를 넣어 주세요.")
-    # 따로 열쇠가 없으면 JWT 열쇠에서 용도별 열쇠를 만들어 씀 (같은 값을 그대로 쓰지 않게 앞에 용도 이름을 붙임)
-    return Fernet(base64.urlsafe_b64encode(hashlib.sha256(b"inquai-refund-account:" + s.jwt_secret_key.encode()).digest()))
+    try:
+        keys = [Fernet(k.encode()) for k in names]
+    except ValueError as e:
+        raise RuntimeError("REFUND_ACCOUNT_KEY·REFUND_ACCOUNT_OLD_KEYS 값이 Fernet 열쇠 형식이 아닙니다 (.env.example 의 만드는 명령 참고).") from e
+    return keys[0], MultiFernet(keys)
+
+
+@lru_cache
+def _keys() -> tuple[Fernet, MultiFernet]:
+    s = get_settings()
+    return build_keys(s.refund_account_key, s.refund_account_old_keys, s.jwt_secret_key)
 
 
 def encrypt(value: str) -> str:
-    return _fernet().encrypt(value.encode()).decode()
+    return _keys()[0].encrypt(value.encode()).decode()
 
 
 def decrypt(value: str | None) -> str | None:
-    """암호문 → 원래 값. 암호화 전 평문이면 그대로, 열쇠가 달라 못 풀면 UNREADABLE"""
+    """암호문 → 원래 값. 암호화 전 평문이면 그대로, 어느 열쇠로도 못 풀면 UNREADABLE"""
     if not value:
         return value
     if not value.startswith(TOKEN_PREFIX):
         return value
     try:
-        return _fernet().decrypt(value.encode()).decode()
+        return _keys()[1].decrypt(value.encode()).decode()
     except InvalidToken:
         return UNREADABLE
 
@@ -66,17 +86,30 @@ def save(inquiry: Inquiry, bank: str, holder: str, number: str) -> None:
     inquiry.refund_account_at = utcnow()
 
 
-def encrypt_legacy(db: Session) -> int:
-    """암호화 전에 평문으로 저장된 환불 계좌를 암호화 (서버가 켜질 때). 바꾼 건수를 돌려줌"""
+def reencrypt(db: Session) -> int:
+    """서버가 켜질 때: 평문으로 남은 값은 암호화하고, 예전 열쇠로 잠긴 값은 새 열쇠로 다시 잠금. 바꾼 문의 수를 돌려줌
+    (어느 열쇠로도 못 푸는 값은 그대로 둠 → 화면에 '(열 수 없음)')"""
+    current, every = _keys()
     rows = db.scalars(select(Inquiry).where(or_(Inquiry.refund_account.is_not(None), Inquiry.refund_holder.is_not(None)))).all()
     count = 0
     for inquiry in rows:
         changed = False
         for field in ("refund_account", "refund_holder"):
             value = getattr(inquiry, field)
-            if value and not value.startswith(TOKEN_PREFIX):
+            if not value:
+                continue
+            if not value.startswith(TOKEN_PREFIX):
                 setattr(inquiry, field, encrypt(value))
                 changed = True
+                continue
+            try:
+                current.decrypt(value.encode())            # 이미 새 열쇠
+            except InvalidToken:
+                try:
+                    setattr(inquiry, field, every.rotate(value.encode()).decode())
+                    changed = True
+                except InvalidToken:
+                    pass
         count += changed
     return count
 

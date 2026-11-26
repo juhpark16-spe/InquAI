@@ -1,5 +1,6 @@
 # CI: main에 푸시하거나 PR을 올릴 때마다 자동으로 확인합니다.
 #   backend  — pytest (모델·LLM·LangSmith 없이: 테스트는 가짜 모델과 임시 SQLite DB를 씀, backend/tests/conftest.py)
+#   postgres — 같은 pytest 를 PostgreSQL 17 에서 (실서비스 DB, docs/production.md)
 #   frontend — 코드 검사 (npm run lint, oxlint), 타입 검사 + 화면 빌드 (npm run build), 알려진 취약점 검사 (npm audit)
 #   security — 파이썬 패키지 취약점 검사 (pip-audit, docs/security_audit.md)
 #   e2e      — 화면 자동 테스트 (Playwright): 문의 등록 → 상담원 답변 발송 → 고객 조회, 로그인·권한 (docs/testing.md)
@@ -38,6 +39,35 @@ jobs:
           sed -e '/download.pytorch.org/d' -e 's/+cu132/+cpu/' requirements.txt > requirements-ci.txt
           pip install -r requirements-ci.txt --extra-index-url https://download.pytorch.org/whl/cpu
       - name: pytest
+        run: python -m pytest backend/tests -q
+
+  postgres:
+    name: 백엔드 테스트 (PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:   # 시험용 빈 DB (테스트마다 표를 지우고 다시 만듦, docs/production.md 1장)
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: pgtest-only
+          POSTGRES_DB: inquai_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements.txt
+      - name: 패키지 설치 (PyTorch는 CPU 버전)
+        run: |
+          sed -e '/download.pytorch.org/d' -e 's/+cu132/+cpu/' requirements.txt > requirements-ci.txt
+          pip install -r requirements-ci.txt --extra-index-url https://download.pytorch.org/whl/cpu
+      - name: pytest (PostgreSQL)
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://postgres:pgtest-only@localhost:5432/inquai_test
         run: python -m pytest backend/tests -q
 
   frontend:

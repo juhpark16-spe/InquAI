@@ -194,7 +194,8 @@
 - 관리 화면 상세에도 가려서. 전체 번호는 `GET /api/inquiries/{id}/refund-account` (맡은 문의만, 볼 때마다 작업 기록 `refund_account_view` '환불 계좌 보기').
 - **AI 분석·초안에는 넘기지 않음**: 초안 입력에는 '환불 계좌 받음 / 아직 없음(칸에 입력해 달라고 안내)'만.
 - **예금주·계좌번호는 암호화해서 저장** (2026-11-26, Fernet: AES-128-CBC + HMAC-SHA256). 열쇠는 `.env`의 `REFUND_ACCOUNT_KEY`(비우면 `JWT_SECRET_KEY`에서 만듦).
-  열쇠가 바뀌어 풀 수 없으면 화면에 '(열 수 없음)'. 암호화 전에 평문으로 저장된 값은 서버가 켜질 때 암호화.
+  열쇠를 바꿀 때는 예전 열쇠를 `REFUND_ACCOUNT_OLD_KEYS`에 두면 서버가 켜질 때 새 열쇠로 다시 잠금(2026-11-26).
+  어느 열쇠로도 풀 수 없으면 화면에 '(열 수 없음)'. 암호화 전에 평문으로 저장된 값도 서버가 켜질 때 암호화.
 
 **답변 알림 메일** (`backend/services/notify.py`, 설정은 `.env.example`)
 - 기본 `MAIL_ENABLED=false`: 보내지 않고 `notifications`에 기록만 (status `기록`). 테스트·CI·화면 자동 테스트는 항상 꺼짐

@@ -33,6 +33,7 @@ pyjwt==2.15.1
 pwdlib[argon2]==0.3.1
 python-multipart==0.0.33   # 문의 사진 첨부 (파일 업로드)
 cryptography==50.0.2       # 환불 계좌 암호화 (backend/services/refund_account.py)
+psycopg[binary]==3.3.8      # PostgreSQL 연결 (DATABASE_URL=postgresql+psycopg://…, docs/production.md)
 
 # 테스트 (python -m pytest backend/tests -q)
 pytest==9.2.0

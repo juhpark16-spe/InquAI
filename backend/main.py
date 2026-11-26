@@ -47,7 +47,7 @@ async def lifespan(app: FastAPI):
         added = reply_templates.ensure_defaults(db)   # 답변 문구 표가 비어 있으면 기본 문구 (예전 DB도 바로 쓰이게)
         added += inventory.ensure_catalog(db)        # 상품 옵션·재고 표에 없는 옵션 채움
         added += uploads.purge_unclaimed(db)         # 문의에 연결되지 않은 오래된 사진 지움
-        added += refund_account.encrypt_legacy(db)   # 암호화 전에 저장된 환불 계좌를 암호화
+        added += refund_account.reencrypt(db)        # 환불 계좌: 평문은 암호화, 예전 열쇠로 잠긴 것은 새 열쇠로
         if added:
             db.commit()
 

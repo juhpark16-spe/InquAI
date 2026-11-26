@@ -96,11 +96,11 @@ def test_legacy_plain_values_are_encrypted(client, db, ai):
     inquiry.refund_bank, inquiry.refund_holder, inquiry.refund_account = "국민은행", "김민준", "3520987654321"
     db.commit()
     assert refund_account.masked(inquiry)["number"] == "****4321"                 # 평문이어도 읽힘
-    assert refund_account.encrypt_legacy(db) == 1
+    assert refund_account.reencrypt(db) == 1
     db.commit()
     assert inquiry.refund_account.startswith(refund_account.TOKEN_PREFIX)
     assert refund_account.full(inquiry)["number"] == "3520987654321" and refund_account.full(inquiry)["holder"] == "김민준"
-    assert refund_account.encrypt_legacy(db) == 0                                  # 두 번 암호화하지 않음
+    assert refund_account.reencrypt(db) == 0                                  # 두 번 암호화하지 않음
 
 
 def test_wrong_key_shows_unreadable(client, db, ai):
@@ -108,3 +108,52 @@ def test_wrong_key_shows_unreadable(client, db, ai):
     from cryptography.fernet import Fernet
     other = Fernet(Fernet.generate_key()).encrypt(b"3520987654321").decode()
     assert refund_account.decrypt(other) == refund_account.UNREADABLE
+
+
+def test_key_rotation(client, db, ai, monkeypatch):
+    """열쇠 바꾸기: 새 열쇠 + 예전 열쇠를 넣고 켜면 예전 열쇠로 잠긴 계좌를 새 열쇠로 다시 잠금 → 예전 열쇠를 지워도 읽힘"""
+    from cryptography.fernet import Fernet
+    from backend.core.config import get_settings
+    jwt = get_settings().jwt_secret_key
+    old_key, new_key = Fernet.generate_key().decode(), Fernet.generate_key().decode()
+
+    def use(current, old=""):
+        keys = refund_account.build_keys(current, old, jwt)
+        monkeypatch.setattr(refund_account, "_keys", lambda: keys)
+
+    inquiry = bank_transfer_inquiry(client, db)
+    use(old_key)
+    refund_account.save(inquiry, ACCOUNT["bank"], ACCOUNT["holder"], ACCOUNT["number"])
+    db.commit()
+    locked_with_old = inquiry.refund_account
+
+    use(new_key, old_key)                                                  # 새 열쇠 + 예전 열쇠
+    assert refund_account.full(inquiry)["number"] == "3520987654321"      # 다시 잠그기 전에도 읽힘
+    assert refund_account.reencrypt(db) == 1
+    db.commit()
+    assert inquiry.refund_account != locked_with_old
+    assert refund_account.reencrypt(db) == 0                              # 이미 새 열쇠
+
+    use(new_key)                                                           # 예전 열쇠를 지워도
+    assert refund_account.full(inquiry) | {"registered_at": None} == {**ACCOUNT, "number": "3520987654321", "registered_at": None}
+
+
+def test_jwt_derived_key_still_reads_after_dedicated_key(client, db, ai, monkeypatch):
+    """JWT 열쇠에서 만든 열쇠로 받은 계좌는 전용 열쇠(REFUND_ACCOUNT_KEY)로 옮겨도 읽히고, 켜질 때 전용 열쇠로 다시 잠김"""
+    from cryptography.fernet import Fernet
+    from backend.core.config import get_settings
+    jwt = get_settings().jwt_secret_key
+    inquiry = bank_transfer_inquiry(client, db)
+    monkeypatch.setattr(refund_account, "_keys", lambda: refund_account.build_keys("", "", jwt))
+    refund_account.save(inquiry, ACCOUNT["bank"], ACCOUNT["holder"], ACCOUNT["number"])
+    db.commit()
+    dedicated = refund_account.build_keys(Fernet.generate_key().decode(), "", jwt)
+    monkeypatch.setattr(refund_account, "_keys", lambda: dedicated)
+    assert refund_account.full(inquiry)["holder"] == "김민준"
+    assert refund_account.reencrypt(db) == 1
+
+
+def test_bad_key_format_is_clear_error():
+    import pytest
+    with pytest.raises(RuntimeError, match="Fernet 열쇠 형식"):
+        refund_account.build_keys("not-a-fernet-key", "", "x" * 40)
