@@ -204,10 +204,10 @@ export default function InquiryFormPage() {
           {thread ? (
             <InquiryThreads items={[thread]} notice="" reload={loadThread} actions={customer ? {
               rate: (n, id, helpful) => shopApi.rate(id, n, helpful),
-              followUp: (n, text, tokens, order, refund) => shopApi.followUp(n, text, tokens, order, refund),
+              followUp: (n, text, tokens, order, account) => shopApi.followUp(n, text, tokens, order, account),
             } : {
               rate: (n, id, helpful) => customerApi.rate(id, n, lookupEmail, form.password, helpful),
-              followUp: (n, text, tokens, order, refund) => customerApi.followUp(lookupEmail, form.password, n, text, tokens, order, refund),
+              followUp: (n, text, tokens, order, account) => customerApi.followUp(lookupEmail, form.password, n, text, tokens, order, account),
             }} />
           ) : (
           <div className="space-y-4 rounded-xl bg-slate-50 p-4">

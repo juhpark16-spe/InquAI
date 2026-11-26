@@ -9,7 +9,19 @@ InquAI에는 세 종류의 자동 테스트가 있고, main에 푸시할 때마�
 | 화면 자동 테스트 (Playwright, 16개) | 실제 브라우저로 화면을 눌러 핵심 흐름 확인 | `cd frontend` 후 `npm run test:e2e` | 화면 자동 테스트 |
 | Docker 확인 | 이미지 빌드, 비밀값·모델이 이미지에 없는지, 켜서 응답하는지 | (CI 전용, `docs/docker.md` 5절) | Docker 빌드 |
 
-그 밖에 CI는 화면 타입 검사·빌드, npm·파이썬 패키지 취약점 검사도 합니다 (`docs/security_audit.md`).
+그 밖에 CI는 화면 코드 검사·타입 검사·빌드, npm·파이썬 패키지 취약점 검사도 합니다 (`docs/security_audit.md`).
+
+## 화면 코드 검사 (oxlint)
+
+`cd frontend` 후 `npm run lint`. 코드를 실행하지 않고 읽기만 해서, 버그가 되기 쉬운 곳을 찾습니다 (CI '화면 빌드'에서 경고가 하나라도 있으면 실패).
+
+- **왜 ESLint가 아니라 oxlint인가:** 화면은 TypeScript 7을 쓰는데, ESLint의 타입스크립트 부품(typescript-eslint)은 TypeScript 6.0까지만 지원합니다.
+  oxlint는 ESLint 규칙을 옮겨 놓은 도구라 TypeScript가 따로 필요 없고, 코드 안의 `// eslint-disable-line …` 표시도 그대로 알아봅니다.
+- **켠 규칙** (`frontend/.oxlintrc.json`): 확실한 버그(correctness, 오류), 의심스러운 코드(suspicious, 경고),
+  React 훅 규칙(`rules-of-hooks`: if 안에서 훅을 쓰지 않기, `exhaustive-deps`: useEffect 재료 목록에 빠진 값).
+- **끈 규칙:** React Compiler 전용 규칙(`set-state-in-effect`, `purity` 등). 이 프로젝트는 React Compiler를 쓰지 않고,
+  데이터를 불러올 때 '불러오는 중'을 켜는 흔한 방식까지 오류로 잡기 때문입니다.
+- 처음 켰을 때(2026-11-26) 고친 것: 바깥 변수와 이름이 겹친 3곳, 쓸데없이 나눠 이어 붙인 글자, FAQ 관리 화면에서 매번 새로 계산되던 유형별 개수.
 
 ## 화면 자동 테스트 (Playwright)
 

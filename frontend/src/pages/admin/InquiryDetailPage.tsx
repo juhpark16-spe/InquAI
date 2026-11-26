@@ -235,7 +235,7 @@ function ActionForm({ action, o, q }: { action: QuickAction; o: OrderCard; q: Re
                 // 서버(order_actions)와 같은 계산: 무료배송(3만원 이상) 주문이 3만원 미만이 되면 배송비 3,000원 차감
                 const unit = Math.floor((o.amount ?? 0) / qty), left = (o.amount ?? 0) - unit * count;
                 const fee = (o.amount ?? 0) >= 30000 && left < 30000 ? 3000 : 0;
-                q.exec("partial_cancel", { count }, `${qty}개 중 ${count}개를 취소할까요?` + "\n" + `환불(승인 취소) ${won(unit * count - fee)}`
+                q.exec("partial_cancel", { count }, `${qty}개 중 ${count}개를 취소할까요?\n환불(승인 취소) ${won(unit * count - fee)}`
                   + (fee ? ` · 남은 금액이 3만원 미만이 되어 배송비 ${won(fee)} 차감` : ""));
               }}>{q.busy ? <Spinner /> : `${count}개 취소`}</Button>
           </div>
@@ -958,7 +958,7 @@ export default function InquiryDetailPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [queue, navigate]);
+  }, [queue, navigate]); // eslint-disable-line react-hooks/exhaustive-deps -- go 는 ref(dirty)와 navigate 만 써서 매번 새로 받을 필요 없음
   // 처리 대기열 위치: 상태가 바뀔 때마다 다시 (완료하면 대기열에서 빠지고 '다음 미처리'가 바뀜)
   useEffect(() => {
     inquiryApi.queue(id).then(setQueue).catch(() => setQueue(null));
@@ -1249,11 +1249,11 @@ export default function InquiryDetailPage() {
                 <details className="mt-3" open={lowConf}>
                   <summary className="cursor-pointer text-sm text-muted hover:text-primary">다른 유형 후보</summary>
                   <div className="mt-2 space-y-1">
-                    {topScores.map(([label, p]) => (
+                    {topScores.map(([label, prob]) => (
                       <div key={label} className="flex items-center gap-2 text-sm">
                         <span className="w-24 truncate text-muted">{label}</span>
-                        <div className="h-1.5 flex-1 rounded bg-slate-100"><div className="h-1.5 rounded bg-indigo-400" style={{ width: `${Math.round(p * 100)}%` }} /></div>
-                        <span className="w-9 text-right tabular-nums text-muted">{(p * 100).toFixed(0)}%</span>
+                        <div className="h-1.5 flex-1 rounded bg-slate-100"><div className="h-1.5 rounded bg-indigo-400" style={{ width: `${Math.round(prob * 100)}%` }} /></div>
+                        <span className="w-9 text-right tabular-nums text-muted">{(prob * 100).toFixed(0)}%</span>
                       </div>
                     ))}
                   </div>

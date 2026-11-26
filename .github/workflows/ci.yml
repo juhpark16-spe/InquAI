@@ -1,6 +1,6 @@
 # CI: main에 푸시하거나 PR을 올릴 때마다 자동으로 확인합니다.
 #   backend  — pytest (모델·LLM·LangSmith 없이: 테스트는 가짜 모델과 임시 SQLite DB를 씀, backend/tests/conftest.py)
-#   frontend — 타입 검사 + 화면 빌드 (npm run build), 알려진 취약점 검사 (npm audit)
+#   frontend — 코드 검사 (npm run lint, oxlint), 타입 검사 + 화면 빌드 (npm run build), 알려진 취약점 검사 (npm audit)
 #   security — 파이썬 패키지 취약점 검사 (pip-audit, docs/security_audit.md)
 #   e2e      — 화면 자동 테스트 (Playwright): 문의 등록 → 상담원 답변 발송 → 고객 조회, 로그인·권한 (docs/testing.md)
 #   docker   — Docker 이미지 2개를 만들고 docker compose 로 실제로 켜서 화면·API가 응답하는지 확인 (docs/docker.md)
@@ -55,6 +55,8 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - name: 코드 검사 (oxlint, 경고가 하나라도 있으면 실패)
+        run: npm run lint
       - name: 타입 검사 + 빌드
         run: npm run build
       - name: npm 취약점 검사 — 화면에 실려 나가는 패키지 (high 이상이면 실패)

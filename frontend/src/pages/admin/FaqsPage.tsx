@@ -331,7 +331,7 @@ export default function FaqsPage() {
       && (!word || `${f.code} ${f.question} ${f.answer}`.toLowerCase().includes(word)));
   }, [faqs, category, q, showInactive]);
 
-  const active = faqs?.filter((f) => f.is_active) ?? [];
+  const active = useMemo(() => faqs?.filter((f) => f.is_active) ?? [], [faqs]);
   const counts = useMemo(() => Object.fromEntries(CATEGORIES.map((c) => [c, active.filter((f) => f.category === c).length])), [active]);
   const inactiveCount = (faqs?.length ?? 0) - active.length;
 
