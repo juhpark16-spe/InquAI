@@ -252,3 +252,44 @@ def test_ticket_lines_tell_ai_request_is_already_made(client, db, ai):
     ai["llm"].replies = {"draft": {**DRAFT, "answer": "처리 기록상 반품 티켓이 접수되어 있습니다.", "check_points": []}}
     d = client.post(f"/api/inquiries/{inquiry.id}/draft", headers=login(client)).json()
     assert any("내부 용어" in c and "처리 기록" in c for c in d["check_points"]) and d["grounded"] is False
+
+
+def test_draft_input_has_payment_shipping_and_policy(client, db, ai):
+    """초안이 질문에 숫자로 답하게: 결제 수단별 환불 기간, 최근 배송 기록, 상담원 '답변 문구' 중 정책 문구([정책]).
+    인사말(첫인사·사과·마무리)과 사용 안 하는 문구는 [정책]에 넣지 않음 (2026-11-26)"""
+    from datetime import timedelta
+    from backend.agents.drafting import build_input
+    from backend.database.models import ShipmentEvent, utcnow
+    from backend.services.reply_templates import ensure_defaults
+    c = db.scalar(select(Customer).where(Customer.email == "customer01@example.com"))
+    if c is None:
+        c = Customer(name="김민준", email="customer01@example.com")
+        db.add(c)
+        db.flush()
+    o = Order(customer_id=c.id, order_number="20261126-0901", product_name="무선 이어폰", amount=39000, order_status="배송 중",
+              shipping_status="배송 중", payment_method="간편결제", carrier="CJ대한통운", ordered_at=utcnow() - timedelta(days=3))
+    db.add(o)
+    db.flush()
+    db.add(ShipmentEvent(order_id=o.id, at=utcnow() - timedelta(hours=5), status="간선 하차", location="대전 HUB"))
+    ensure_defaults(db)
+    db.add(ReplyTemplate(label="옛 안내", text="쓰지 않는 문구입니다", is_active=False, sort_order=99))
+    db.commit()
+    inquiry, _ = saved(db, post(client, content="이어폰 지금 어디쯤 있나요?",
+                                order_number="20261126-0901").json()["inquiry_number"])
+    text = build_input(db, inquiry, [], None)
+    assert "결제: 간편결제 · 환불(승인 취소) 반영 기간: 간편결제 1~3영업일 안에 반영" in text
+    assert "간선 하차 (대전 HUB) · 택배사 CJ대한통운" in text
+    policy = text.split("[정책]")[1].split("\n\n")[0]
+    assert "회수 안내: 지정 택배사가 1~3영업일 안에 방문" in policy and "환불 일정:" in policy
+    assert "첫인사" not in policy and "마무리" not in policy and "옛 안내" not in policy
+
+
+def test_shop_side_problem_line_only_for_damage(client, db, ai):
+    """사과 신호: 파손·불량·오배송 문의에만 [쇼핑몰 쪽 문제] 줄 (사이즈가 작아서 교환 같은 고객 사정에는 없음, 2026-11-26)"""
+    from backend.agents.drafting import build_input
+    ai["analyzer"].next = {"confidence": 0.6}
+    size, _ = saved(db, post(client, content="맨투맨을 받았는데 생각보다 작아요. L 사이즈로 교환하고 싶어요.").json()["inquiry_number"])
+    ai["analyzer"].next = {"confidence": 0.6}
+    broken, _ = saved(db, post(client, content="바디로션 펌프가 깨져서 왔어요. 반품할게요", photos_later=True).json()["inquiry_number"])
+    assert "[쇼핑몰 쪽 문제]" not in build_input(db, size, [], None)
+    assert "[쇼핑몰 쪽 문제] 파손·불량·오배송 문의 → 첫 문장에 짧게 사과할 것" in build_input(db, broken, [], None)

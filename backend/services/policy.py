@@ -11,3 +11,12 @@ RETURN_FEE = 6000                              # 단순 변심 반품·교환 �
 FREE_SHIPPING_MIN, SHIPPING_FEE = 30000, 3000  # 3만원 이상 무료배송, 아니면 3,000원 (F15·F28)
 REFUND_BUSINESS_DAYS = 3                       # 반품 검수 뒤 환불까지 영업일 (F18)
 DELAY_DAYS = 4                                 # 주문 후 이만큼 지나도 배송 완료가 아니면 '배송 지연' (평일 출고 + 1~2일, 주말 여유)
+
+
+def refund_timing(method: str | None) -> str:
+    """결제 수단별 환불(승인 취소) 반영 기간 (F29, 화면 frontend/.../inquiry-detail/Tickets.tsx refundTiming 과 같은 기준)"""
+    if method == "무통장입금":
+        return "고객 환불 계좌로 1~2영업일 (환불 계좌를 먼저 받아야 함)"
+    if method in ("계좌이체", "간편결제"):
+        return f"{method} 1~3영업일 안에 반영"
+    return f"{method or '카드'} 3~5영업일 안에 반영 (카드사 사정)"
