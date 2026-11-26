@@ -121,6 +121,12 @@ class InquiryLookup(_Email):
     password: str = Field(min_length=1, max_length=64)
 
 
+class ExchangeFeePay(InquiryLookup):
+    """비회원 교환 배송비 결제: 본인 확인(이메일 + 비밀번호) + 문의 번호 + 결제 수단"""
+    inquiry_number: str = Field(min_length=1, max_length=20)
+    method: str = Field(min_length=1, max_length=20)   # 신용카드 / 간편결제 (services/exchange_fee.py)
+
+
 class FollowUpCreate(InquiryLookup):
     """추가 문의: 본인 확인(이메일 + 비밀번호) + 어느 문의에 이어서 쓰는지"""
     inquiry_number: str = Field(min_length=1, max_length=20)
@@ -209,6 +215,7 @@ class InquiryPublic(BaseModel):
     photos_requested: bool = False    # 파손 사진을 나중에 보내기로 함
     refund_account: dict | None = None      # 보낸 환불 계좌 (가림: 은행·끝 4자리·예금주 가운데)
     refund_account_needed: bool = False     # 무통장입금 주문 취소·반품인데 환불 계좌가 아직 없음 → 추가 문의에 칸
+    exchange_fee: dict | None = None        # 교환 배송비: {amount, status(요청/완료), method, at} → 요청이면 [교환 배송비 결제]
 
 
 class InquiryLookupResult(BaseModel):

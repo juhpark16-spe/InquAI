@@ -20,3 +20,12 @@ def refund_timing(method: str | None) -> str:
     if method in ("계좌이체", "간편결제"):
         return f"{method} 1~3영업일 안에 반영"
     return f"{method or '카드'} 3~5영업일 안에 반영 (카드사 사정)"
+
+
+def partial_refund(amount: int, qty: int, count: int) -> tuple[int, int, int]:
+    """출고 전 부분 취소: (환불액, 뺀 배송비, 남는 금액). 무료배송(3만원 이상) 주문이 3만원 미만이 되면 처음 배송비 3,000원을 빼고 환불 (F28).
+    바로 처리(order_actions)와 문의하기의 환불 미리 보기(refund_preview)가 같은 계산을 씀"""
+    unit = amount // qty
+    left = amount - unit * count
+    fee = SHIPPING_FEE if amount >= FREE_SHIPPING_MIN > left else 0
+    return unit * count - fee, fee, left

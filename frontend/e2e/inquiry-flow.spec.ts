@@ -120,6 +120,10 @@ test("회원 주문 취소 요청 → 상담원이 취소 티켓 승인·문구 
   const title = `주문 취소 요청 ${Date.now()} (자동 테스트)`;
   await page.getByLabel("제목").fill(title);
   await page.getByLabel(/문의 내용/).fill("방금 결제했는데 색상을 잘못 골랐어요. 이 주문 취소해 주세요.");
+  // 환불 미리 보기: 고른 주문(출고 전)이라 '전체 취소: n원 전액 환불' (동의 체크 없음)
+  await expect(page.getByText("이 주문을 취소·반품하면")).toBeVisible();
+  await expect(page.getByText(/전체 취소: [\d,]+원 전액 환불/)).toBeVisible();
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/refund-preview.png`, fullPage: true });
   await page.getByLabel(/개인정보 수집·이용에 동의합니다/).check();
   await page.getByRole("button", { name: "문의 등록" }).click();
   await expect(page.getByText("문의가 등록되었습니다")).toBeVisible();
@@ -459,4 +463,48 @@ test("비밀번호 확인이 다르면 입력하는 동안 칸 아래에 바로 
   await expect(page.getByText("위 비밀번호와 달라요.")).toBeVisible();
   await page.getByLabel("비밀번호 확인").fill("abc12345");
   await expect(page.getByText("위 비밀번호와 달라요.")).toHaveCount(0);
+});
+
+test("단순 변심 교환 배송비: 상담원이 결제 요청 → 고객이 내 쇼핑에서 결제 → 상담원 화면에 '받음'", async ({ page, browser }) => {
+  // 고객(customer14: 시험 데이터에서 방금 배송 완료된 주문이 있음): 배송 완료 주문으로 사이즈 교환 문의
+  await page.goto("/shop/login");
+  await page.getByLabel("이메일").fill("customer14@example.com");
+  await page.getByLabel("비밀번호").fill(STAFF_PASSWORD);
+  await page.getByRole("button", { name: "로그인" }).click();
+  await expect(page).not.toHaveURL(/\/shop\/login/);
+  await page.goto("/my");
+  const order = page.locator("li").filter({ hasText: "배송 완료" }).filter({ has: page.getByRole("link", { name: "이 주문 문의하기" }) }).first();
+  await order.getByRole("link", { name: "이 주문 문의하기" }).click();
+  const title = `사이즈 교환 ${Date.now()} (자동 테스트)`;
+  await page.getByLabel("제목").fill(title);
+  await page.getByLabel(/문의 내용/).fill("받았는데 생각보다 작아요. 한 치수 큰 걸로 교환하고 싶어요.");
+  await page.getByLabel(/개인정보 수집·이용에 동의합니다/).check();
+  await page.getByRole("button", { name: "문의 등록" }).click();
+  const number = (await page.getByText(/^INQ-\d{8}-\d{4}$/).textContent())!.trim();
+
+  // 상담원: 주문 정보의 바로 처리 [교환 배송비 받기] → [결제 요청 보내기]
+  const staff = await (await browser.newContext({ baseURL: "http://127.0.0.1:5174", locale: "ko-KR" })).newPage();
+  await staffLogin(staff, "admin");
+  await staff.getByLabel("문의 검색").fill(number);
+  await staff.keyboard.press("Enter");
+  await expect(staff.getByRole("heading", { name: title })).toBeVisible();
+  await staff.getByRole("button", { name: "교환 배송비 받기" }).first().click();
+  await staff.getByRole("button", { name: "결제 요청 보내기" }).click();
+  await staff.getByRole("alertdialog").getByRole("button", { name: "받기" }).click();
+  await expect(staff.getByText(/교환 배송비 6,000원: 고객 결제 대기/).first()).toBeVisible();
+  if (process.env.E2E_SHOTS) await staff.screenshot({ path: `${process.env.E2E_SHOTS}/exchange-fee-staff.png`, fullPage: true });
+
+  // 고객: 내 쇼핑의 내 문의에 결제 칸 → 신용카드로 결제
+  await page.goto("/my");
+  const mine = page.locator("section").filter({ hasText: title });
+  await expect(mine.getByText("교환 배송비 6,000원 결제가 필요해요")).toBeVisible();
+  if (process.env.E2E_SHOTS) await page.screenshot({ path: `${process.env.E2E_SHOTS}/exchange-fee-customer.png`, fullPage: true });
+  await mine.getByRole("button", { name: "신용카드로 결제" }).click();
+  await page.getByRole("alertdialog").getByRole("button", { name: "결제하기" }).click();
+  await expect(mine.getByText(/교환 배송비 6,000원 결제 완료 \(신용카드\)/)).toBeVisible();
+
+  // 상담원: 다시 불러오면 '받음'
+  await staff.reload();
+  await expect(staff.getByText(/교환 배송비 6,000원 받음 \(신용카드\)/).first()).toBeVisible();
+  if (process.env.E2E_SHOTS) await staff.screenshot({ path: `${process.env.E2E_SHOTS}/exchange-fee-paid.png`, fullPage: true });
 });

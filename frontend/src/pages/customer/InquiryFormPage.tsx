@@ -7,6 +7,7 @@ import { useShop } from "../../auth/ShopProvider";
 import { Bubble, Note, Thumbs } from "../../components/Chat";
 import FaqSuggestions from "../../components/FaqSuggestions";
 import { EMPTY_REFUND, REFUND_WORDS, RefundAccountToggle, refundValue } from "../../components/RefundAccountFields";
+import RefundPreviewNote, { MONEY_WORDS } from "../../components/RefundPreviewNote";
 import InquiryThreads from "../../components/InquiryThreads";
 import PhotoPicker, { PhotoSlot, type PickedPhoto } from "../../components/PhotoPicker";
 import { Alert, Button, Card, Field, Input, MemberBadge, Select, Spinner, Textarea, cx } from "../../components/ui";
@@ -205,9 +206,11 @@ export default function InquiryFormPage() {
             <InquiryThreads items={[thread]} notice="" reload={loadThread} actions={customer ? {
               rate: (n, id, helpful) => shopApi.rate(id, n, helpful),
               followUp: (n, text, tokens, order, account) => shopApi.followUp(n, text, tokens, order, account),
+              payExchangeFee: (n, method) => shopApi.payExchangeFee(n, method),
             } : {
               rate: (n, id, helpful) => customerApi.rate(id, n, lookupEmail, form.password, helpful),
               followUp: (n, text, tokens, order, account) => customerApi.followUp(lookupEmail, form.password, n, text, tokens, order, account),
+              payExchangeFee: (n, method) => customerApi.payExchangeFee(lookupEmail, form.password, n, method),
             }} />
           ) : (
           <div className="space-y-4 rounded-xl bg-slate-50 p-4">
@@ -305,6 +308,11 @@ export default function InquiryFormPage() {
             onBlur={() => { if (orderNumber) setForm((f) => ({ ...f, order_number: orderNumber })); }}
             className={cx(orderError ? "border-rose-400 ring-2 ring-rose-100" : needsOrder && "border-amber-400 bg-amber-50/50 ring-2 ring-amber-100")} />
         </Field>
+        )}
+        {/* 취소·반품·교환 이야기면 돌려받을 금액·배송비를 미리 보여 줌 (동의 체크 없음, 회원은 고른 주문의 실제 금액) */}
+        {MONEY_WORDS.test(`${form.title} ${form.content}`) && (
+          <RefundPreviewNote member={!!customer} orderNumber={customer ? form.order_number : ""} damage={damageMode}
+            exchange={/교환/.test(`${form.title} ${form.content}`)} />
         )}
         {/* 무통장입금 주문의 취소·반품: 환불 계좌를 글과 따로 받음 (AI에 넘기지 않음) */}
         {(refundRelevant || showRefund) && (

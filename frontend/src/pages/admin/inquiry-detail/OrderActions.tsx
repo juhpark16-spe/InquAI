@@ -22,7 +22,15 @@ export const ACTION_CONFIRM: Record<QuickAction, { title: string; label: string;
   points: { title: "보상 적립금 지급", label: "지급" },
   coupon: { title: "사과 쿠폰 발급", label: "발급" },
   return: { title: "반품 회수 접수", label: "접수" },
+  exchange_fee: { title: "교환 배송비 받기", label: "받기" },
 };
+
+/** 교환 배송비 상태 한 줄 (주문 정보의 바로 처리·교환 요청 카드가 함께 씀) */
+export function exchangeFeeText(o: OrderCard): string | null {
+  const f = o.exchange_fee;
+  if (!f) return null;
+  return f.status === "요청" ? `교환 배송비 ${won(f.amount)}: 고객 결제 대기 (결제 요청함)` : `교환 배송비 ${won(f.amount)} 받음 (${f.method})`;
+}
 
 /** 바로 처리 공통: 버튼을 누르면 아래에 작은 입력칸이 열리고 [실행] → 서버가 조건을 다시 확인해 처리 */
 export function useQuickAction(inquiryId: number, onDone: (msg: string) => void) {
@@ -126,6 +134,25 @@ export function ActionForm({ action, o, q }: { action: QuickAction; o: OrderCard
             onClick={() => q.exec("return", { reason }, `${reason} 반품 회수를 접수할까요?`)}>{q.busy ? <Spinner /> : "회수 접수"}</Button>
         </>
       )}
+      {action === "exchange_fee" && (
+        <>
+          <p>단순 변심 교환은 왕복 배송비 <b>6,000원</b>을 받아요 (불량·오배송이면 받지 않아요). 받은 뒤 회수를 접수해 주세요.</p>
+          {o.exchange_fee?.status === "요청" && <p className="text-xs text-amber-700">결제 요청을 보냈어요. 고객이 문의 화면에서 결제하면 '받음'으로 바뀌어요.</p>}
+          <div className="flex flex-wrap gap-1.5">
+            <Button className="min-h-9 px-3 py-1" disabled={q.busy || (o.points_balance ?? 0) < 6000}
+              onClick={() => q.exec("exchange_fee", { method: "points" }, `고객 적립금에서 6,000원을 차감할까요? (잔액 ${won(o.points_balance ?? 0)})\n고객이 동의했을 때만 진행해 주세요.`)}>
+              {q.busy ? <Spinner /> : `적립금으로 차감 (잔액 ${won(o.points_balance ?? 0)})`}
+            </Button>
+            {!o.exchange_fee && (
+              <Button variant="ghost" className="min-h-9 px-3 py-1" disabled={q.busy}
+                onClick={() => q.exec("exchange_fee", { method: "request" }, "고객에게 교환 배송비 6,000원 결제를 요청할까요?\n고객 문의 화면에 [교환 배송비 결제] 버튼이 생겨요.")}>
+                결제 요청 보내기
+              </Button>
+            )}
+          </div>
+          {(o.points_balance ?? 0) < 6000 && <p className="text-xs text-muted">적립금이 6,000원보다 적어 결제 요청으로 받아요.</p>}
+        </>
+      )}
       {q.error && <Alert>{q.error}</Alert>}
     </div>
   );
@@ -138,7 +165,10 @@ export function OrderActions({ o, inquiryId, onDone }: { o: OrderCard; inquiryId
   const qty = o.quantity ?? 1;
   const choices = o.option_choices ?? [];
   const canReturn = o.order_status === "배송 완료" && !o.return_requested_at && !!o.defect_return_until && new Date(o.defect_return_until).getTime() > Date.now();
-  if (!beforeShipping && !o.duplicate_payment && !canReturn) return null;
+  // 교환 배송비: 배송 완료 + 단순 변심 기한(7일) 안 + 아직 받지 않음
+  const canExchangeFee = o.order_status === "배송 완료" && !!o.returnable && o.exchange_fee?.status !== "완료";
+  const feeText = exchangeFeeText(o);
+  if (!beforeShipping && !o.duplicate_payment && !canReturn && !canExchangeFee && !feeText) return null;
   return (
     <div className="mt-3 rounded-xl border border-primary/20 bg-primary-soft/40 p-3">
       <p className="mb-2 text-sm font-semibold text-ink">바로 처리 <span className="font-normal text-muted">· 지금 주문 상태에서 할 수 있는 것</span></p>
@@ -148,7 +178,9 @@ export function OrderActions({ o, inquiryId, onDone }: { o: OrderCard; inquiryId
         {beforeShipping && choices.length > 0 && <ActionButton label="옵션 변경" active={q.open === "option"} onClick={() => q.toggle("option")} />}
         {beforeShipping && qty > 1 && <ActionButton label="부분 취소" active={q.open === "partial_cancel"} onClick={() => q.toggle("partial_cancel")} />}
         {canReturn && <ActionButton label="반품 회수 접수" active={q.open === "return"} onClick={() => q.toggle("return")} />}
+        {canExchangeFee && <ActionButton label="교환 배송비 받기" active={q.open === "exchange_fee"} onClick={() => q.toggle("exchange_fee")} />}
       </div>
+      {feeText && <p className="mt-2 text-xs text-body">{feeText}</p>}
       {q.open && <ActionForm key={q.open} action={q.open} o={o} q={q} />}
     </div>
   );

@@ -312,6 +312,8 @@ class OrderCard(BaseModel):
     picked_up_at: UTCDateTime | None = None
     return_reason: str | None = None        # [반품 회수 접수]에서 고른 사유 (단순 변심 / 불량·오배송)
     refund_preview: int | None = None       # 반품 승인 시 환불 예정 금액 (단순 변심이면 왕복 배송비 차감)
+    exchange_fee: dict | None = None        # 단순 변심 교환 배송비: {amount, status(요청/완료), method, at}
+    points_balance: int | None = None       # 고객 적립금 잔액 (교환 배송비를 적립금으로 받을 수 있는지)
     related_inquiries: list[RelatedInquiry] = []   # 같은 주문으로 들어온 다른 문의
     shipping_address: str | None = None
     option_choices: list[OptionChoice] = []        # 옵션별 재고 (옵션 변경·교환 안내)

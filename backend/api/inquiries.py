@@ -8,10 +8,10 @@ from backend.core.dependencies import DB, MaybeCustomer
 from backend.core.errors import AppError
 from backend.core.rate_limit import FailureLock, rate_limit
 from backend.database.models import Attachment
-from backend.schemas.inquiry import (FollowUpCreate, InquiryCreate, InquiryCreated, InquiryLookup, InquiryLookupResult,
+from backend.schemas.inquiry import (ExchangeFeePay, FollowUpCreate, InquiryCreate, InquiryCreated, InquiryLookup, InquiryLookupResult,
                                      RatingCreate, UploadOut)
 from backend.services.drafts import write_draft
-from backend.services import sla, uploads
+from backend.services import exchange_fee, sla, uploads
 from backend.services.inquiries import (add_follow_up, find_owned_inquiry, find_public_inquiries, rate_answer,
                                         register_inquiry)
 
@@ -36,7 +36,7 @@ def _check_lock(email: str) -> None:
         raise AppError(429, LOCKED, "TOO_MANY_REQUESTS")
 
 
-def _owned_or_404(db, body: FollowUpCreate | RatingCreate, inquiry_number: str):
+def _owned_or_404(db, body: FollowUpCreate | RatingCreate | ExchangeFeePay, inquiry_number: str):
     _check_lock(body.customer_email)
     inquiry = find_owned_inquiry(db, body.customer_email, body.password, inquiry_number)
     if inquiry is None:
@@ -101,6 +101,15 @@ def follow_up(body: FollowUpCreate, db: DB):
     add_follow_up(db, inquiry, body.content, body.attachment_tokens, body.order_number, body.refund_account)
     return {"inquiry_number": inquiry.inquiry_number, "status": inquiry.status,
             "message": "추가 문의가 접수되었습니다. " + sla.CUSTOMER_NOTICE}
+
+
+@router.post("/exchange-fee", summary="교환 배송비 결제 (상담원이 결제를 요청한 문의, 시연용 결제)",
+             dependencies=[Depends(rate_limit("exchange_fee", 5, 60))])
+def pay_exchange_fee(body: ExchangeFeePay, db: DB):
+    inquiry = _owned_or_404(db, body, body.inquiry_number.strip())
+    paid = exchange_fee.customer_pay(db, inquiry, body.method)
+    db.commit()
+    return {"exchange_fee": paid, "message": "교환 배송비 결제가 완료되었습니다. 상담원이 확인 후 회수를 접수해 드립니다."}
 
 
 @router.post("/answers/{response_id}/rating", summary="답변 평가 (도움이 되었나요?)",

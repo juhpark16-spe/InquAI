@@ -7,7 +7,7 @@ import axios, { AxiosError, type InternalAxiosRequestConfig } from "axios";
 import type {
   AgentLogPage, DraftStats, RetrainingStatus, FaqSuggestResult, ShopCustomer, ShopOrder, FaqAdmin, FaqPublic, FaqSearchTest, InquiryCreate, ResponseItem, InquiryCreated, InquiryDetail, InquiryListItem, InquiryPublic, InquiryState, Page, Role, User,
   UserDetail,
-  OrderCard, RefundAccountInput,
+  ExchangeFee, OrderCard, RefundAccountInput, RefundPreview,
 } from "./types";
 
 export const http = axios.create({ baseURL: "/api", withCredentials: true });
@@ -90,6 +90,9 @@ export const customerApi = {
     http.post<{ status: string; message: string }>("/inquiries/follow-up",
       { customer_email, password, inquiry_number, content, attachment_tokens, order_number: order_number || null,
         refund_account: refund_account ?? null }).then((r) => r.data),
+  // 교환 배송비 결제 (상담원이 결제를 요청한 문의, 시연용 결제: backend/services/exchange_fee.py)
+  payExchangeFee: (customer_email: string, password: string, inquiry_number: string, method: string) =>
+    http.post<{ exchange_fee: ExchangeFee; message: string }>("/inquiries/exchange-fee", { customer_email, password, inquiry_number, method }).then((r) => r.data),
   rate: (answerId: number, inquiry_number: string, customer_email: string, password: string, helpful: boolean) =>
     http.post<{ rating: number }>(`/inquiries/answers/${answerId}/rating`, { customer_email, password, helpful },
       { params: { inquiry_number } }).then((r) => r.data),
@@ -163,7 +166,7 @@ export const auditApi = {
 };
 
 /** 문의 상세의 바로 처리 (backend/services/order_actions.py) */
-export type QuickAction = "address" | "option" | "partial_cancel" | "duplicate_cancel" | "points" | "coupon" | "return";
+export type QuickAction = "address" | "option" | "partial_cancel" | "duplicate_cancel" | "points" | "coupon" | "return" | "exchange_fee";
 
 export const inquiryApi = {
   action: (id: number, action: QuickAction, body: Record<string, string | number> = {}) =>
@@ -341,6 +344,9 @@ export const shopApi = {
     refund_account?: RefundAccountInput | null) =>
     http.post<{ status: string; message: string }>(`/shop/inquiries/${inquiry_number}/follow-up`,
       { content, attachment_tokens, order_number: order_number || null, refund_account: refund_account ?? null }).then((r) => r.data),
+  refundPreview: (order_number: string) => http.get<RefundPreview>(`/shop/orders/${order_number}/refund-preview`).then((r) => r.data),
+  payExchangeFee: (inquiry_number: string, method: string) =>
+    http.post<{ exchange_fee: ExchangeFee; message: string }>(`/shop/inquiries/${inquiry_number}/exchange-fee`, { method }).then((r) => r.data),
   rate: (answerId: number, inquiry_number: string, helpful: boolean) =>
     http.post<{ rating: number }>(`/shop/answers/${answerId}/rating`, { helpful }, { params: { inquiry_number } }).then((r) => r.data),
 };

@@ -83,6 +83,7 @@ export default function MyPage() {
           <InquiryThreads items={items} notice={notice} reload={loadInquiries} actions={{
             rate: (n, id, helpful) => shopApi.rate(id, n, helpful),
             followUp: (n, text, tokens, order, refund) => shopApi.followUp(n, text, tokens, order, refund),
+            payExchangeFee: (n, method) => shopApi.payExchangeFee(n, method),
           }} />
         )}
       </section>

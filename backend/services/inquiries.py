@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, object_session
 
 from backend.agents.pipeline import needs_draft, run_agent
 from backend.core.security import hash_password, verify_password
-from backend.services import notify, photo_evidence, refund_account, uploads
+from backend.services import exchange_fee, notify, photo_evidence, refund_account, uploads
 from backend.services.assignment import auto_assign
 from backend.services.inquiry_context import order_resolves, relink_open_tickets
 from backend.core.errors import AppError
@@ -203,7 +203,8 @@ def _public(inquiry: Inquiry) -> dict:
             # 상담원이 '확인 후 다시 안내'를 표시해 둠 (확인할 내용·기한 같은 내부 정보는 보내지 않음)
             "more_answer_coming": inquiry.recheck_note is not None,
             "refund_account": refund_account.masked(inquiry),
-            "refund_account_needed": refund_account.needed(object_session(inquiry), inquiry)}
+            "refund_account_needed": refund_account.needed(object_session(inquiry), inquiry),
+            "exchange_fee": exchange_fee.state(exchange_fee.order_for(object_session(inquiry), inquiry))}
 
 
 FOLLOW_UP_LIMIT = 10  # 문의 1건에 추가 문의 최대 개수 (끝없는 대화 방지, 넘으면 새 문의로)

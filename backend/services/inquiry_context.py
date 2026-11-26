@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from backend.database.models import (AdminAuditLog, AdminUser, Coupon, Customer, Faq, Inquiry, Notification, Order,
                                      PointHistory, Response, Ticket, as_utc, utcnow)
-from backend.services import carriers, inventory
+from backend.services import carriers, exchange_fee, inventory
 from backend.services.order_actions import duplicates
 
 from backend.services.policy import CANCELLABLE, DEFECT_RETURN_DAYS, RETURN_DAYS, RETURN_FEE
@@ -37,6 +37,8 @@ def order_card(db: Session, inquiry: Inquiry) -> dict | None:
     if order.return_requested_at:   # 반품 회수 접수됨 → 사유와 환불 예정 금액 (반품 승인 확인창에 보여 줌)
         reason = return_reason(db, order.order_number)
         card["return_reason"], card["refund_preview"] = reason, refund_amount(order, reason)
+    card["exchange_fee"] = exchange_fee.state(order)   # 단순 변심 교환 배송비: 요청(고객 결제 대기) / 완료 / None
+    card["points_balance"] = points_and_coupons(db, customer)[0]["points_balance"]   # 적립금으로 교환 배송비를 받을 수 있는지
     card["related_inquiries"] = [{"id": i.id, "inquiry_number": i.inquiry_number, "title": i.title, "status": i.status,
                                   "created_at": i.created_at, "assigned_to": i.assigned_to} for i in others]
     return card

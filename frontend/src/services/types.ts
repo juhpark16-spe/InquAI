@@ -99,7 +99,19 @@ export interface InquiryPublic {
   photos_requested?: boolean;    // 파손 사진을 나중에 보내기로 함 → 추가 문의에 안내
   refund_account?: RefundAccountMasked | null;   // 보낸 환불 계좌 (가림)
   refund_account_needed?: boolean;                // 무통장입금 취소·반품인데 환불 계좌가 아직 없음
+  exchange_fee?: ExchangeFee | null;              // 교환 배송비: 요청이면 [교환 배송비 결제] 버튼
 }
+
+/** 문의하기의 환불 미리 보기 (회원이 고른 주문, backend/services/refund_preview.py). kind: cancel = 출고 전, return = 출고 뒤·배송 완료 */
+export interface RefundPreview {
+  order_number: string; product_name: string; amount: number; order_status: string; refund_timing: string;
+  kind: "cancel" | "return" | null;
+  partial: { count: number; refund: number; fee: number; left: number }[];
+  change_refund: number | null; defect_refund: number | null; change_until: string | null; defect_until: string | null;
+}
+
+/** 단순 변심 교환 배송비 (backend/services/exchange_fee.py): 요청 = 고객 결제 대기, 완료 = 받음 */
+export interface ExchangeFee { amount: number; status: "요청" | "완료"; method: string | null; at: string }
 
 // ---- 관리 ----
 export interface InquiryListItem {
@@ -271,6 +283,8 @@ export interface OrderCard {
   picked_up_at?: string | null;
   return_reason?: string | null;     // [반품 회수 접수]에서 고른 사유 (단순 변심 / 불량·오배송)
   refund_preview?: number;           // 반품 승인 시 환불 예정 금액 (단순 변심이면 왕복 배송비 차감)
+  exchange_fee?: ExchangeFee | null; // 단순 변심 교환 배송비 (요청/완료)
+  points_balance?: number | null;    // 고객 적립금 잔액 (교환 배송비를 적립금으로 받을 수 있는지)
   related_inquiries?: { id: number; inquiry_number: string; title: string; status: string; created_at: string; assigned_to?: number | null }[];
   shipping_address?: string | null;
   // 같은 상품의 옵션별 재고 (옵션 변경·교환 안내). low = 3개 이하, restock_at = 품절일 때 재입고 예정일

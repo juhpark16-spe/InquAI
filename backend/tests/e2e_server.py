@@ -101,9 +101,10 @@ app.router.lifespan_context = lifespan
 
 @app.middleware("http")
 async def _no_inquiry_create_limit(request, call_next):
-    """화면 테스트는 한 IP(127.0.0.1)에서 1분 안에 문의를 6건 넘게 만듦 → 문의 등록 횟수 제한만 끔 (다른 제한은 그대로)"""
+    """화면 테스트는 한 IP(127.0.0.1)에서 1분 안에 문의를 6건 넘게 만들고, 상담원·고객 로그인도 10번 넘게 함
+    → 문의 등록·로그인 횟수 제한만 끔 (다른 제한은 그대로, 로그인 제한은 백엔드 테스트 test_auth 가 확인)"""
     with rate_limit._lock:
-        for key in [k for k in rate_limit._hits if k[0] == "inquiry_create"]:
+        for key in [k for k in rate_limit._hits if k[0] in ("inquiry_create", "login", "shop_login")]:
             del rate_limit._hits[key]
     return await call_next(request)
 

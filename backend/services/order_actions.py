@@ -9,6 +9,7 @@
 | points 보상 적립금 | 쇼핑몰 고객 + 한도 (상담원 3,000원, 관리자 50,000원) | 적립금 내역 +금액 |
 | coupon 사과 쿠폰 | 쇼핑몰 고객 + 쿠폰 종류별 권한 | 쿠폰 발급 (30일) |
 | return 반품 회수 접수 | 배송 완료 + 기한 안 (단순 변심 7일, 불량·오배송 30일) + 아직 접수 전 | 반품 접수 시각, 회수 예정 안내 |
+| exchange_fee 교환 배송비 받기 | 배송 완료 + 단순 변심 교환 기한(7일) 안 + 아직 받지 않음 | 적립금 -6,000원(잔액 있을 때) 또는 결제 요청 (services/exchange_fee.py) |
 
 주문 처리는 **문의에 적힌 주문이고 문의 이메일과 주문자 이메일이 같을 때만** 합니다 (본인 확인).
 모든 처리는 작업 기록(order_action)에 바뀌기 전·후와 함께 남고, 문의 처리 이력·AI 초안의 처리 기록에 들어갑니다.
@@ -23,12 +24,12 @@ from sqlalchemy.orm import Session
 from backend.core.errors import AppError
 from backend.database.models import (AdminUser, Coupon, Customer, Inquiry, Order, Payment, PointHistory, Ticket,
                                      as_utc, utcnow)
-from backend.services import inventory
+from backend.services import exchange_fee, inventory
 from backend.services.audit import add_audit
 from backend.services.inventory import split_product
 
 from backend.services.policy import (CANCELLABLE, DEFECT_RETURN_DAYS, FREE_SHIPPING_MIN, RETURN_DAYS, RETURN_FEE,  # noqa: F401
-                                     SHIPPING_FEE)
+                                     SHIPPING_FEE, partial_refund)
 POINT_LIMIT = {"agent": 3000, "admin": 50000}     # 1회 보상 적립금 한도
 DUPLICATE_WINDOW = timedelta(minutes=10)
 
@@ -133,11 +134,8 @@ def run(db: Session, request: Request, user: AdminUser, inquiry: Inquiry, action
         qty = order.quantity or 1
         if not 1 <= count < qty:
             raise AppError(422, f"1개부터 {qty - 1}개까지 취소할 수 있습니다 (전부 취소는 취소 티켓 승인으로).", "VALIDATION_ERROR")
-        unit = order.amount // qty
-        left = order.amount - unit * count
-        # 무료배송이던 주문이 3만원 미만이 되면 처음 배송비 3,000원을 빼고 환불 (정책 F28)
-        fee = SHIPPING_FEE if order.amount >= FREE_SHIPPING_MIN > left else 0
-        refund = unit * count - fee
+        # 무료배송이던 주문이 3만원 미만이 되면 처음 배송비 3,000원을 빼고 환불 (정책 F28, 미리 보기와 같은 계산)
+        refund, fee, left = partial_refund(order.amount, qty, count)
         before, after = {"quantity": qty, "amount": order.amount}, {"quantity": qty - count, "amount": left, "shipping_fee": fee}
         order.quantity, order.amount = qty - count, left
         inventory.restock(db, order.product_name, count)   # 취소한 수량은 재고로
@@ -202,6 +200,28 @@ def run(db: Session, request: Request, user: AdminUser, inquiry: Inquiry, action
         after = {"reason": reason}
         fee = "왕복 배송비 6,000원은 환불 금액에서 차감" if reason == "단순 변심" else "배송비는 쇼핑몰 부담"
         summary = f"반품 회수 접수 ({reason}): 1~3영업일 안에 택배 기사 방문, {fee}"
+
+    elif action == "exchange_fee":
+        order = _order(db, inquiry)
+        if order.order_status != "배송 완료" or not order.delivered_at:
+            raise AppError(409, "배송 완료된 주문만 교환 배송비를 받을 수 있습니다.", "INVALID_STATE")
+        if now > as_utc(order.delivered_at) + timedelta(days=RETURN_DAYS):
+            raise AppError(409, f"단순 변심 교환 기한({RETURN_DAYS}일)이 지났습니다.", "INVALID_STATE")
+        how = body.get("method")
+        if how == "points":
+            from backend.services.inquiry_context import points_and_coupons   # inquiry_context 가 이 파일을 불러와서 여기서
+            customer = _customer(db, inquiry)
+            balance = points_and_coupons(db, customer)[0]["points_balance"] or 0
+            exchange_fee.take_points(db, order, customer, balance)
+            after = {"method": "적립금", "amount": RETURN_FEE}
+            summary = f"교환 배송비 {won(RETURN_FEE)}을 적립금으로 받음 (잔액 {won(balance)} → {won(balance - RETURN_FEE)}). 회수를 접수해 주세요"
+        elif how == "request":
+            exchange_fee.request(db, order)
+            after = {"method": "결제 요청", "amount": RETURN_FEE}
+            summary = (f"교환 배송비 {won(RETURN_FEE)} 결제 요청: 고객 문의 화면(내 쇼핑 > 내 문의·문의 조회)에 "
+                       "[교환 배송비 결제] 버튼이 생김. 결제가 확인되면 회수를 접수해 주세요")
+        else:
+            raise AppError(422, "받는 방법을 골라 주세요 (적립금 / 결제 요청).", "VALIDATION_ERROR")
 
     else:
         raise AppError(422, "알 수 없는 처리입니다.", "VALIDATION_ERROR")

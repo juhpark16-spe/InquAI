@@ -28,7 +28,7 @@ InquAI는 **시연·교육용으로 한 대의 컴퓨터에서 돌아가게** �
   $env:TEST_DATABASE_URL = "postgresql+psycopg://postgres:pgtest-only@127.0.0.1:55432/inquai_test"; .venv\Scripts\python -m pytest backend/tests -q
   ```
   테스트는 `TEST_DATABASE_URL`이 있으면 그 DB를 씁니다 (`backend/tests/conftest.py`). **테스트마다 표를 지우고 다시 만들므로 빈 시험용 DB에만** 쓰세요.
-- 결과: **324개 모두 통과** (그 뒤 테스트가 늘어 지금은 332개, CI가 매번 확인) (4분 30초, SQLite와 같은 결과). GitHub 자동 검사에도 'PostgreSQL 테스트'를 넣어 푸시할 때마다 확인합니다.
+- 결과: **324개 모두 통과** (그 뒤 테스트가 늘어 지금은 339개, CI가 매번 확인) (4분 30초, SQLite와 같은 결과). GitHub 자동 검사에도 'PostgreSQL 테스트'를 넣어 푸시할 때마다 확인합니다.
 - 남은 차이: 서버가 켜질 때 새 칸을 자동으로 붙이는 기능은 SQLite에서만 동작합니다. PostgreSQL에서는 Alembic으로 바꿉니다 (2).
 
 ## 2. DB 구조 바꾸기 (Alembic)

@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Bubble, Note, Thumbs } from "./Chat";
 import PhotoPicker, { type PickedPhoto } from "./PhotoPicker";
 import { EMPTY_REFUND, REFUND_WORDS, RefundAccountToggle, refundValue } from "./RefundAccountFields";
+import { confirmDialog } from "./ConfirmDialog";
 import { Alert, Button, Input, Spinner, Textarea, cx, formatDate } from "./ui";
 import { errorMessage } from "../services/api";
 import type { InquiryPublic, RefundAccountInput } from "../services/types";
@@ -14,6 +15,7 @@ export interface ThreadActions {
   rate: (inquiryNumber: string, answerId: number, helpful: boolean) => Promise<unknown>;
   followUp: (inquiryNumber: string, content: string, tokens: string[], orderNumber?: string | null,
     refundAccount?: RefundAccountInput | null) => Promise<unknown>;
+  payExchangeFee: (inquiryNumber: string, method: string) => Promise<unknown>;
 }
 
 function RateButtons({ answerId, rating, onRate }: { answerId: number; rating: number | null; onRate: (id: number, helpful: boolean) => void }) {
@@ -42,6 +44,44 @@ function normalizeOrder(raw: string): string | null {
   if (!v) return "";
   const fixed = /^\d{12}$/.test(v) ? `${v.slice(0, 8)}-${v.slice(8)}` : v;
   return /^\d{8}-\d{4}$/.test(fixed) ? fixed : null;
+}
+
+/** 교환 배송비 결제: 상담원이 결제를 요청한 문의에만 (단순 변심 교환 왕복 6,000원, backend/services/exchange_fee.py).
+ *  시연용 결제라 실제로 돈이 나가지 않음. 결제하면 상담원이 확인 후 회수를 접수 */
+function ExchangeFeePay({ inquiry, actions, onDone }: { inquiry: InquiryPublic; actions: ThreadActions; onDone: (msg: string) => void }) {
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const fee = inquiry.exchange_fee;
+  if (!fee) return null;
+  if (fee.status === "완료") {
+    return <p className="rounded-xl bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800">✓ 교환 배송비 {fee.amount.toLocaleString()}원 결제 완료 ({fee.method}). 담당자가 회수를 접수해 드려요.</p>;
+  }
+  async function pay(method: string) {
+    if (!(await confirmDialog({ title: "교환 배송비 결제", message: `교환 배송비 ${fee!.amount.toLocaleString()}원을 ${method}(으)로 결제할까요?
+(시연용 결제라 실제로 돈이 나가지 않아요)`, confirmLabel: "결제하기" }))) return;
+    setError("");
+    setBusy(method);
+    try {
+      await actions.payExchangeFee(inquiry.inquiry_number, method);
+      onDone("교환 배송비 결제가 완료되었습니다. 담당자가 확인 후 회수를 접수해 드려요.");
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy("");
+    }
+  }
+  return (
+    <div className="space-y-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm">
+      <p className="font-semibold text-ink">교환 배송비 {fee.amount.toLocaleString()}원 결제가 필요해요</p>
+      <p className="text-xs text-body">단순 변심 교환은 왕복 배송비를 고객님이 부담해요. 결제가 확인되면 택배 기사님이 1~3영업일 안에 회수하러 가요.</p>
+      <div className="flex flex-wrap gap-1.5">
+        {["신용카드", "간편결제"].map((m) => (
+          <Button key={m} className="min-h-9 px-3 py-1" disabled={!!busy} onClick={() => pay(m)}>{busy === m ? <Spinner /> : `${m}로 결제`}</Button>
+        ))}
+      </div>
+      {error && <Alert>{error}</Alert>}
+    </div>
+  );
 }
 
 /** 내용 보충 · 추가 문의: 문의 수정 대신 빠뜨린 내용·사진·주문번호를 이어서 보냄 (처음 글은 그대로 남음) */
@@ -235,6 +275,11 @@ export default function InquiryThreads({ items, notice, actions, reload }: {
                   {closed && <Note>이 문의는 답변 없이 종료되었어요. {found.closed_note}</Note>}
                   {!waiting && !closed && found.more_answer_coming && <Note>담당자가 확인한 뒤 이어서 안내해 드릴게요.</Note>}
                 </div>
+                {found.exchange_fee && (
+                  <div className="mt-3">
+                    <ExchangeFeePay inquiry={found} actions={actions} onDone={(msg) => { say(found.inquiry_number, msg); reload(); }} />
+                  </div>
+                )}
                 {done[found.inquiry_number] && <div className="mt-3"><Alert kind="success">{done[found.inquiry_number]}</Alert></div>}
                 <div className="mt-3">
                   <FollowUp inquiry={found} actions={actions}

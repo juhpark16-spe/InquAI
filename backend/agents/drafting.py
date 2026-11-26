@@ -106,6 +106,10 @@ def _order_text(card: dict | None) -> str:
                      + (f" (사유: {card['return_reason']})" if card.get("return_reason") else "")
                      + (f" · 수거 완료 {_kst(card['picked_up_at'])}" if card.get("picked_up_at") else " · 아직 수거 전")
                      + (f" · 환불 예정 {_won(card['refund_preview'])}" if card.get("refund_preview") is not None else ""))
+    fee = card.get("exchange_fee")   # 단순 변심 교환 배송비를 받았는지 (services/exchange_fee.py)
+    if fee:
+        lines.append(f"교환 배송비 {_won(fee['amount'])}: " + ("고객 결제 대기 (결제 요청함, 문의 화면의 [교환 배송비 결제]로 결제)"
+                                                         if fee["status"] == "요청" else f"받음 ({fee['method']})"))
     if card.get("option_choices"):   # 같은 상품의 옵션별 재고: 옵션 변경·교환 문의에 재고를 근거로 안내
         lines.append("같은 상품 옵션 재고: " + " · ".join(inventory.describe(c) for c in card["option_choices"]))
     if card["return_until"]:

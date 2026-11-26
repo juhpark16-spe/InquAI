@@ -137,6 +137,7 @@ export default function InquiryLookupPage() {
         <InquiryThreads items={items} notice={notice} reload={load} actions={{
           rate: (n, id, helpful) => customerApi.rate(id, n, email.trim(), password, helpful),
           followUp: (n, text, tokens, order, refund) => customerApi.followUp(email.trim(), password, n, text, tokens, order, refund),
+          payExchangeFee: (n, method) => customerApi.payExchangeFee(email.trim(), password, n, method),
         }} />
       )}
     </div>

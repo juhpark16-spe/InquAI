@@ -223,6 +223,8 @@
 | GET | /api/shop/orders | 내 주문 (최신순) `[{order_number, product_name, amount, order_status, shipping_status, ordered_at, delivered_at, inquiry_count}]` |
 | GET | /api/shop/inquiries | 내 문의 (조회 비밀번호 없이, `/api/inquiries/lookup`과 같은 형식) |
 | POST | /api/shop/inquiries/{번호}/follow-up | `{ content, attachment_tokens, order_number? }` 추가 문의 (내 문의가 아니면 404, 주문번호는 내 주문만 422) |
+| GET | /api/shop/orders/{주문번호}/refund-preview | 문의하기의 환불 미리 보기: `{kind: cancel 또는 return, amount, partial[{count, refund, fee, left}], change_refund, defect_refund, change_until, defect_until, refund_timing}` (내 주문이 아니면 404, 2026-11-26) |
+| POST | /api/shop/inquiries/{번호}/exchange-fee | `{ method }` (신용카드 또는 간편결제) 교환 배송비 결제 (상담원이 결제를 요청한 문의만, 아니면 409. 시연용 결제, 2026-11-26) |
 | POST | /api/shop/answers/{id}/rating?inquiry_number= | `{ helpful }` 답변 평가 |
 
 - **쿠키:** `shop_session`(HttpOnly, `Path=/api`, 8시간, 종류 `shop` JWT) + `shop_csrf`(`Path=/`). 관리자 로그인 쿠키와 따로라
@@ -295,6 +297,10 @@
 - `customer_history_hidden`: 상담원에게 보이지 않는(남이 맡았거나 미배정) 같은 고객 문의 수 `{total, open}` (내용은 숨김, 관리자는 0)
 - `order.carrier_info` `{name, phone, tracking_url}`: 택배사 고객센터 대표번호와 송장번호를 넣은 배송조회 주소 (`services/carriers.py`, 번호·주소 모두 각 택배사 홈페이지에서 확인함 2026-11-25). `order.driver` `{name, phone}`: '배송 출발' 뒤 담당 기사 (시연은 택배사 조회 API 대신 가짜 기사, 연락처 가운데 가림). 상담원 화면 전용이라 AI 초안·고객 답변에는 넣지 않음
 - `order.return_reason`·`order.refund_preview`: [반품 회수 접수] 뒤 반품 사유와 환불 예정 금액 (반품 승인 확인창)
+- `order.exchange_fee`·`order.points_balance`: 단순 변심 교환 배송비 `{amount, status: 요청|완료, method, at}`와 고객 적립금 잔액.
+  바로 처리 `exchange_fee` `{method: points|request}` = 적립금에서 6,000원 차감(잔액 부족이면 409) 또는 결제 요청(결제 내역 '추가 결제 · 요청').
+  고객은 조회 응답의 `exchange_fee`가 '요청'이면 `POST /api/inquiries/exchange-fee` `{customer_email, password, inquiry_number, method}`(비회원)
+  또는 `POST /api/shop/inquiries/{번호}/exchange-fee`(회원)로 결제 → '완료'. 배송 완료 + 단순 변심 7일 안에서만 (`services/exchange_fee.py`)
 - `customer_profile`: 고객 카드 (같은 이메일 기준). `member`=쇼핑몰 회원 로그인 가능 고객, `phone`은 가운데를 가림,
   `orders`·`inquiries`=주문·문의 수, 불만 신호 `negative_ratings`(이전 답변에 👎 수)·`negative_inquiries`(부정 감정 문의 수).
   화면은 👎가 있거나 부정 문의가 2건 이상이면 "응대에 신경 쓸 고객"으로 표시

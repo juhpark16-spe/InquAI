@@ -9,6 +9,8 @@
     GET  /api/shop/orders                        내 주문 (주문별 문의 수)
     GET  /api/shop/inquiries                     내 문의 (조회 비밀번호 없이)
     POST /api/shop/inquiries/{번호}/follow-up     추가 문의
+    POST /api/shop/inquiries/{번호}/exchange-fee  교환 배송비 결제 (상담원이 요청한 것)
+    GET  /api/shop/orders/{주문번호}/refund-preview 취소·반품하면 돌려받을 금액 미리 보기
     POST /api/shop/answers/{id}/rating           답변 평가
 
 문의 등록은 기존 POST /api/inquiries 를 그대로 쓰고, 로그인 상태면 이름·이메일을 계정 정보로 채웁니다.
@@ -27,7 +29,7 @@ from backend.core.security import clear_shop_cookies, create_shop_token, set_sho
 from backend.database.models import Customer, Inquiry
 from backend.schemas.common import UTCDateTime
 from backend.schemas.inquiry import InquiryLookupResult, RefundAccountIn, fill_follow_up, normalize_order_number
-from backend.services import sla
+from backend.services import exchange_fee, refund_preview, sla
 from backend.services.inquiries import add_follow_up, find_customer_inquiries, public_view, rate_answer
 
 router = APIRouter(prefix="/shop", tags=["쇼핑몰 연동 (고객 로그인)"])
@@ -135,6 +137,14 @@ def my_orders(customer: ShopCustomer, db: DB):
              "inquiry_count": counts[o.order_number]} for o in orders]
 
 
+@router.get("/orders/{order_number}/refund-preview", summary="내 주문을 취소·반품하면 돌려받을 금액 미리 보기 (문의하기 화면)")
+def my_refund_preview(order_number: str, customer: ShopCustomer):
+    order = next((o for o in customer.orders if o.order_number == order_number), None)
+    if order is None:
+        raise AppError(404, "내 주문에서 찾을 수 없습니다.", "NOT_FOUND")
+    return refund_preview.preview(order)
+
+
 @router.get("/inquiries", response_model=InquiryLookupResult, summary="내 문의 (조회 비밀번호 없이)")
 def my_inquiries(customer: ShopCustomer, db: DB):
     return {"items": [public_view(i) for i in find_customer_inquiries(db, customer.email)],
@@ -150,6 +160,18 @@ def follow_up(inquiry_number: str, body: FollowUpBody, customer: ShopCustomer, d
     add_follow_up(db, inquiry, body.content, body.attachment_tokens, body.order_number, body.refund_account)
     return {"inquiry_number": inquiry.inquiry_number, "status": inquiry.status,
             "message": "추가 문의가 접수되었습니다. " + sla.CUSTOMER_NOTICE}
+
+
+class ExchangeFeeBody(BaseModel):
+    method: str = Field(min_length=1, max_length=20)   # 신용카드 / 간편결제
+
+
+@router.post("/inquiries/{inquiry_number}/exchange-fee", summary="교환 배송비 결제 (상담원이 결제를 요청한 문의, 시연용 결제)",
+             dependencies=[Depends(rate_limit("exchange_fee", 5, 60))])
+def pay_exchange_fee(inquiry_number: str, body: ExchangeFeeBody, customer: ShopCustomer, db: DB):
+    paid = exchange_fee.customer_pay(db, _my_inquiry(db, customer, inquiry_number), body.method)
+    db.commit()
+    return {"exchange_fee": paid, "message": "교환 배송비 결제가 완료되었습니다. 상담원이 확인 후 회수를 접수해 드립니다."}
 
 
 @router.post("/answers/{response_id}/rating", summary="답변 평가",

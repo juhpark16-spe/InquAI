@@ -17,13 +17,14 @@ router = APIRouter(prefix="/inquiries", tags=["바로 처리"])
 
 
 class ActionBody(BaseModel):
-    action: Literal["address", "option", "partial_cancel", "duplicate_cancel", "points", "coupon", "return"]
+    action: Literal["address", "option", "partial_cancel", "duplicate_cancel", "points", "coupon", "return", "exchange_fee"]
     address: str | None = Field(None, max_length=200)
     option: str | None = Field(None, max_length=50)
     count: int | None = Field(None, ge=1, le=99)
     amount: int | None = Field(None, ge=0, le=1_000_000)
     reason: str | None = Field(None, max_length=50)
     coupon: str | None = Field(None, max_length=50)
+    method: str | None = Field(None, max_length=20)   # exchange_fee: points(적립금) / request(결제 요청)
 
 
 @router.post("/{inquiry_id}/actions", summary="바로 처리 (로그인)")

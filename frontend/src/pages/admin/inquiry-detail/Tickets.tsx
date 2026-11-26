@@ -7,7 +7,7 @@ import { Alert, Badge, Button, Input, Spinner, cx, formatDate, monthDay } from "
 import { errorMessage, inquiryApi } from "../../../services/api";
 import type { InquiryDetail } from "../../../services/types";
 import { Card, insertIntoReply } from "./parts";
-import { InlineAction } from "./OrderActions";
+import { InlineAction, exchangeFeeText } from "./OrderActions";
 
 export const TICKET_ACTIONABLE = ["취소", "교환", "환불"];
 
@@ -178,6 +178,11 @@ export function Tickets({ data, onChanged }: { data: InquiryDetail; onChanged: (
                           ? <>교환할 수 있는 옵션: {inStock.map((c) => `${c.option}(${c.stock}개)`).join(" · ")}</>
                           : "다른 옵션이 모두 품절이라 교환할 수 없어요 → 반려하고 반품(환불)으로 안내 (정책 F32)"}
                       </p>
+                    )}
+                    {/* 단순 변심 교환이면 왕복 배송비 6,000원을 먼저 받음 (적립금 / 결제 요청), 불량·오배송이면 받지 않음 */}
+                    {exchangeFeeText(o) && <p className={cx("text-sm", o.exchange_fee?.status === "완료" ? "text-emerald-700" : "text-amber-700")}>{exchangeFeeText(o)}</p>}
+                    {t.status === "접수" && !exchangeBlocked && o.returnable && o.exchange_fee?.status !== "완료" && (
+                      <InlineAction action="exchange_fee" label="교환 배송비 받기 (단순 변심)" o={o} inquiryId={data.id} onDone={onChanged} />
                     )}
                   </>
                 )}
