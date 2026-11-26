@@ -19,13 +19,23 @@ def login(client, username="admin"):
     client.headers["X-CSRF-Token"] = client.cookies.get("csrf_token")
 
 
-def seeded(db):
+def seeded(db, now=None):
     seed_data.seed_faqs(db)
-    seed_data.seed_orders(db, reset=False)
+    seed_data.seed_orders(db, reset=False, now=now)
     db.flush()
-    n = seed_inquiries(db)
+    n = seed_inquiries(db, now=now)
     db.commit()
     return n
+
+
+def last_tuesday_11am():
+    """가장 최근 화요일 오전 11시(한국 시간, 지금보다 앞): 시연 데이터 수가 실행한 날·시각에 따라 달라지지 않게 고정할 때.
+    seed_demo 는 '지금'부터 14일 치를 만들어 요일·시각에 따라 보낸 초안 수가 6~15건으로 바뀜 (목요일 오전이 가장 적음)"""
+    kst_now = utcnow().astimezone(sla.KST)
+    day = kst_now.replace(hour=11, minute=0, second=0, microsecond=0) - timedelta(days=(kst_now.weekday() - 1) % 7)
+    if day > kst_now:
+        day -= timedelta(days=7)
+    return day
 
 
 def test_seed_is_repeatable_and_consistent(db):

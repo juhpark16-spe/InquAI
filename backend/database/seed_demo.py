@@ -365,6 +365,7 @@ def seed_inquiries(db: Session, *, now: datetime | None = None, days: int = DAYS
     seq: dict[str, int] = {}
     used_orders: set[int] = set()
     follow_ups = notes = 0
+    edit_turn = edits_done = 0   # 고친 문장이 있는 AI 초안: 번갈아 고침 (보낸 초안이 6건 안팎이라 확률로 정하면 '많이 고침'이 없는 날이 생김)
     admin = db.scalar(select(AdminUser).where(AdminUser.role == "admin").order_by(AdminUser.id))
     # 시연에서 꼭 보여야 할 미처리 문의: 실행 시각 기준 LIVE 문의 (시나리오 고정, 처리하지 않고 남김)
     by_title = {sc.title: sc for sc in scenarios}
@@ -482,8 +483,13 @@ def seed_inquiries(db: Session, *, now: datetime | None = None, days: int = DAYS
         limit = 4 if sc.urgency == "높음" else 20
         sent_at = created + timedelta(hours=rng.uniform(0.5, limit), minutes=rng.randint(0, 59))
         sent_at = min(sent_at, now - timedelta(minutes=5))
-        if draft:  # AI 초안을 승인: 절반 넘게는 그대로, 나머지는 상담원이 고쳐서 (초안 수정 분석 시연)
-            final = rng.choice(sc.edits) if sc.edits and rng.random() < 0.4 else sc.answer
+        if draft:  # AI 초안을 승인: 그대로 보낸 것과 상담원이 고친 것이 섞이게 (초안 수정 분석 시연)
+            final = sc.answer
+            if sc.edits:   # 고침 → 그대로 → 고침 … 고칠 때는 고친 문장을 첫 번째부터 차례로 (첫 번째가 대부분 '많이 고침')
+                if edit_turn % 2 == 0:
+                    final = sc.edits[edits_done % len(sc.edits)]
+                    edits_done += 1
+                edit_turn += 1
             if sc.edits and rng.random() < 0.15:  # 가끔 [AI 초안 만들기]에 요청을 넣어 다시 만든 기록
                 db.add(AdminAuditLog(admin_id=agent.id, action="draft_generate", target_type="inquiry",
                                      target_id=inquiry.id, created_at=sent_at - timedelta(minutes=3),

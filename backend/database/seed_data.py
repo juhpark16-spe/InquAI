@@ -13,7 +13,7 @@ import argparse
 import random
 import sys
 from collections import Counter
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pandas as pd
 from sqlalchemy import delete, func, select, update
@@ -69,7 +69,7 @@ def seed_faqs(db) -> None:
     print(f"[FAQ] {len(df)}개 중 추가 {added}, 수정 {changed}")
 
 
-def seed_orders(db, reset: bool) -> None:
+def seed_orders(db, reset: bool, now: datetime | None = None) -> None:
     if db.scalar(select(func.count()).select_from(Customer)):
         if not reset:
             print("[고객·주문] 이미 있어 건너뜀 (다시 만들려면 --reset)")
@@ -89,7 +89,7 @@ def seed_orders(db, reset: bool) -> None:
     db.add_all(customers)
     db.flush()
 
-    now = utcnow()
+    now = now or utcnow()   # 테스트는 기준 시각을 고정해 넘김 (backend/tests/test_seed_demo.py)
     per_day = Counter()
     orders = []
     for k, (status, count, (d0, d1), delivered) in enumerate(PLAN):
