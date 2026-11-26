@@ -89,6 +89,7 @@ def register_inquiry(db: Session, body: InquiryCreate, analyzer, faq_search, llm
 
     # 3. 에이전트
     result = run_agent(db, inquiry, analysis, faq_search, llm, timeout)
+    analysis = result.analysis or analysis   # 표기 재확인으로 유형이 바뀌었을 수 있음
 
     # 4. 결과 저장
     db.add(AnalysisResult(

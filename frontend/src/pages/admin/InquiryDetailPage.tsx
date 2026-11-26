@@ -124,6 +124,7 @@ export default function InquiryDetailPage() {
   const log = data.agent_logs.at(-1);
   const isOpen = OPEN.includes(data.status);
   const lowConf = !!a && a.confidence < LOW_CONFIDENCE;
+  const recheck = a?.scores?.page_recheck;   // 상품 페이지 표기 오류 신호가 있을 때 AI가 유형을 다시 본 결과
   const topScores = Object.entries(a?.scores?.category ?? {}).sort((x, y) => y[1] - x[1]).slice(0, 3);
   // 검색 점수가 낮은 FAQ는 관계없는 경우가 많아 참고 목록에서 뺌 (고객 화면 추천과 같은 기준)
   const refFaqs = (log?.retrieved_faqs ?? []).filter(([, s]) => s >= FAQ_MIN_SCORE);
@@ -383,6 +384,9 @@ export default function InquiryDetailPage() {
                   <Row label="감정"><Badge value={a.sentiment} /></Row>
                   <Row label="긴급도"><Badge value={a.urgency} /></Row>
                 </dl>
+                {recheck?.changed && (
+                  <p className="mt-2 text-xs text-muted">표기 오류 재확인: 분류 모델 '{recheck.model}' → AI '{recheck.llm}'</p>
+                )}
                 <details className="mt-3" open={lowConf}>
                   <summary className="cursor-pointer text-sm text-muted hover:text-primary">다른 유형 후보</summary>
                   <div className="mt-2 space-y-1">

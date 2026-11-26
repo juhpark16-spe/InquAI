@@ -195,6 +195,7 @@ def main() -> None:
             db.flush()
             t0 = time.monotonic()
             result = run_agent(db, inquiry, analysis, faq_search, llm, settings.agent_timeout_seconds)
+            analysis = result.analysis or analysis   # 표기 재확인으로 유형이 바뀌었을 수 있음
             draft_ms = None
             if needs_draft(result):  # 서버처럼 고객 응답 뒤에 초안을 씀 (시간은 따로 잼)
                 t1 = time.monotonic()

@@ -1,6 +1,6 @@
 """에이전트 처리 흐름 (LangGraph, 3주차). 고객이 기다리는 부분만 그래프로 돌리고, 답변 초안은 응답 뒤에 씁니다.
 
-    START → FAQ 검색 → 규칙 판단 ─┬─(정해짐)──────────────┐
+    START → 표기 재확인 → FAQ 검색 → 규칙 판단 ─┬─(정해짐)──────────────┐
                                   └─(아님)→ LLM 판단 ──────┤
                                                            ▼
                                                      주문 본인 확인
@@ -9,6 +9,7 @@
           답변 검사          │              │              │              │
               └──────────────┴──────────────┴──────────────┴──────────────┴→ END
 
+- 표기 재확인: 상품 페이지 표기 오류 신호가 있는 문의만 LLM이 유형을 다시 정함 (backend/ai/page_check.py)
 - 노드는 상태(AgentState)의 바뀐 부분만 돌려줍니다. DB 세션·문의·검색·LLM·마감 시각은 실행 정보(AgentDeps)로 받습니다.
 - 그림: docs/agent_graph.md (python -m backend.agents.graph 로 다시 그림)
 - 답변 초안은 이 그래프 밖에서 고객 응답 뒤에 씀 (backend/services/drafts.py, 응답 시간·20초 제한 문제 때문)
@@ -23,6 +24,7 @@ from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 from sqlalchemy.orm import Session
 
+from backend.ai import page_check
 from backend.ai.prompts import (ANSWER_PROMPT, ANSWER_SCHEMA, ROUTE_PROMPT, ROUTE_SCHEMA, check_tool, decide_by_rule,
                                 find_promises, format_answer_input, format_route_input)
 from backend.database.models import Inquiry, Order
@@ -67,13 +69,15 @@ class AgentDeps:
     llm: Any
     deadline: float                   # time.monotonic() 기준 마감 시각
 
-    def ask_llm(self, system: str, user: str, schema: dict, name: str) -> tuple[dict, dict]:
+    def ask_llm(self, system: str, user: str, schema: dict, name: str,
+                limit: float | None = None) -> tuple[dict, dict]:
+        """limit: 이 호출에 쓸 최대 시간(초). 없으면 마감까지 남은 시간 전부"""
         if self.llm is None:
             raise RuntimeError("LLM을 쓸 수 없습니다 (OPENAI_API_KEY 없음).")
         remaining = self.deadline - time.monotonic()
         if remaining <= 1:
             raise TimeoutError("에이전트 처리 시간 초과")
-        data, usage = self.llm.json(system, user, schema, name, timeout=remaining)
+        data, usage = self.llm.json(system, user, schema, name, timeout=min(remaining, limit) if limit else remaining)
         return data, {"input": usage.get("input", 0), "output": usage.get("output", 0), "calls": 1}
 
 
@@ -81,6 +85,23 @@ Ctx = Runtime[AgentDeps]
 
 
 # ---- 노드 -------------------------------------------------------------------
+def page_recheck(state: AgentState, runtime: Ctx) -> dict:
+    """표기 오류 신호가 있으면 LLM이 결정 질문으로 유형을 다시 정함. 실패하면 분류 모델 결과 그대로"""
+    deps = runtime.context
+    if deps.llm is None or not page_check.has_page_signal(state["text"]):
+        return {"steps": []}
+    try:
+        out, tokens = deps.ask_llm(page_check.SYSTEM, state["text"], page_check.SCHEMA, "category",
+                                   limit=page_check.TIME_LIMIT)
+        if out.get("category") not in page_check.CATEGORIES:
+            raise ValueError(f"알 수 없는 유형: {out.get('category')}")
+        analysis = page_check.apply_recheck(state["analysis"], state["text"], out["category"])
+    except Exception as e:  # noqa: BLE001
+        return {"analysis": page_check.failed(state["analysis"], f"{type(e).__name__}: {e}"),
+                "steps": ["표기 재확인(실패)"]}
+    return {"analysis": analysis, "tokens": tokens, "steps": ["표기 재확인"]}
+
+
 def search_faq(state: AgentState, runtime: Ctx) -> dict:
     a = state.get("analysis") or {}   # 분류 모델이 확신하는 유형의 FAQ를 조금 앞으로 (backend/rag/category_boost.py)
     hits = search_with_category(runtime.context.faq_search, state["text"], a.get("category"), a.get("confidence"))
@@ -191,12 +212,13 @@ def pick_tool(state: AgentState) -> str:
 
 def build_graph():
     g = StateGraph(AgentState, context_schema=AgentDeps)
-    for name, fn in [("search_faq", search_faq), ("rule_check", rule_check), ("llm_route", llm_route),
+    for name, fn in [("page_recheck", page_recheck), ("search_faq", search_faq), ("rule_check", rule_check), ("llm_route", llm_route),
                      ("verify_order", verify_order), ("faq_answer", faq_answer), ("check_answer", check_answer),
                      ("lookup_shipping", lookup_shipping), ("open_ticket", open_ticket), ("escalate", escalate),
                      ("record_faqs", record_faqs)]:
         g.add_node(name, fn)
-    g.add_edge(START, "search_faq")
+    g.add_edge(START, "page_recheck")
+    g.add_edge("page_recheck", "search_faq")
     g.add_edge("search_faq", "rule_check")
     g.add_conditional_edges("rule_check", after_rule, ["verify_order", "llm_route"])
     g.add_edge("llm_route", "verify_order")
@@ -212,6 +234,7 @@ AGENT_GRAPH = build_graph()
 
 
 NODE_LABELS = {  # 노드 이름 → 화면·문서에 쓰는 이름과 하는 일
+    "page_recheck": ("표기 재확인", "상품 페이지 표기 오류 신호가 있는 문의만 LLM이 결정 질문으로 유형을 다시 정함 (실패하면 분류 모델 결과)"),
     "search_faq": ("FAQ 검색", "KURE + ChromaDB로 비슷한 FAQ 3개 (분류 유형과 같은 FAQ는 점수가 붙어 있을 때 조금 앞으로)"),
     "rule_check": ("규칙 판단", "확신도 0.8 미만·긴급도 높음·기타 유형이면 LLM 없이 담당자 연결"),
     "llm_route": ("LLM 판단", "처리 방식(자동 답변/답변 초안/담당자 연결)과 도구 선택"),

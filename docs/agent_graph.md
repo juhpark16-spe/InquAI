@@ -12,6 +12,7 @@ config:
 ---
 graph TD;
 	__start__([<p>__start__</p>]):::first
+	page_recheck(page_recheck)
 	search_faq(search_faq)
 	rule_check(rule_check)
 	llm_route(llm_route)
@@ -23,9 +24,10 @@ graph TD;
 	escalate(escalate)
 	record_faqs(record_faqs)
 	__end__([<p>__end__</p>]):::last
-	__start__ --> search_faq;
+	__start__ --> page_recheck;
 	faq_answer --> check_answer;
 	llm_route --> verify_order;
+	page_recheck --> search_faq;
 	rule_check -.-> llm_route;
 	rule_check -.-> verify_order;
 	search_faq --> rule_check;
@@ -46,6 +48,7 @@ graph TD;
 
 | 노드 | 이름 | 하는 일 |
 | --- | --- | --- |
+| `page_recheck` | 표기 재확인 | 상품 페이지 표기 오류 신호가 있는 문의만 LLM이 결정 질문으로 유형을 다시 정함 (실패하면 분류 모델 결과) |
 | `search_faq` | FAQ 검색 | KURE + ChromaDB로 비슷한 FAQ 3개 (분류 유형과 같은 FAQ는 점수가 붙어 있을 때 조금 앞으로) |
 | `rule_check` | 규칙 판단 | 확신도 0.8 미만·긴급도 높음·기타 유형이면 LLM 없이 담당자 연결 |
 | `llm_route` | LLM 판단 | 처리 방식(자동 답변/답변 초안/담당자 연결)과 도구 선택 |

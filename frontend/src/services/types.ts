@@ -155,7 +155,12 @@ export interface Analysis {
   decision: string | null;
   decided_by: string | null;
   decision_reason: string | null;
-  scores: { category?: Record<string, number>; sentiment?: Record<string, number> } | null;
+  scores: {
+    category?: Record<string, number>;
+    sentiment?: Record<string, number>;
+    // 표기 재확인 (상품 페이지 표기 오류 신호가 있을 때만): 분류 모델 답 → LLM 답
+    page_recheck?: { model: string; llm: string | null; changed: boolean; ignored?: boolean; error?: string };
+  } | null;
   model_version: string;
 }
 

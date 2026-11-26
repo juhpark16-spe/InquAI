@@ -11,7 +11,7 @@ from backend.tests.test_inquiries import ai, post, route_reply, saved  # noqa: F
 def test_graph_shape():
     g = AGENT_GRAPH.get_graph()
     nodes = set(g.nodes) - {"__start__", "__end__"}
-    assert nodes == {"search_faq", "rule_check", "llm_route", "verify_order", "faq_answer", "check_answer",
+    assert nodes == {"page_recheck", "search_faq", "rule_check", "llm_route", "verify_order", "faq_answer", "check_answer",
                      "lookup_shipping", "open_ticket", "escalate", "record_faqs"}
     mermaid = g.draw_mermaid()
     assert "rule_check" in mermaid and "llm_route" in mermaid
