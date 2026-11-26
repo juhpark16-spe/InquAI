@@ -46,7 +46,7 @@ graph TD;
 
 | 노드 | 이름 | 하는 일 |
 | --- | --- | --- |
-| `search_faq` | FAQ 검색 | KURE + ChromaDB로 비슷한 FAQ 3개 |
+| `search_faq` | FAQ 검색 | KURE + ChromaDB로 비슷한 FAQ 3개 (분류 유형과 같은 FAQ는 점수가 붙어 있을 때 조금 앞으로) |
 | `rule_check` | 규칙 판단 | 확신도 0.8 미만·긴급도 높음·기타 유형이면 LLM 없이 담당자 연결 |
 | `llm_route` | LLM 판단 | 처리 방식(자동 답변/답변 초안/담당자 연결)과 도구 선택 |
 | `verify_order` | 주문 본인 확인 | 주문번호와 문의 이메일이 다르면 담당자 연결 |

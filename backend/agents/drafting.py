@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.ai.prompts import DRAFT_PROMPT, DRAFT_SCHEMA, customer_text, find_promises
+from backend.rag.category_boost import search_with_category
 from backend.database.models import (AdminAuditLog, Attachment, CustomerMessage, Inquiry, ReplyTemplate, Response, Ticket,
                                      as_utc)
 from backend.services import inventory, refund_account
@@ -199,7 +200,11 @@ def generate_draft(db: Session, inquiry: Inquiry, faq_search, llm, timeout: floa
     if analysis is None and inquiry.analysis is not None:
         a = inquiry.analysis
         analysis = {"category": a.category, "sentiment": a.sentiment, "urgency": a.urgency}
-    faqs = faq_search.search(search_query(db, inquiry), 3) if faq_search else []
+    # 분류 결과로 FAQ 순서 보정 (backend/rag/category_boost.py): 넘겨받은 분석 → 저장된 분석 순으로 유형·확신도
+    saved = inquiry.analysis
+    category = (analysis or {}).get("category") or (saved.category if saved else None)
+    confidence = (analysis or {}).get("confidence", saved.confidence if saved else None)
+    faqs = search_with_category(faq_search, search_query(db, inquiry), category, confidence) if faq_search else []
 
     user_input = build_input(db, inquiry, faqs, analysis)
     if instruction and instruction.strip():

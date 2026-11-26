@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from backend.ai.prompts import (ANSWER_PROMPT, ANSWER_SCHEMA, ROUTE_PROMPT, ROUTE_SCHEMA, check_tool, decide_by_rule,
                                 find_promises, format_answer_input, format_route_input)
 from backend.database.models import Inquiry, Order
+from backend.rag.category_boost import search_with_category
 from backend.tools.orders import find_customer_order, shipping_summary
 from backend.tools.tickets import CATEGORY_TICKET_TYPE, create_ticket
 
@@ -81,7 +82,9 @@ Ctx = Runtime[AgentDeps]
 
 # ---- 노드 -------------------------------------------------------------------
 def search_faq(state: AgentState, runtime: Ctx) -> dict:
-    return {"retrieved": runtime.context.faq_search.search(state["text"]), "steps": ["FAQ 검색"]}
+    a = state.get("analysis") or {}   # 분류 모델이 확신하는 유형의 FAQ를 조금 앞으로 (backend/rag/category_boost.py)
+    hits = search_with_category(runtime.context.faq_search, state["text"], a.get("category"), a.get("confidence"))
+    return {"retrieved": hits, "steps": ["FAQ 검색"]}
 
 
 def rule_check(state: AgentState, runtime: Ctx) -> dict:
@@ -209,7 +212,7 @@ AGENT_GRAPH = build_graph()
 
 
 NODE_LABELS = {  # 노드 이름 → 화면·문서에 쓰는 이름과 하는 일
-    "search_faq": ("FAQ 검색", "KURE + ChromaDB로 비슷한 FAQ 3개"),
+    "search_faq": ("FAQ 검색", "KURE + ChromaDB로 비슷한 FAQ 3개 (분류 유형과 같은 FAQ는 점수가 붙어 있을 때 조금 앞으로)"),
     "rule_check": ("규칙 판단", "확신도 0.8 미만·긴급도 높음·기타 유형이면 LLM 없이 담당자 연결"),
     "llm_route": ("LLM 판단", "처리 방식(자동 답변/답변 초안/담당자 연결)과 도구 선택"),
     "verify_order": ("주문 본인 확인", "주문번호와 문의 이메일이 다르면 담당자 연결"),
