@@ -203,7 +203,7 @@ SCENARIOS: list[tuple[Scenario, int]] = [  # (시나리오, 뽑힐 비중)
     (S("결제", "결제가 두 번 됐어요", "{p} 하나 주문했는데 카드 결제 문자가 두 번 왔어요. 확인 부탁드립니다.", "담당자 연결", "상담원 이관",
        "확인해 보니 결제 오류로 중복 승인이 되었습니다. 한 건은 오늘 승인 취소했으며 카드사에 따라 3~5영업일 안에 반영됩니다. "
        "불편을 드려 죄송합니다.", sentiment="부정", urgency="높음", decided_by="규칙", reason="결제 오류 의심 → 긴급 (규칙)",
-       order_status=("출고", "배송 중")), 2),   # 출고된 주문으로 (출고 전 주문은 시연 장면 3·6의 취소·문의용으로 남김)
+       order_status=("출고", "배송 중")), 2),   # 출고된 주문으로 (출고 전 주문은 시연 장면 3-1·4의 문의·취소용으로 남김)
     (S("배송", "배송 완료인데 못 받았어요", "{p} 배송 완료라고 나오는데 문 앞에도 경비실에도 없어요.", "담당자 연결", "상담원 이관",
        "택배사에 확인해 보니 옆 동 경비실로 잘못 배달되었습니다. 기사님이 오늘 중으로 다시 가져다 드린다고 합니다.",
        sentiment="부정", urgency="높음", order_status=("배송 완료",), reason="분실 의심 → 택배사 확인 필요", delivered_days=(0, 3)), 2),
@@ -543,7 +543,7 @@ def _live_touches(db: Session, now: datetime) -> None:
         r = done[1]
         r.rating, r.rated_at = -1, now - timedelta(minutes=LIVE_BAD_RATING_MIN)
     used = {r.inquiry_id for r in done[:2]}
-    # 시연 상담원(agent1 김하늘)의 문의를 먼저 (장면 6-3)
+    # 시연 상담원(agent1 김하늘)의 문의를 먼저 (시연 부록 C)
     agent1 = db.scalar(select(AdminUser.id).where(AdminUser.username == "agent1"))
     picks = sorted((r for r in done if r.inquiry.title in LIVE_RECHECK and r.inquiry_id not in used),
                    key=lambda r: r.approved_by != agent1)   # 같은 상담원이면 가장 최근에 답한 문의 (done 은 최신순)
