@@ -293,3 +293,39 @@ def test_shop_side_problem_line_only_for_damage(client, db, ai):
     broken, _ = saved(db, post(client, content="바디로션 펌프가 깨져서 왔어요. 반품할게요", photos_later=True).json()["inquiry_number"])
     assert "[쇼핑몰 쪽 문제]" not in build_input(db, size, [], None)
     assert "[쇼핑몰 쪽 문제] 파손·불량·오배송 문의 → 첫 문장에 짧게 사과할 것" in build_input(db, broken, [], None)
+
+
+def test_draft_made_meanwhile_is_reused_not_duplicated(client, db, ai):
+    """[AI 초안 만들기]를 빠르게 두 번 눌러 AI가 쓰는 사이 다른 요청이 초안을 만들었으면, 새로 만들지 않고 그 자리에 씀
+    (INQ-20261125-0911: 1초 차이 두 요청이 초안을 2개 만들고, 하나를 보낸 뒤 다른 하나가 답변 칸에 다시 나타났음)"""
+    ai["analyzer"].next = {"confidence": 0.6}
+    inquiry, _ = saved(db, post(client).json()["inquiry_number"])
+    ai["llm"].replies = {"draft": {**DRAFT, "check_points": []}}
+
+    class Racing(Recorder):   # AI가 쓰는 동안 다른 요청이 초안을 만든 상황
+        def json(self, system, user, schema, name, timeout):
+            other = Response(inquiry_id=inquiry.id, generated_by="llm", status="초안", draft_text="먼저 만들어진 초안")
+            db.add(other)
+            db.commit()
+            return super().json(system, user, schema, name, timeout)
+
+    app.state.llm = Racing(ai["llm"])
+    r = client.post(f"/api/inquiries/{inquiry.id}/draft", headers=login(client))
+    assert r.status_code == 200
+    db.expire_all()
+    drafts = db.scalars(select(Response).where(Response.inquiry_id == inquiry.id, Response.status == "초안")).all()
+    assert len(drafts) == 1 and drafts[0].id == r.json()["id"] and drafts[0].draft_text != "먼저 만들어진 초안"
+
+
+def test_sending_removes_leftover_drafts(client, db, ai):
+    """발송하면 같은 문의에 남은 다른 미발송 초안은 지움 (발송 뒤 옛 초안이 답변 칸에 다시 나타나지 않게)"""
+    ai["analyzer"].next = {"confidence": 0.6}
+    inquiry, _ = saved(db, post(client).json()["inquiry_number"])
+    keep = Response(inquiry_id=inquiry.id, generated_by="llm", status="초안", draft_text="보낼 초안")
+    leftover = Response(inquiry_id=inquiry.id, generated_by="llm", status="초안", draft_text="남은 초안")
+    db.add_all([keep, leftover])
+    db.commit()
+    assert client.post(f"/api/responses/{keep.id}/approve", headers=login(client)).status_code == 200
+    db.expire_all()
+    left = db.scalars(select(Response).where(Response.inquiry_id == inquiry.id)).all()
+    assert [(x.draft_text, x.status) for x in left] == [("보낼 초안", "발송")]

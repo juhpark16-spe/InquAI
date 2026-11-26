@@ -128,7 +128,11 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged, onDirtyCh
   const [stale, setStale] = useState(false);
   const base = draft ? (draft.final_text ?? draft.draft_text) : null;
 
+  // 처리 중인 요청이 있으면 두 번째 클릭은 보내지 않음 (busy 는 화면이 다시 그려진 뒤에야 버튼을 막아, 빠르게 두 번 누르면 초안이 2개 생겼음)
+  const inFlight = useRef(false);
   async function run(kind: "save" | "send" | "draft", action: () => Promise<unknown>, ok: string) {
+    if (inFlight.current) return;
+    inFlight.current = true;
     setError("");
     setNotice("");
     setBusy(kind);
@@ -140,6 +144,7 @@ export default function AnswerComposer({ data, refFaqCodes, onChanged, onDirtyCh
       setStale(errorCode(err) === "STALE");
       setError(errorMessage(err));
     } finally {
+      inFlight.current = false;
       setBusy("");
     }
   }

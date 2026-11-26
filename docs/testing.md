@@ -5,7 +5,7 @@ InquAI에는 세 종류의 자동 테스트가 있고, main에 푸시할 때마�
 
 | 종류 | 무엇을 확인하나 | 실행 (프로젝트 루트에서) | CI 작업 이름 |
 | --- | --- | --- | --- |
-| 백엔드 테스트 (pytest, 330개) | API·권한·에이전트 흐름·보안 규칙 | `python -m pytest backend/tests -q` | 백엔드 테스트 |
+| 백엔드 테스트 (pytest, 332개) | API·권한·에이전트 흐름·보안 규칙 | `python -m pytest backend/tests -q` | 백엔드 테스트 |
 | 같은 테스트를 PostgreSQL에서 | 실서비스 DB에서도 같은 결과인지 | `TEST_DATABASE_URL` 지정 후 위와 같음 (`docs/production.md` 1장) | 백엔드 테스트 (PostgreSQL) |
 | 화면 자동 테스트 (Playwright, 16개) | 실제 브라우저로 화면을 눌러 핵심 흐름 확인 | `cd frontend` 후 `npm run test:e2e` | 화면 자동 테스트 |
 | Docker 확인 | 이미지 빌드, 비밀값·모델이 이미지에 없는지, 켜서 응답하는지 | (CI 전용, `docs/docker.md` 5절) | Docker 빌드 |

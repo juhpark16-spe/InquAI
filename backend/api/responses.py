@@ -86,6 +86,10 @@ def _send(db: Session, request: Request, response: Response, user: AdminUser, re
     response.is_edited = response.generated_by == "llm" and final != response.draft_text
     response.status = "발송"
     response.approved_by, response.approved_at = user.id, utcnow()
+    # 같은 문의에 남은 다른 미발송 초안은 지움 (발송 뒤 옛 초안이 답변 칸에 다시 나타나지 않게, 예: 두 번 눌러 생긴 초안)
+    for leftover in db.scalars(select(Response).where(Response.inquiry_id == response.inquiry_id, Response.status == "초안",
+                                                      Response.id != response.id)).all():
+        db.delete(leftover)
     inquiry = db.get(Inquiry, response.inquiry_id)
     before = inquiry.status
     # 승인 대기 중인 취소·교환·반품 요청이 있으면 완료하지 않음 (목록·미처리 건수에서 빠져 요청이 잊히지 않게)
@@ -179,6 +183,9 @@ def create_draft(inquiry_id: int, request: Request, user: LoginUser, db: DB, bod
         logger.exception("AI 초안 생성 실패: %s", inquiry.inquiry_number)
         raise AppError(502, "AI 초안을 만들지 못했습니다. 잠시 후 다시 시도하거나 직접 작성해 주세요.", "DRAFT_FAILED")
 
+    if draft is None:   # AI가 쓰는 10초 사이 다른 요청(두 번 누름·응답 뒤 자동 초안)이 초안을 만들었으면 그 자리에 씀 (초안이 2개 생기지 않게)
+        draft = db.scalar(select(Response).where(Response.inquiry_id == inquiry.id, Response.status == "초안")
+                          .order_by(Response.id).limit(1))
     if draft is None:
         draft = Response(inquiry_id=inquiry.id, generated_by="llm", status="초안", draft_text=result.answer)
         db.add(draft)

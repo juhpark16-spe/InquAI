@@ -38,6 +38,9 @@ def write_draft(inquiry_id: int, faq_search, llm, timeout: float) -> None:
                 log.reason = (log.reason or "") + " / 초안 작성 실패"
             db.commit()
             return
+        if db.scalar(select(Response).where(Response.inquiry_id == inquiry_id, Response.status == "초안")):
+            db.commit()   # 쓰는 사이 상담원이 [AI 초안 만들기]로 초안을 만들었으면 그쪽을 남김 (초안이 2개 생기지 않게)
+            return
         db.add(Response(inquiry_id=inquiry_id, draft_text=d.answer, generated_by="llm", used_faq_ids=d.used_faq_ids,
                         grounded=d.grounded, check_points=d.check_points or None, status="초안"))
         if log is not None:
