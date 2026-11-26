@@ -68,6 +68,10 @@ faqs                                              FAQ 원본 → ChromaDB 색인
 | customer_email | VARCHAR(255) | 본인 확인용 (문의 조회, 주문 확인). 소문자로 저장 |
 | **lookup_password_hash** | VARCHAR(255) NULL | **문의 조회 비밀번호의 Argon2 해시.** 이메일 + 이 비밀번호로 본인 문의를 조회 (2주차 추가) |
 | order_number | VARCHAR(30) NULL | 주문 관련 문의일 때만 |
+| refund_bank | VARCHAR(20) NULL | 환불 받을 은행 (무통장입금 주문 취소·반품, `services/refund_account.py`). 은행 이름은 그대로 |
+| **refund_holder** | VARCHAR(255) NULL | **예금주, 암호문(Fernet)으로 저장** |
+| **refund_account** | VARCHAR(255) NULL | **계좌번호(숫자만), 암호문(Fernet)으로 저장.** 화면에는 끝 4자리만, 전체는 [번호 보기] + 작업 기록 |
+| refund_account_at | DATETIME NULL | 환불 계좌를 받은 시각 |
 | title | VARCHAR(200) | |
 | content | TEXT | 문의 원문 |
 | status | VARCHAR(10) | 아래 상태값 |

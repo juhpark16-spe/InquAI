@@ -20,7 +20,7 @@ from backend.core.errors import register_error_handlers
 from backend.core.security_headers import add_security_headers
 from backend.database.session import SessionLocal, init_db
 from backend.rag.faq_search import FaqSearch
-from backend.services import inventory, reply_templates, uploads
+from backend.services import inventory, refund_account, reply_templates, uploads
 
 settings = get_settings()
 logger = logging.getLogger("inquai")
@@ -47,6 +47,7 @@ async def lifespan(app: FastAPI):
         added = reply_templates.ensure_defaults(db)   # 답변 문구 표가 비어 있으면 기본 문구 (예전 DB도 바로 쓰이게)
         added += inventory.ensure_catalog(db)        # 상품 옵션·재고 표에 없는 옵션 채움
         added += uploads.purge_unclaimed(db)         # 문의에 연결되지 않은 오래된 사진 지움
+        added += refund_account.encrypt_legacy(db)   # 암호화 전에 저장된 환불 계좌를 암호화
         if added:
             db.commit()
 

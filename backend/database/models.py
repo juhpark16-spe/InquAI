@@ -107,9 +107,10 @@ class Inquiry(TimestampMixin, Base):
     privacy_agreed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))  # 개인정보 수집·이용 동의 시각
     # 환불 계좌 (무통장입금 주문의 취소·반품 환불용, services/refund_account.py). 문의 글과 따로 저장하고 AI에는 넘기지 않음.
     # 고객 화면은 가려서, 상담원은 [번호 보기]를 눌러야 전체 번호가 보이고 그때마다 작업 기록(refund_account_view)
+    # 예금주·계좌번호는 암호문(Fernet)으로 저장 → 길이가 늘어 255자
     refund_bank: Mapped[str | None] = mapped_column(String(20))
-    refund_holder: Mapped[str | None] = mapped_column(String(30))
-    refund_account: Mapped[str | None] = mapped_column(String(30))
+    refund_holder: Mapped[str | None] = mapped_column(String(255))
+    refund_account: Mapped[str | None] = mapped_column(String(255))
     refund_account_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     assigned_to: Mapped[int | None] = mapped_column(ForeignKey("admin_users.id"))
     # 다시 안내 (backend/services/recheck.py): "확인 후 다시 안내드리겠습니다"를 먼저 보냈을 때 확인할 내용·기한

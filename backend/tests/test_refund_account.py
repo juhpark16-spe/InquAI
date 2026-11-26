@@ -1,9 +1,10 @@
 """환불 계좌 (무통장입금 주문 취소·반품): 문의 글과 따로 받고, 고객·상담원 화면에는 가려서, [번호 보기]는 작업 기록,
-AI 초안 입력에는 받았는지만 (번호는 넘기지 않음)."""
+AI 초안 입력에는 받았는지만 (번호는 넘기지 않음). 예금주·계좌번호는 DB에 암호문으로 저장."""
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from backend.agents.drafting import build_input
+from backend.services import refund_account
 from backend.database.models import AdminAuditLog, AnalysisResult, Customer, Order, Ticket, utcnow
 from backend.tests.test_customer_features import PW, admin_login, lookup
 from backend.tests.test_inquiries import ai, post, saved  # noqa: F401  (fixture 재사용)
@@ -37,7 +38,8 @@ def test_follow_up_with_refund_account_only(client, db, ai):
             "content": "", "refund_account": ACCOUNT}
     assert client.post("/api/inquiries/follow-up", json=body).status_code == 201
     db.expire_all()
-    assert inquiry.refund_account == "3520987654321" and inquiry.refund_bank == "국민은행"
+    assert inquiry.refund_bank == "국민은행"
+    assert refund_account.decrypt(inquiry.refund_account) == "3520987654321"
     item = lookup(client).json()["items"][0]
     assert item["refund_account"]["number"] == "****4321" and item["refund_account"]["holder"] == "김*준"
     assert item["refund_account_needed"] is False
@@ -74,4 +76,35 @@ def test_new_inquiry_can_carry_refund_account(client, db, ai):
     r = post(client, content="무통장으로 산 주문 취소하려고요", refund_account=ACCOUNT)
     assert r.status_code == 201
     inquiry, _ = saved(db, r.json()["inquiry_number"])
-    assert inquiry.refund_account == "3520987654321" and "3520987654321" not in inquiry.content
+    assert refund_account.decrypt(inquiry.refund_account) == "3520987654321" and "3520987654321" not in inquiry.content
+
+
+def test_stored_encrypted_in_db(client, db, ai):
+    """DB 파일에는 예금주·계좌번호가 암호문으로만 남음 (평문 번호·이름이 없음)"""
+    r = post(client, content="무통장으로 산 주문 취소하려고요", refund_account=ACCOUNT)
+    inquiry, _ = saved(db, r.json()["inquiry_number"])
+    row = db.execute(text("SELECT refund_bank, refund_holder, refund_account FROM inquiries WHERE id = :i"), {"i": inquiry.id}).one()
+    assert row.refund_bank == "국민은행"
+    assert row.refund_account.startswith(refund_account.TOKEN_PREFIX) and "3520987654321" not in row.refund_account
+    assert row.refund_holder.startswith(refund_account.TOKEN_PREFIX) and "김민준" not in row.refund_holder
+    assert refund_account.encrypt("3520987654321") != row.refund_account          # 같은 번호도 매번 다른 암호문
+
+
+def test_legacy_plain_values_are_encrypted(client, db, ai):
+    """암호화 전에 평문으로 저장된 계좌는 서버가 켜질 때 암호화되고, 그 전에도 화면에는 똑같이 보임"""
+    inquiry = bank_transfer_inquiry(client, db)
+    inquiry.refund_bank, inquiry.refund_holder, inquiry.refund_account = "국민은행", "김민준", "3520987654321"
+    db.commit()
+    assert refund_account.masked(inquiry)["number"] == "****4321"                 # 평문이어도 읽힘
+    assert refund_account.encrypt_legacy(db) == 1
+    db.commit()
+    assert inquiry.refund_account.startswith(refund_account.TOKEN_PREFIX)
+    assert refund_account.full(inquiry)["number"] == "3520987654321" and refund_account.full(inquiry)["holder"] == "김민준"
+    assert refund_account.encrypt_legacy(db) == 0                                  # 두 번 암호화하지 않음
+
+
+def test_wrong_key_shows_unreadable(client, db, ai):
+    """열쇠가 바뀌어 풀 수 없으면 오류 대신 '(열 수 없음)'"""
+    from cryptography.fernet import Fernet
+    other = Fernet(Fernet.generate_key()).encrypt(b"3520987654321").decode()
+    assert refund_account.decrypt(other) == refund_account.UNREADABLE
