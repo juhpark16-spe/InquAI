@@ -32,7 +32,12 @@ class InquiryClassifier:
         inputs = self.tokenizer(
             texts, truncation=True, max_length=self.max_length, padding=True, return_tensors="pt"
         ).to(self.device)
-        probs = torch.softmax(self.model(**inputs).logits, dim=-1).cpu()
+        logits = self.model(**inputs).logits
+        # sigmoid 로 학습한 모델(train.py --loss bce, 실험)은 유형마다 따로 0~1. 지금 서버 모델은 softmax (합 1)
+        if self.model.config.problem_type == "multi_label_classification":
+            probs = torch.sigmoid(logits).cpu()
+        else:
+            probs = torch.softmax(logits, dim=-1).cpu()
 
         results = []
         for row in probs:

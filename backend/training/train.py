@@ -77,6 +77,9 @@ def parse_args():
     p.add_argument("--label-smoothing", type=float, default=0.1,
                    help="정답을 100%%가 아닌 90%% 등으로 부드럽게 학습해 과한 확신도를 줄임 (0이면 끔)")
     p.add_argument("--seed", type=int, default=42)
+    p.add_argument("--loss", default="ce", choices=["ce", "bce"],
+                   help="ce = softmax + 교차 엔트로피 (기본, 문의당 유형 하나), "
+                        "bce = 유형마다 sigmoid + 이진 교차 엔트로피 (실험, docs/model_card.md 'softmax와 sigmoid 비교')")
     p.add_argument("--extra-train", nargs="*", default=[],
                    help="학습 분할에만 더할 CSV (text, <라벨> 컬럼). 상담원 분류 수정·약점 보강 문장 등 (docs/retraining.md)")
     p.add_argument("--extra-repeat", type=int, nargs="*", default=[],
@@ -202,10 +205,11 @@ def compute_metrics(eval_pred):
 class WeightedTrainer(Trainer):
     """클래스 가중치와 라벨 스무딩을 적용한 CrossEntropy 손실을 쓰는 Trainer."""
 
-    def __init__(self, *args, class_weights: torch.Tensor | None = None, label_smoothing: float = 0.0, **kwargs):
+    def __init__(self, *args, class_weights: torch.Tensor | None = None, label_smoothing: float = 0.0, loss: str = "ce", **kwargs):
         super().__init__(*args, **kwargs)
         self.class_weights = class_weights
         self.label_smoothing = label_smoothing
+        self.loss = loss
 
     def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
         labels = inputs.pop("labels")
@@ -213,9 +217,15 @@ class WeightedTrainer(Trainer):
         weight = None
         if self.class_weights is not None:
             weight = self.class_weights.to(outputs.logits.device)
-        loss = torch.nn.functional.cross_entropy(
-            outputs.logits, labels, weight=weight, label_smoothing=self.label_smoothing
-        )
+        if self.loss == "bce":
+            # 유형마다 따로 "맞다/아니다" (sigmoid). 정답 하나짜리 데이터라 원-핫을 목표로, 라벨 스무딩은 0/1을 ε/2, 1-ε/2 로
+            target = torch.nn.functional.one_hot(labels, outputs.logits.size(-1)).float()
+            target = target * (1 - self.label_smoothing) + self.label_smoothing / 2
+            loss = torch.nn.functional.binary_cross_entropy_with_logits(outputs.logits, target, pos_weight=None)
+        else:
+            loss = torch.nn.functional.cross_entropy(
+                outputs.logits, labels, weight=weight, label_smoothing=self.label_smoothing
+            )
         return (loss, outputs) if return_outputs else loss
 
 
@@ -265,6 +275,8 @@ def main():
         num_labels=len(labels),
         id2label=id2label,
         label2id=label2id,
+        # 예측(predict.py)이 이 값을 보고 sigmoid 확률을 씀. ce 는 기본값(None) 그대로라 지금 모델과 같음
+        problem_type="multi_label_classification" if args.loss == "bce" else None,
     )
 
     train_ds = to_dataset(train_df, label_column, label2id, tokenizer, args.max_length)
@@ -320,6 +332,7 @@ def main():
         callbacks=[EarlyStoppingCallback(early_stopping_patience=2)],
         class_weights=class_weights,
         label_smoothing=args.label_smoothing,
+        loss=args.loss,
     )
 
     # 4. 학습 (검증 Macro F1이 가장 높은 체크포인트를 최종 모델로 사용)
@@ -358,6 +371,7 @@ def main():
             "class_weight": args.class_weight,
             "class_weight_power": args.class_weight_power,
             "label_smoothing": args.label_smoothing,
+            "loss": args.loss,
             "seed": args.seed,
             "extra_train": extra_info,
         },
