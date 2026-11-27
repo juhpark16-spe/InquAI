@@ -26,6 +26,8 @@ os.environ.update({
     "COOKIE_SECURE": "false",
     "LOAD_MODELS": "false",
     "OPENAI_API_KEY": "",
+    "GEMINI_API_KEY": "",
+    "LLM_PROVIDER": "openai",
     "LANGSMITH_TRACING": "false",
     "MAIL_ENABLED": "false",
     "PASSWORD_MIN_LENGTH": "8",

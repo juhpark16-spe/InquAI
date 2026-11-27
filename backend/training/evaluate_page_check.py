@@ -39,7 +39,7 @@ def main():
     p.add_argument("--repeat", type=int, default=3)
     args = p.parse_args()
     settings = get_settings()
-    clf, llm = InquiryClassifier(settings.category_model_dir), LLM(settings)
+    clf, llm = InquiryClassifier(settings.category_model_dir), LLM(settings, patient=True)
     report = {"model": settings.category_model_version, "llm": llm.label, "repeat": args.repeat, "sets": {}}
     for name, path in FILES.items():
         d = pd.read_csv(ROOT / path)

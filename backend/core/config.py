@@ -14,9 +14,15 @@ class Settings(BaseSettings):
     app_name: str = "InquAI"
     database_url: str = "sqlite:///./data/inquai.db"
 
+    # LLM 회사: openai 또는 gemini. Gemini도 OpenAI와 같은 방식(OpenAI 호환 주소)으로 부름 (backend/ai/llm.py)
+    llm_provider: str = "openai"
     # OpenAI (추론 강도 low: 1주차 프롬프트 검증에서 정확도·속도 균형이 가장 좋았음)
     openai_api_key: str = ""
     openai_model: str = "gpt-5-mini"
+    # Gemini (2026-11-27 OpenAI 크레딧 소진으로 추가). flash-lite: 답 1개 약 1초.
+    # lite가 아닌 flash 모델은 같은 요청에 20초 넘게 걸리거나 시간 초과 → 문의 1건 제한(20초)에 맞지 않음
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.5-flash-lite"
     llm_reasoning_effort: str = "low"
     # 문의 등록 1건의 에이전트 처리 제한 시간. 넘으면 자동 답변 없이 '검토 대기' (docs/api_spec.md 3장)
     agent_timeout_seconds: float = 20.0
@@ -87,6 +93,16 @@ class Settings(BaseSettings):
         if self.database_url.startswith(prefix):
             return f"sqlite:///{(PROJECT_ROOT / self.database_url[len(prefix):]).as_posix()}"
         return self.database_url
+
+
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+
+
+def llm_connection(s: "Settings") -> tuple[str, str, str | None]:
+    """(API 키, 모델, 접속 주소). 키가 비어 있으면 LLM 없이 동작"""
+    if s.llm_provider.lower() == "gemini":
+        return s.gemini_api_key, s.gemini_model, GEMINI_BASE_URL
+    return s.openai_api_key, s.openai_model, None
 
 
 @lru_cache

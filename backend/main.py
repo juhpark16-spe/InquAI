@@ -15,7 +15,7 @@ from backend.api import (agent_logs, audit_logs, auth, customers, faqs_admin, fa
                          order_actions, reply_templates as reply_templates_api, responses,
                          retraining, shop, staff, stats, tickets)
 from backend.core import tracing
-from backend.core.config import get_settings
+from backend.core.config import get_settings, llm_connection
 from backend.core.errors import register_error_handlers
 from backend.core.security_headers import add_security_headers
 from backend.database.session import SessionLocal, init_db
@@ -58,12 +58,12 @@ async def lifespan(app: FastAPI):
         app.state.analyzer = Analyzer(settings)  # 분류 모델 2개를 한 번만 불러와 메모리에 둠
 
     app.state.llm = None
-    if settings.openai_api_key:
+    if llm_connection(settings)[0]:
         from backend.ai.llm import LLM
 
         app.state.llm = LLM(settings)
     else:
-        logger.warning("OPENAI_API_KEY 가 없어 LLM 판단 없이 동작합니다 (규칙에 걸리지 않는 문의는 검토 대기).")
+        logger.warning("LLM API 키가 없어 LLM 판단 없이 동작합니다 (규칙에 걸리지 않는 문의는 검토 대기).")
     yield
     tracing.flush()  # 남은 추적 기록을 보내고 종료
 

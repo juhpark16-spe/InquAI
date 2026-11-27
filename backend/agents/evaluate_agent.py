@@ -162,14 +162,15 @@ def main() -> None:
     settings = get_settings()
     if args.trace and tracing.setup(settings.model_copy(update={"langsmith_project": "inquai-eval"})):
         print("LangSmith 기록: 프로젝트 inquai-eval")
-    if not settings.openai_api_key:
-        raise SystemExit(".env 에 OPENAI_API_KEY 가 필요합니다.")
+    from backend.core.config import llm_connection
+    if not llm_connection(settings)[0]:
+        raise SystemExit(".env 에 LLM API 키(OPENAI_API_KEY 또는 GEMINI_API_KEY)가 필요합니다.")
     cases = json.loads(Path(args.cases).read_text(encoding="utf-8"))
     if args.only:
         cases = [c for c in cases if c["id"] in args.only]
 
     print("모델 불러오는 중 (분류 모델 2개, FAQ 검색)...")
-    analyzer, llm, faq_search = Analyzer(settings), LLM(settings), make_searcher(args.engine)
+    analyzer, llm, faq_search = Analyzer(settings), LLM(settings, patient=True), make_searcher(args.engine)
     init_db()
     rows = []
     with SessionLocal() as db:
