@@ -17,11 +17,19 @@
 결과: data/supplement/page_distill_raw.csv(전부·버린 이유), data/supplement/page_distill.csv(학습용)
     python backend/training/distill_page.py --per-request 8
     python backend/training/distill_page.py --relabel      # 생성은 그대로, 걸러내기·라벨만 다시
+
+2차 (--round 2, 2026-11-27)
+    1차 704문장(기타 355)으로 학습하니 경계는 65.6 → 88.9로 올랐지만 페이지를 언급하는 보통 상품 질문까지 기타로 쏠림.
+    → 페이지를 언급하는 상품 질문 상황 6가지를 더 만들고(page_distill2.csv),
+      --mix 로 1차 기타 표기 알림은 100문장만 남기고 나머지와 합침 (page_distill_mix.csv)
+    python backend/training/distill_page.py --round 2 --per-request 8
+    python backend/training/distill_page.py --mix --other 100
 """
 
 import argparse
 import json
 import random
+import re
 import sys
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -41,9 +49,6 @@ from backend.ai import page_check  # noqa: E402
 from backend.ai.llm import LLM  # noqa: E402
 from backend.core.config import get_settings  # noqa: E402
 
-RAW = PROJECT_ROOT / "data/supplement/page_distill_raw.csv"
-OUT = PROJECT_ROOT / "data/supplement/page_distill.csv"
-
 SITUATIONS = [  # 유형 이름은 주지 않음 → 라벨은 선생님이 정함
     ("두 곳 표기 다름", "구매 전에 상품 페이지 두 곳(상품명·옵션·상세 설명·스펙표·사진·목록·주의사항 등)의 정보가 서로 다르게 적혀 있다고 말함"),
     ("페이지 깨짐·오타·엉뚱한 내용", "상품 페이지의 이미지가 깨지거나, 오타가 있거나, 다른 상품 설명·사진이 들어가 있거나, 정보가 오래되었다고 말함"),
@@ -54,10 +59,23 @@ SITUATIONS = [  # 유형 이름은 주지 않음 → 라벨은 선생님이 정�
     ("받은 물건이 표기와 달라 요청", "주문해서 받은 상품이 페이지 표기(색·크기·소재·구성·용량)와 달라서 교환이나 반품·환불을 요청함"),
     ("받은 물건이 표기와 다름만 말함", "주문해서 받은 상품이 페이지 표기와 다르다고 말하거나 원래 그런지 물음. 교환·반품 요청은 하지 않음"),
 ]
+SITUATIONS2 = [  # 2차: 페이지를 언급하지만 틀렸다는 말이 없는 상품 질문 (실전 오답 "상세페이지 색상이랑 실제 색상이 많이 다른가요?" 같은 것)
+    ("사진과 실물 차이 정도", "구매 전에 상세페이지 사진·색상과 실제 상품이 얼마나 다른지, 차이가 큰 편인지 물음. '다른가요', '차이 나나요' 같은 말을 써도 됨. 페이지가 틀렸다고 하지는 않음"),
+    ("옵션끼리 차이", "구매 전에 페이지의 옵션 두 개(색상·용량·모델·세트 구성)가 어떻게 다른지, 어느 쪽이 나에게 맞는지 물음"),
+    ("사이즈표 보고 추천", "상세페이지 사이즈표·치수를 보고 내 체형·공간에 어떤 사이즈가 맞는지 물음"),
+    ("설명의 낯선 말 뜻", "상세 설명·스펙표에 적힌 용어·약자·수치의 뜻을 물음 (예: 데니어, IPX, 정격 출력)"),
+    ("적힌 정보에 없는 것", "페이지에 나와 있지 않은 정보(무게, 원산지, 부속품, 세탁법 등)를 따로 알려 달라고 물음"),
+    ("후기·사진 보고 걱정", "상세페이지 사진이나 설명을 보고 실제 사용에서 걱정되는 점(내구성·냄새·소음·보풀)을 물음"),
+]
 DOMAINS = ["의류", "신발·가방", "생활가전", "주방용품", "식품", "화장품", "유아용품", "가구·침구", "전자기기·액세서리",
            "문구·취미", "반려동물 용품", "스포츠·캠핑"]
 STYLES = [("게시판체", "존댓말로 또박또박"), ("구어체", "말하듯 편하게, 맞춤법이 조금 틀려도 됨"),
           ("짧은 글", "한두 문장으로 짧게, 마침표·물음표를 빼기도 함")]
+
+SUP = PROJECT_ROOT / "data/supplement"
+ROUNDS = {1: (SITUATIONS, SUP / "page_distill_raw.csv", SUP / "page_distill.csv"),
+          2: (SITUATIONS2, SUP / "page_distill2_raw.csv", SUP / "page_distill2.csv")}
+MIX = SUP / "page_distill_mix.csv"
 
 PROMPT = """너는 한국 온라인 쇼핑몰에 들어오는 고객 문의를 만드는 작가다. 서로 다른 고객 문의 {n}개를 만든다.
 
@@ -85,7 +103,7 @@ def generate(llm, job, n, seeds):
     for _ in range(3):
         try:
             out, _ = llm.json("", content, SCHEMA, "inquiries", timeout=120)
-            return [{"text": " ".join(i["text"].split()), "sentiment": i["sentiment"], "situation": sit,
+            return [{"text": re.sub(r"\s*\((중립|부정|긍정)\)", "", " ".join(i["text"].split())).strip(), "sentiment": i["sentiment"], "situation": sit,
                      "domain": domain, "style": style} for i in out["items"]]
         except Exception as e:  # noqa: BLE001
             print(f"  [재시도] {sit}/{domain}: {type(e).__name__}")
@@ -95,7 +113,7 @@ def generate(llm, job, n, seeds):
 def filter_rows(df):
     existing = set()
     for f in EXISTING_FILES + ["data/supplement/generated_weak4.csv", "data/supplement/page_error_balanced.csv",
-                               "data/supplement/page_error_boost.csv"]:
+                               "data/supplement/page_error_boost.csv", "data/supplement/page_distill.csv"]:
         if resolve(f).exists():
             existing |= {key(t) for t in pd.read_csv(resolve(f), encoding="utf-8-sig")["text"]}
     eval_grams = [grams(t) for f in EVAL_FILES for t in pd.read_csv(resolve(f), encoding="utf-8")["text"]]
@@ -135,14 +153,20 @@ def main():
     p.add_argument("--workers", type=int, default=6)
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--relabel", action="store_true")
+    p.add_argument("--round", type=int, default=1, choices=sorted(ROUNDS))
+    p.add_argument("--mix", action="store_true", help="1차 기타 표기 알림을 --other개만 남기고 1·2차를 합침 (API 없음)")
+    p.add_argument("--other", type=int, default=100)
     args = p.parse_args()
-    llm = LLM(get_settings())
+    if args.mix:
+        return mix(args.other, args.seed)
+    situations, RAW, OUT = ROUNDS[args.round]
+    llm = LLM(get_settings(), patient=True)
     if args.relabel:
         df = pd.read_csv(RAW, encoding="utf-8-sig")[["text", "sentiment", "situation", "domain", "style"]]
     else:
         rng = random.Random(args.seed)
         seeds = pd.read_csv(PROJECT_ROOT / "data/supplement/seed_inquiries.csv", encoding="utf-8-sig")["text"].tolist()
-        jobs = [(s, d, st, random.Random(rng.random())) for s in SITUATIONS for d in DOMAINS
+        jobs = [(s, d, st, random.Random(rng.random())) for s in situations for d in DOMAINS
                 for st in [STYLES[rng.randrange(len(STYLES))]]]
         with ThreadPoolExecutor(args.workers) as pool:
             rows = [r for rs in pool.map(lambda j: generate(llm, j, args.per_request, seeds), jobs) for r in rs]
@@ -170,6 +194,19 @@ def main():
     wrong = kept["model_pred"] != kept["category"]
     print(f"\n[저장] {OUT} ({len(kept)}건, 지금 모델과 다른 문장 {int(wrong.sum())}건)")
     print(Counter(zip(kept.loc[wrong, "category"], kept.loc[wrong, "model_pred"])).most_common(8))
+
+
+def mix(other: int, seed: int):
+    """1차 기타(표기 알림)는 상황별로 고르게 other개만, 1차의 나머지와 2차는 전부"""
+    one = pd.read_csv(ROUNDS[1][2], encoding="utf-8-sig")
+    two = pd.read_csv(ROUNDS[2][2], encoding="utf-8-sig")
+    o = one[one["category"] == "기타"]
+    per = o.groupby("subtype")["text"].transform("size") / len(o)
+    keep = o.sample(n=min(other, len(o)), weights=per, random_state=seed)
+    out = pd.concat([keep, one[one["category"] != "기타"], two]).sample(frac=1, random_state=seed)
+    out.to_csv(MIX, index=False, encoding="utf-8-sig")
+    print(f"[저장] {MIX} ({len(out)}건)")
+    print(out["category"].value_counts().to_string())
 
 
 if __name__ == "__main__":

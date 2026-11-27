@@ -109,3 +109,32 @@ def test_change_outside_boundary_is_ignored():
     assert new["scores"]["page_recheck"] == {"model": "쿠폰·적립금·회원", "llm": "교환", "changed": False, "ignored": True}
     moved = apply_recheck(a, "마이페이지 이름이 틀리게 나와요", "기타")   # 기타로 가면 사람에게 (안전한 쪽)
     assert moved["category"] == "기타" and moved["route"] == "이관형"
+
+
+def test_export_recheck_records(db):
+    """재확인 기록 내보내기: 상담원 정답 > LLM 답, 실패·무시한 답과 재확인 없는 문의는 뺌"""
+    from backend.database.models import AnalysisResult, Inquiry, LabelCorrection
+    from backend.training.export_page_recheck import collect
+
+    recs = {"A": {"model": "상품", "llm": "기타", "changed": True},
+            "B": {"model": "상품", "llm": "기타", "changed": True},                          # 상담원이 상품으로 고침
+            "C": {"model": "상품", "llm": None, "changed": False, "error": "TimeoutError"},
+            "D": {"model": "쿠폰·적립금·회원", "llm": "교환", "changed": False, "ignored": True},
+            "E": None}
+    ids = {}
+    for n, rec in recs.items():
+        i = Inquiry(inquiry_number=f"INQ-P-{n}", customer_name="고객", customer_email="p@example.com", title="t",
+                    content=f"문의 {n}", status="담당자 처리")
+        db.add(i)
+        db.flush()
+        ids[n] = i.id
+        db.add(AnalysisResult(inquiry_id=i.id, category=(rec or {}).get("llm") or "상품", confidence=0.5,
+                              sentiment="중립", sentiment_confidence=0.9, urgency="보통", route="이관형",
+                              model_version="t", scores={"page_recheck": rec} if rec else {}))
+    db.add(LabelCorrection(inquiry_id=ids["B"], field="category", before_label="기타", after_label="상품",
+                           text="문의 B", corrected_by=1))
+    db.commit()
+    rows = {r["inquiry_number"][-1]: r for r in collect(db)}
+    assert set(rows) == {"A", "B"}
+    assert rows["A"]["category"] == "기타" and rows["A"]["source"] == "LLM"
+    assert rows["B"]["category"] == "상품" and rows["B"]["source"] == "상담원" and rows["B"]["llm_label"] == "기타"
