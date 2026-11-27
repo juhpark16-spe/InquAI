@@ -27,6 +27,7 @@ os.environ.update({
     "LOAD_MODELS": "false",
     "OPENAI_API_KEY": "",
     "GEMINI_API_KEY": "",
+    "OPENROUTER_API_KEY": "",
     "LLM_PROVIDER": "openai",
     "LANGSMITH_TRACING": "false",
     "MAIL_ENABLED": "false",

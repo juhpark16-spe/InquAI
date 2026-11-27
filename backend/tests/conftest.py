@@ -17,6 +17,7 @@ os.environ["COOKIE_SECURE"] = "false"
 os.environ["LOAD_MODELS"] = "false"   # 분류 모델·LLM은 테스트마다 가짜로 끼움 (test_inquiries.py)
 os.environ["OPENAI_API_KEY"] = ""
 os.environ["GEMINI_API_KEY"] = ""      # .env 에 Gemini 키가 있어도 테스트는 진짜 LLM을 만들지 않음
+os.environ["OPENROUTER_API_KEY"] = ""
 os.environ["LLM_PROVIDER"] = "openai"
 os.environ["LANGSMITH_TRACING"] = "false"   # 테스트 문의가 LangSmith에 쌓이지 않게
 os.environ["MAIL_ENABLED"] = "false"        # 개발 .env 가 메일을 켜도 테스트는 보내지 않음 (메일 테스트는 가짜 SMTP)

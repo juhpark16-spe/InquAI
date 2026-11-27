@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     app_name: str = "InquAI"
     database_url: str = "sqlite:///./data/inquai.db"
 
-    # LLM 회사: openai 또는 gemini. Gemini도 OpenAI와 같은 방식(OpenAI 호환 주소)으로 부름 (backend/ai/llm.py)
+    # LLM 회사: openai, gemini, openrouter. Gemini도 OpenAI와 같은 방식(OpenAI 호환 주소)으로 부름 (backend/ai/llm.py)
     llm_provider: str = "openai"
     # OpenAI (추론 강도 low: 1주차 프롬프트 검증에서 정확도·속도 균형이 가장 좋았음)
     openai_api_key: str = ""
@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     # lite가 아닌 flash 모델은 같은 요청에 20초 넘게 걸리거나 시간 초과 → 문의 1건 제한(20초)에 맞지 않음
     gemini_api_key: str = ""
     gemini_model: str = "gemini-3.5-flash-lite"
+    # OpenRouter (여러 회사 모델을 한 키로 부르는 중계 서비스). 증류 선생님을 gpt-5-mini 그대로 쓰려고 추가 (2026-11-27)
+    openrouter_api_key: str = ""
+    openrouter_model: str = "openai/gpt-5-mini"
     llm_reasoning_effort: str = "low"
     # 문의 등록 1건의 에이전트 처리 제한 시간. 넘으면 자동 답변 없이 '검토 대기' (docs/api_spec.md 3장)
     agent_timeout_seconds: float = 20.0
@@ -96,12 +99,15 @@ class Settings(BaseSettings):
 
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 
 def llm_connection(s: "Settings") -> tuple[str, str, str | None]:
     """(API 키, 모델, 접속 주소). 키가 비어 있으면 LLM 없이 동작"""
     if s.llm_provider.lower() == "gemini":
         return s.gemini_api_key, s.gemini_model, GEMINI_BASE_URL
+    if s.llm_provider.lower() == "openrouter":
+        return s.openrouter_api_key, s.openrouter_model, OPENROUTER_BASE_URL
     return s.openai_api_key, s.openai_model, None
 
 
