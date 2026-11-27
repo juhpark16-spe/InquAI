@@ -23,13 +23,15 @@ class LLM:
 
         self.client = wrap_openai(OpenAI(api_key=key, base_url=base_url, max_retries=6 if patient else 0))
         self.model = model
+        # 추론 강도는 추론 모델(gpt-5 계열 등)에만 보냄. gpt-4o-mini처럼 지원하지 않는 모델은 LLM_REASONING_EFFORT= (비움)
         self.effort = settings.llm_reasoning_effort
-        self.label = f"{self.model} (reasoning_effort={self.effort})"
+        self.label = f"{self.model} (reasoning_effort={self.effort})" if self.effort else self.model
 
     def json(self, system: str, user: str, schema: dict, name: str, timeout: float) -> tuple[dict, dict]:
         """(결과, 토큰 수). 시간 초과·API 오류는 예외로 올라갑니다."""
+        extra = {"reasoning_effort": self.effort} if self.effort else {}
         resp = self.client.chat.completions.create(
-            model=self.model, reasoning_effort=self.effort, timeout=timeout,
+            model=self.model, timeout=timeout, **extra,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             response_format={"type": "json_schema", "json_schema": {"name": name, "strict": True, "schema": schema}},
         )
