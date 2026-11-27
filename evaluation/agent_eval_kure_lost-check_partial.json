@@ -1,0 +1,482 @@
+{
+ "meta": {
+  "run_at": "2026-11-27 21:28",
+  "engine": "kure",
+  "llm": "gpt-5-mini (reasoning_effort=low)",
+  "cases": 2,
+  "repeat": 3
+ },
+ "summary": {
+  "decision": {
+   "ok": 3,
+   "n": 6
+  },
+  "tool": {
+   "ok": 3,
+   "n": 6
+  },
+  "faq": {
+   "ok": 0,
+   "n": 0
+  },
+  "safe": {
+   "ok": 0,
+   "n": 0
+  },
+  "no_promise": {
+   "ok": 3,
+   "n": 3
+  },
+  "draft": {
+   "ok": 0,
+   "n": 0
+  },
+  "no_error": {
+   "ok": 6,
+   "n": 6
+  },
+  "latency_ms": {
+   "avg": 4697,
+   "max": 9921,
+   "llm_avg": 9275
+  },
+  "draft_ms": null,
+  "tokens": {
+   "output": 1665,
+   "calls": 6,
+   "input": 5355
+  },
+  "decisions": {
+   "담당자 연결": 3,
+   "자동 답변": 3
+  }
+ },
+ "rows": [
+  {
+   "id": "S005",
+   "text": "택배 기사님은 배송완료라고 찍으셨는데 문 앞에 아무것도 없어요!! 분실된 것 같은데 빨리 찾아주시든지 조치해주세요 급해요!",
+   "expected_decision": [
+    "담당자 연결"
+   ],
+   "expected_tool": [
+    "상담원 이관"
+   ],
+   "expected_faqs": [],
+   "point": "배송 완료인데 분실 의심 → 긴급도 규칙(분실 의심)으로 담당자 연결 (2026-11-27)",
+   "source": "seed_inquiries.csv INQ_0005",
+   "category": "배송",
+   "sentiment": "부정",
+   "run": 1,
+   "analysis": {
+    "category": "배송",
+    "confidence": 0.9353,
+    "sentiment": "부정",
+    "urgency": "높음",
+    "route": "조회형"
+   },
+   "decided_by": "규칙",
+   "decision": "담당자 연결",
+   "tool": "상담원 이관",
+   "reason": "긴급도 높음",
+   "retrieved_faqs": [
+    [
+     "F26",
+     0.697
+    ],
+    [
+     "F23",
+     0.636
+    ],
+    [
+     "F27",
+     0.576
+    ]
+   ],
+   "used_faq_ids": [],
+   "answer": null,
+   "grounded": null,
+   "check_points": [],
+   "error": null,
+   "tokens": {
+    "output": 0,
+    "calls": 0,
+    "input": 0
+   },
+   "latency_ms": 30,
+   "draft_ms": null,
+   "steps": [
+    "FAQ 검색",
+    "규칙 판단",
+    "주문 본인 확인",
+    "상담원 이관"
+   ],
+   "wall_ms": 30,
+   "checks": {
+    "decision": true,
+    "tool": true,
+    "faq": null,
+    "safe": null,
+    "no_promise": null,
+    "draft": null,
+    "no_error": true
+   }
+  },
+  {
+   "id": "S043",
+   "text": "회사 행사 기념품으로 텀블러 200개 정도 대량 구매하려고 하는데 견적서 발급이나 대량 할인 문의는 어디로 드리면 될까요?",
+   "expected_decision": [
+    "담당자 연결"
+   ],
+   "expected_tool": [
+    "상담원 이관"
+   ],
+   "expected_faqs": [],
+   "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+   "source": "seed_inquiries.csv INQ_0043",
+   "category": "기타",
+   "sentiment": "중립",
+   "run": 1,
+   "analysis": {
+    "category": "쿠폰·적립금·회원",
+    "confidence": 0.8606,
+    "sentiment": "중립",
+    "urgency": "낮음",
+    "route": "FAQ형"
+   },
+   "decided_by": "LLM",
+   "decision": "자동 답변",
+   "tool": "FAQ 검색",
+   "reason": "분류 모델은 '쿠폰·적립금·회원'으로 예측했으나 고객 문의는 회사 행사 기념품 대량 주문(견적/단체 할인) 문의임. 검색된 FAQ F48이 해당 내용에 직접 답함.",
+   "retrieved_faqs": [
+    [
+     "F48",
+     0.654
+    ],
+    [
+     "F05",
+     0.48
+    ],
+    [
+     "F30",
+     0.488
+    ]
+   ],
+   "used_faq_ids": [
+    "F48"
+   ],
+   "answer": "단체 주문은 50장 이상인 경우 담당 부서에서 별도 견적을 안내해 드립니다. 원하시는 색상·사이즈별 수량을 알려주시면 견적서를 보내 드리니, 그 정보를 알려주세요. 담당 부서에서 확인해 안내해 드리겠습니다.",
+   "grounded": true,
+   "check_points": [],
+   "error": null,
+   "tokens": {
+    "output": 567,
+    "calls": 2,
+    "input": 1785
+   },
+   "latency_ms": 9921,
+   "draft_ms": null,
+   "steps": [
+    "FAQ 검색",
+    "규칙 판단",
+    "LLM 판단",
+    "주문 본인 확인",
+    "FAQ 답변",
+    "답변 검사"
+   ],
+   "wall_ms": 9921,
+   "checks": {
+    "decision": false,
+    "tool": false,
+    "faq": null,
+    "safe": null,
+    "no_promise": true,
+    "draft": null,
+    "no_error": true
+   }
+  },
+  {
+   "id": "S005",
+   "text": "택배 기사님은 배송완료라고 찍으셨는데 문 앞에 아무것도 없어요!! 분실된 것 같은데 빨리 찾아주시든지 조치해주세요 급해요!",
+   "expected_decision": [
+    "담당자 연결"
+   ],
+   "expected_tool": [
+    "상담원 이관"
+   ],
+   "expected_faqs": [],
+   "point": "배송 완료인데 분실 의심 → 긴급도 규칙(분실 의심)으로 담당자 연결 (2026-11-27)",
+   "source": "seed_inquiries.csv INQ_0005",
+   "category": "배송",
+   "sentiment": "부정",
+   "run": 2,
+   "analysis": {
+    "category": "배송",
+    "confidence": 0.9353,
+    "sentiment": "부정",
+    "urgency": "높음",
+    "route": "조회형"
+   },
+   "decided_by": "규칙",
+   "decision": "담당자 연결",
+   "tool": "상담원 이관",
+   "reason": "긴급도 높음",
+   "retrieved_faqs": [
+    [
+     "F26",
+     0.697
+    ],
+    [
+     "F23",
+     0.636
+    ],
+    [
+     "F27",
+     0.576
+    ]
+   ],
+   "used_faq_ids": [],
+   "answer": null,
+   "grounded": null,
+   "check_points": [],
+   "error": null,
+   "tokens": {
+    "output": 0,
+    "calls": 0,
+    "input": 0
+   },
+   "latency_ms": 140,
+   "draft_ms": null,
+   "steps": [
+    "FAQ 검색",
+    "규칙 판단",
+    "주문 본인 확인",
+    "상담원 이관"
+   ],
+   "wall_ms": 140,
+   "checks": {
+    "decision": true,
+    "tool": true,
+    "faq": null,
+    "safe": null,
+    "no_promise": null,
+    "draft": null,
+    "no_error": true
+   }
+  },
+  {
+   "id": "S043",
+   "text": "회사 행사 기념품으로 텀블러 200개 정도 대량 구매하려고 하는데 견적서 발급이나 대량 할인 문의는 어디로 드리면 될까요?",
+   "expected_decision": [
+    "담당자 연결"
+   ],
+   "expected_tool": [
+    "상담원 이관"
+   ],
+   "expected_faqs": [],
+   "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+   "source": "seed_inquiries.csv INQ_0043",
+   "category": "기타",
+   "sentiment": "중립",
+   "run": 2,
+   "analysis": {
+    "category": "쿠폰·적립금·회원",
+    "confidence": 0.8606,
+    "sentiment": "중립",
+    "urgency": "낮음",
+    "route": "FAQ형"
+   },
+   "decided_by": "LLM",
+   "decision": "자동 답변",
+   "tool": "FAQ 검색",
+   "reason": "분류 모델은 '쿠폰·적립금·회원'으로 예측했으나 문의 내용은 단체(대량) 주문 견적/할인 문의로, 검색된 FAQ 중 F48(단체 주문 별도 견적 안내)이 직접 답을 제공하므로 자동 답변 처리합니다.",
+   "retrieved_faqs": [
+    [
+     "F48",
+     0.654
+    ],
+    [
+     "F05",
+     0.48
+    ],
+    [
+     "F30",
+     0.488
+    ]
+   ],
+   "used_faq_ids": [
+    "F48"
+   ],
+   "answer": "단체 주문의 경우 50장 이상이면 담당 부서에서 별도 견적을 안내해 드립니다. 원하시는 색상·사이즈별 수량을 알려주시면 견적서를 보내 드리겠습니다.",
+   "grounded": true,
+   "check_points": [],
+   "error": null,
+   "tokens": {
+    "output": 497,
+    "calls": 2,
+    "input": 1785
+   },
+   "latency_ms": 8500,
+   "draft_ms": null,
+   "steps": [
+    "FAQ 검색",
+    "규칙 판단",
+    "LLM 판단",
+    "주문 본인 확인",
+    "FAQ 답변",
+    "답변 검사"
+   ],
+   "wall_ms": 8500,
+   "checks": {
+    "decision": false,
+    "tool": false,
+    "faq": null,
+    "safe": null,
+    "no_promise": true,
+    "draft": null,
+    "no_error": true
+   }
+  },
+  {
+   "id": "S005",
+   "text": "택배 기사님은 배송완료라고 찍으셨는데 문 앞에 아무것도 없어요!! 분실된 것 같은데 빨리 찾아주시든지 조치해주세요 급해요!",
+   "expected_decision": [
+    "담당자 연결"
+   ],
+   "expected_tool": [
+    "상담원 이관"
+   ],
+   "expected_faqs": [],
+   "point": "배송 완료인데 분실 의심 → 긴급도 규칙(분실 의심)으로 담당자 연결 (2026-11-27)",
+   "source": "seed_inquiries.csv INQ_0005",
+   "category": "배송",
+   "sentiment": "부정",
+   "run": 3,
+   "analysis": {
+    "category": "배송",
+    "confidence": 0.9353,
+    "sentiment": "부정",
+    "urgency": "높음",
+    "route": "조회형"
+   },
+   "decided_by": "규칙",
+   "decision": "담당자 연결",
+   "tool": "상담원 이관",
+   "reason": "긴급도 높음",
+   "retrieved_faqs": [
+    [
+     "F26",
+     0.697
+    ],
+    [
+     "F23",
+     0.636
+    ],
+    [
+     "F27",
+     0.576
+    ]
+   ],
+   "used_faq_ids": [],
+   "answer": null,
+   "grounded": null,
+   "check_points": [],
+   "error": null,
+   "tokens": {
+    "output": 0,
+    "calls": 0,
+    "input": 0
+   },
+   "latency_ms": 187,
+   "draft_ms": null,
+   "steps": [
+    "FAQ 검색",
+    "규칙 판단",
+    "주문 본인 확인",
+    "상담원 이관"
+   ],
+   "wall_ms": 187,
+   "checks": {
+    "decision": true,
+    "tool": true,
+    "faq": null,
+    "safe": null,
+    "no_promise": null,
+    "draft": null,
+    "no_error": true
+   }
+  },
+  {
+   "id": "S043",
+   "text": "회사 행사 기념품으로 텀블러 200개 정도 대량 구매하려고 하는데 견적서 발급이나 대량 할인 문의는 어디로 드리면 될까요?",
+   "expected_decision": [
+    "담당자 연결"
+   ],
+   "expected_tool": [
+    "상담원 이관"
+   ],
+   "expected_faqs": [],
+   "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+   "source": "seed_inquiries.csv INQ_0043",
+   "category": "기타",
+   "sentiment": "중립",
+   "run": 3,
+   "analysis": {
+    "category": "쿠폰·적립금·회원",
+    "confidence": 0.8606,
+    "sentiment": "중립",
+    "urgency": "낮음",
+    "route": "FAQ형"
+   },
+   "decided_by": "LLM",
+   "decision": "자동 답변",
+   "tool": "FAQ 검색",
+   "reason": "분류 모델은 쿠폰·적립금·회원으로 예측했으나 문의 내용은 단체(대량) 주문 견적/할인 문의입니다. 검색된 FAQ[F48]이 정확히 해당 내용(50장 이상은 담당 부서에서 별도 견적 안내, 색상·사이즈별 수량 필요)을 안내하므로 자동 답변(FAQ)을 제공합니다.",
+   "retrieved_faqs": [
+    [
+     "F48",
+     0.654
+    ],
+    [
+     "F05",
+     0.48
+    ],
+    [
+     "F30",
+     0.488
+    ]
+   ],
+   "used_faq_ids": [
+    "F48"
+   ],
+   "answer": "단체 주문은 50장(개) 이상인 경우 별도 견적을 안내해 드립니다. 원하시는 색상·사이즈별 수량을 알려주시면 담당 부서에서 견적서를 보내드립니다. 색상·사이즈별 수량 정보를 준비하셔서 문의해 주시기 바랍니다.",
+   "grounded": true,
+   "check_points": [],
+   "error": null,
+   "tokens": {
+    "output": 601,
+    "calls": 2,
+    "input": 1785
+   },
+   "latency_ms": 9405,
+   "draft_ms": null,
+   "steps": [
+    "FAQ 검색",
+    "규칙 판단",
+    "LLM 판단",
+    "주문 본인 확인",
+    "FAQ 답변",
+    "답변 검사"
+   ],
+   "wall_ms": 9405,
+   "checks": {
+    "decision": false,
+    "tool": false,
+    "faq": null,
+    "safe": null,
+    "no_promise": true,
+    "draft": null,
+    "no_error": true
+   }
+  }
+ ]
+}
