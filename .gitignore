@@ -45,3 +45,6 @@ frontend/playwright-report/
 
 # Claude Code 로컬 설정 (미리보기 서버 launch.json 등, 사람마다 다름)
 .claude/
+
+# 평가 스크립트가 실행할 때마다 다시 만드는 결과 (예: evaluate_page_check → reports/page_check_eval.json)
+reports/
