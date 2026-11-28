@@ -1,0 +1,697 @@
+{
+ "meta": {
+  "run_at": "2026-11-28 14:37",
+  "engine": "kure",
+  "llm": "gpt-5-mini (reasoning_effort=low)",
+  "cases": 3,
+  "repeat": 3
+ },
+ "summary": {
+  "decision": {
+   "ok": 9,
+   "n": 9
+  },
+  "tool": {
+   "ok": 9,
+   "n": 9
+  },
+  "faq": {
+   "ok": 0,
+   "n": 0
+  },
+  "safe": {
+   "ok": 0,
+   "n": 0
+  },
+  "no_promise": {
+   "ok": 3,
+   "n": 3
+  },
+  "draft": {
+   "ok": 3,
+   "n": 3
+  },
+  "no_error": {
+   "ok": 9,
+   "n": 9
+  },
+  "latency_ms": {
+   "avg": 4699,
+   "max": 9875,
+   "llm_avg": 6994
+  },
+  "draft_ms": null,
+  "tokens": {
+   "calls": 9,
+   "input": 9467,
+   "output": 3448
+  },
+  "decisions": {
+   "답변 초안": 3,
+   "담당자 연결": 6
+  }
+ },
+ "rows": [
+  {
+   "id": "S027",
+   "text": "회사 법인카드로 결제했는데 제출용 거래명세서랑 영수증은 어디에서 출력할 수 있나요?",
+   "expected_decision": [
+    "자동 답변",
+    "답변 초안"
+   ],
+   "expected_tool": [
+    "FAQ 검색"
+   ],
+   "expected_faqs": [],
+   "point": "법인카드는 매출전표가 증빙(F37)",
+   "source": "seed_inquiries.csv INQ_0027",
+   "category": "결제",
+   "sentiment": "중립",
+   "run": 1,
+   "analysis": {
+    "category": "결제",
+    "confidence": 0.9312,
+    "sentiment": "중립",
+    "urgency": "낮음",
+    "route": "FAQ형"
+   },
+   "decided_by": "LLM",
+   "decision": "답변 초안",
+   "tool": "FAQ 검색",
+   "reason": "질문은 결제 관련 일반 안내(법인카드 결제 시 증빙서류 출력 방법)이며, 검색된 FAQ F37이 카드 결제의 경우 카드 매출전표가 증빙서류가 되어 별도 세금계산서 발급이 되지 않는다고 직접 답하고 있어 자동 답변 처리에 적합합니다. / FAQ 근거 부족으로 초안 전환",
+   "retrieved_faqs": [
+    [
+     "F37",
+     0.679
+    ],
+    [
+     "F01",
+     0.63
+    ],
+    [
+     "F04",
+     0.53
+    ]
+   ],
+   "used_faq_ids": [
+    "F37"
+   ],
+   "answer": "법인카드로 결제하신 경우 카드 매출전표가 증빙 서류가 되어 세금계산서는 별도 발급되지 않습니다. 거래명세서나 영수증 출력 방법은 확인 후 안내해드리겠습니다.",
+   "grounded": false,
+   "check_points": [],
+   "error": null,
+   "tokens": {
+    "calls": 2,
+    "input": 1834,
+    "output": 831
+   },
+   "latency_ms": 9875,
+   "draft_ms": null,
+   "steps": [
+    "FAQ 검색",
+    "규칙 판단",
+    "LLM 판단",
+    "주문 본인 확인",
+    "FAQ 답변",
+    "답변 검사"
+   ],
+   "wall_ms": 9875,
+   "checks": {
+    "decision": true,
+    "tool": true,
+    "faq": null,
+    "safe": null,
+    "no_promise": true,
+    "draft": true,
+    "no_error": true
+   }
+  },
+  {
+   "id": "S043",
+   "text": "회사 행사 기념품으로 텀블러 200개 정도 대량 구매하려고 하는데 견적서 발급이나 대량 할인 문의는 어디로 드리면 될까요?",
+   "expected_decision": [
+    "담당자 연결"
+   ],
+   "expected_tool": [
+    "상담원 이관"
+   ],
+   "expected_faqs": [],
+   "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+   "source": "seed_inquiries.csv INQ_0043",
+   "category": "기타",
+   "sentiment": "중립",
+   "run": 1,
+   "analysis": {
+    "category": "쿠폰·적립금·회원",
+    "confidence": 0.8606,
+    "sentiment": "중립",
+    "urgency": "낮음",
+    "route": "FAQ형"
+   },
+   "decided_by": "LLM",
+   "decision": "담당자 연결",
+   "tool": "상담원 이관",
+   "reason": "문의 내용은 '회사 행사 기념품으로 텀블러 200개 정도 대량 구매'로 단체·대량 주문에 대한 견적·할인 요청입니다. 분류 모델은 쿠폰·회원 유형·FAQ형으로 예측했으나(모델 확신도 0.86) 해당 문의는 담당 부서의 별도 견적/대응이 필요한 사례이므로 상담원 이관(담당자 연결) 처리해야 합니다. 검색된 FAQ [F48]이 관련 안내를 포함하나, 안내대로 담당자가 확인 후 연락해야 하므로 자동 답변이나 단순 FAQ 안내로는 처리할 수 없습니다.",
+   "retrieved_faqs": [
+    [
+     "F48",
+     0.607
+    ],
+    [
+     "F05",
+     0.48
+    ],
+    [
+     "F30",
+     0.488
+    ]
+   ],
+   "used_faq_ids": [],
+   "answer": null,
+   "grounded": null,
+   "check_points": [],
+   "error": null,
+   "tokens": {
+    "calls": 1,
+    "input": 1243,
+    "output": 432
+   },
+   "latency_ms": 4358,
+   "draft_ms": null,
+   "steps": [
+    "FAQ 검색",
+    "규칙 판단",
+    "LLM 판단",
+    "주문 본인 확인",
+    "상담원 이관"
+   ],
+   "wall_ms": 4358,
+   "checks": {
+    "decision": true,
+    "tool": true,
+    "faq": null,
+    "safe": null,
+    "no_promise": null,
+    "draft": null,
+    "no_error": true
+   }
+  },
+  {
+   "id": "S121",
+   "text": "유튜브 패션 크리에이터인데 귀사 신상품 협찬 및 브랜디드 콘텐츠 제휴 제안을 드리고 싶습니다. 마케팅 담당자님 이메일 주소 알 수 있을까요?",
+   "expected_decision": [
+    "담당자 연결"
+   ],
+   "expected_tool": [
+    "상담원 이관"
+   ],
+   "expected_faqs": [],
+   "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+   "source": "seed_inquiries.csv INQ_0121",
+   "category": "기타",
+   "sentiment": "중립",
+   "run": 1,
+   "analysis": {
+    "category": "기타",
+    "confidence": 0.9334,
+    "sentiment": "중립",
+    "urgency": "보통",
+    "route": "이관형"
+   },
+   "decided_by": "규칙",
+   "decision": "담당자 연결",
+   "tool": "상담원 이관",
+   "reason": "기타 유형(이관형)",
+   "retrieved_faqs": [
+    [
+     "F39",
+     0.491
+    ],
+    [
+     "F26",
+     0.469
+    ],
+    [
+     "F48",
+     0.448
+    ]
+   ],
+   "used_faq_ids": [],
+   "answer": null,
+   "grounded": null,
+   "check_points": [],
+   "error": null,
+   "tokens": {
+    "calls": 0,
+    "input": 0,
+    "output": 0
+   },
+   "latency_ms": 94,
+   "draft_ms": null,
+   "steps": [
+    "FAQ 검색",
+    "규칙 판단",
+    "주문 본인 확인",
+    "상담원 이관"
+   ],
+   "wall_ms": 94,
+   "checks": {
+    "decision": true,
+    "tool": true,
+    "faq": null,
+    "safe": null,
+    "no_promise": null,
+    "draft": null,
+    "no_error": true
+   }
+  },
+  {
+   "id": "S027",
+   "text": "회사 법인카드로 결제했는데 제출용 거래명세서랑 영수증은 어디에서 출력할 수 있나요?",
+   "expected_decision": [
+    "자동 답변",
+    "답변 초안"
+   ],
+   "expected_tool": [
+    "FAQ 검색"
+   ],
+   "expected_faqs": [],
+   "point": "법인카드는 매출전표가 증빙(F37)",
+   "source": "seed_inquiries.csv INQ_0027",
+   "category": "결제",
+   "sentiment": "중립",
+   "run": 2,
+   "analysis": {
+    "category": "결제",
+    "confidence": 0.9312,
+    "sentiment": "중립",
+    "urgency": "낮음",
+    "route": "FAQ형"
+   },
+   "decided_by": "LLM",
+   "decision": "답변 초안",
+   "tool": "FAQ 검색",
+   "reason": "문의는 결제 영수증/거래명세서 출력 방법을 묻는 일반 안내 문의로, 검색된 FAQ(F37: 세금계산서 안내, F01: 현금영수증 안내)가 직접 답변할 수 있음. 결제 수단이 법인카드인 경우 카드 매출전표가 증빙서류가 되므로 FAQ 내용을 안내해 자동 답변 처리함. / FAQ 근거 부족으로 초안 전환",
+   "retrieved_faqs": [
+    [
+     "F37",
+     0.679
+    ],
+    [
+     "F01",
+     0.63
+    ],
+    [
+     "F04",
+     0.53
+    ]
+   ],
+   "used_faq_ids": [
+    "F37",
+    "F01"
+   ],
+   "answer": "법인카드로 결제하신 경우 카드 매출전표가 증빙서류(영수증)를 대신하므로 별도의 세금계산서는 발급되지 않습니다. 거래명세서 출력 방법은 FAQ에 안내된 내용이 없어 확인 후 별도 안내드리겠습니다.",
+   "grounded": false,
+   "check_points": [],
+   "error": null,
+   "tokens": {
+    "calls": 2,
+    "input": 1952,
+    "output": 668
+   },
+   "latency_ms": 8000,
+   "draft_ms": null,
+   "steps": [
+    "FAQ 검색",
+    "규칙 판단",
+    "LLM 판단",
+    "주문 본인 확인",
+    "FAQ 답변",
+    "답변 검사"
+   ],
+   "wall_ms": 8000,
+   "checks": {
+    "decision": true,
+    "tool": true,
+    "faq": null,
+    "safe": null,
+    "no_promise": true,
+    "draft": true,
+    "no_error": true
+   }
+  },
+  {
+   "id": "S043",
+   "text": "회사 행사 기념품으로 텀블러 200개 정도 대량 구매하려고 하는데 견적서 발급이나 대량 할인 문의는 어디로 드리면 될까요?",
+   "expected_decision": [
+    "담당자 연결"
+   ],
+   "expected_tool": [
+    "상담원 이관"
+   ],
+   "expected_faqs": [],
+   "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+   "source": "seed_inquiries.csv INQ_0043",
+   "category": "기타",
+   "sentiment": "중립",
+   "run": 2,
+   "analysis": {
+    "category": "쿠폰·적립금·회원",
+    "confidence": 0.8606,
+    "sentiment": "중립",
+    "urgency": "낮음",
+    "route": "FAQ형"
+   },
+   "decided_by": "LLM",
+   "decision": "담당자 연결",
+   "tool": "상담원 이관",
+   "reason": "문의 내용은 단체·대량 구매(텀블러 200개)로 담당 부서의 별도 견적·할인 검토가 필요한 요청입니다. 분류 모델은 '쿠폰·적립금·회원'으로 나왔으나(확신도 0.86) 실제 문의와 불일치합니다. 검색에서 유사 FAQ(F48)가 일부 관련되나, 단체·대량 주문은 담당 부서에서 처리해야 하므로 상담원 이관이 적절합니다.",
+   "retrieved_faqs": [
+    [
+     "F48",
+     0.607
+    ],
+    [
+     "F05",
+     0.48
+    ],
+    [
+     "F30",
+     0.488
+    ]
+   ],
+   "used_faq_ids": [],
+   "answer": null,
+   "grounded": null,
+   "check_points": [],
+   "error": null,
+   "tokens": {
+    "calls": 1,
+    "input": 1243,
+    "output": 529
+   },
+   "latency_ms": 5889,
+   "draft_ms": null,
+   "steps": [
+    "FAQ 검색",
+    "규칙 판단",
+    "LLM 판단",
+    "주문 본인 확인",
+    "상담원 이관"
+   ],
+   "wall_ms": 5889,
+   "checks": {
+    "decision": true,
+    "tool": true,
+    "faq": null,
+    "safe": null,
+    "no_promise": null,
+    "draft": null,
+    "no_error": true
+   }
+  },
+  {
+   "id": "S121",
+   "text": "유튜브 패션 크리에이터인데 귀사 신상품 협찬 및 브랜디드 콘텐츠 제휴 제안을 드리고 싶습니다. 마케팅 담당자님 이메일 주소 알 수 있을까요?",
+   "expected_decision": [
+    "담당자 연결"
+   ],
+   "expected_tool": [
+    "상담원 이관"
+   ],
+   "expected_faqs": [],
+   "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+   "source": "seed_inquiries.csv INQ_0121",
+   "category": "기타",
+   "sentiment": "중립",
+   "run": 2,
+   "analysis": {
+    "category": "기타",
+    "confidence": 0.9334,
+    "sentiment": "중립",
+    "urgency": "보통",
+    "route": "이관형"
+   },
+   "decided_by": "규칙",
+   "decision": "담당자 연결",
+   "tool": "상담원 이관",
+   "reason": "기타 유형(이관형)",
+   "retrieved_faqs": [
+    [
+     "F39",
+     0.491
+    ],
+    [
+     "F26",
+     0.469
+    ],
+    [
+     "F48",
+     0.448
+    ]
+   ],
+   "used_faq_ids": [],
+   "answer": null,
+   "grounded": null,
+   "check_points": [],
+   "error": null,
+   "tokens": {
+    "calls": 0,
+    "input": 0,
+    "output": 0
+   },
+   "latency_ms": 202,
+   "draft_ms": null,
+   "steps": [
+    "FAQ 검색",
+    "규칙 판단",
+    "주문 본인 확인",
+    "상담원 이관"
+   ],
+   "wall_ms": 202,
+   "checks": {
+    "decision": true,
+    "tool": true,
+    "faq": null,
+    "safe": null,
+    "no_promise": null,
+    "draft": null,
+    "no_error": true
+   }
+  },
+  {
+   "id": "S027",
+   "text": "회사 법인카드로 결제했는데 제출용 거래명세서랑 영수증은 어디에서 출력할 수 있나요?",
+   "expected_decision": [
+    "자동 답변",
+    "답변 초안"
+   ],
+   "expected_tool": [
+    "FAQ 검색"
+   ],
+   "expected_faqs": [],
+   "point": "법인카드는 매출전표가 증빙(F37)",
+   "source": "seed_inquiries.csv INQ_0027",
+   "category": "결제",
+   "sentiment": "중립",
+   "run": 3,
+   "analysis": {
+    "category": "결제",
+    "confidence": 0.9312,
+    "sentiment": "중립",
+    "urgency": "낮음",
+    "route": "FAQ형"
+   },
+   "decided_by": "LLM",
+   "decision": "답변 초안",
+   "tool": "FAQ 검색",
+   "reason": "문의는 결제(법인카드) 관련 일반 안내로, 검색된 FAQ가 직접적으로 응답합니다. F37이 카드 결제의 경우 세금계산서 미발급 및 카드 매출전표가 증빙서류임을 안내하고 있으며, F01은 카드 결제 시 카드 매출전표가 영수증을 대신한다는 내용을 담고 있어 자동 안내로 처리하면 적절합니다. 분류 모델의 'FAQ형' 예측과 일치합니다. / FAQ 근거 부족으로 초안 전환",
+   "retrieved_faqs": [
+    [
+     "F37",
+     0.679
+    ],
+    [
+     "F01",
+     0.63
+    ],
+    [
+     "F04",
+     0.53
+    ]
+   ],
+   "used_faq_ids": [
+    "F37",
+    "F01"
+   ],
+   "answer": "법인카드로 결제하신 경우 카드 매출전표(카드사 발행 영수증)가 제출용 증빙서류가 되며, 별도의 세금계산서는 발급되지 않습니다. 영수증(현금영수증)은 카드결제의 경우 카드 매출전표로 대체됩니다. 다만 매출전표나 거래명세서 출력 방법은 FAQ에 정보가 없어 확인 후 안내해드리겠습니다.",
+   "grounded": false,
+   "check_points": [],
+   "error": null,
+   "tokens": {
+    "calls": 2,
+    "input": 1952,
+    "output": 658
+   },
+   "latency_ms": 9172,
+   "draft_ms": null,
+   "steps": [
+    "FAQ 검색",
+    "규칙 판단",
+    "LLM 판단",
+    "주문 본인 확인",
+    "FAQ 답변",
+    "답변 검사"
+   ],
+   "wall_ms": 9172,
+   "checks": {
+    "decision": true,
+    "tool": true,
+    "faq": null,
+    "safe": null,
+    "no_promise": true,
+    "draft": true,
+    "no_error": true
+   }
+  },
+  {
+   "id": "S043",
+   "text": "회사 행사 기념품으로 텀블러 200개 정도 대량 구매하려고 하는데 견적서 발급이나 대량 할인 문의는 어디로 드리면 될까요?",
+   "expected_decision": [
+    "담당자 연결"
+   ],
+   "expected_tool": [
+    "상담원 이관"
+   ],
+   "expected_faqs": [],
+   "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+   "source": "seed_inquiries.csv INQ_0043",
+   "category": "기타",
+   "sentiment": "중립",
+   "run": 3,
+   "analysis": {
+    "category": "쿠폰·적립금·회원",
+    "confidence": 0.8606,
+    "sentiment": "중립",
+    "urgency": "낮음",
+    "route": "FAQ형"
+   },
+   "decided_by": "LLM",
+   "decision": "담당자 연결",
+   "tool": "상담원 이관",
+   "reason": "고객은 회사 행사 기념품으로 텀블러 약 200개 대량 구매와 견적서 발급·대량 할인 문의를 하고 있습니다. 단체·대량 주문은 별도 견적과 담당 부서 확인이 필요한 요청으로, FAQ 안내가 있더라도 담당자 연결 처리해야 합니다. 참고: 분류 모델은 '쿠폰·적립금·회원'으로 예측했으나 문의 내용은 단체·대량 구매 관련임.",
+   "retrieved_faqs": [
+    [
+     "F48",
+     0.607
+    ],
+    [
+     "F05",
+     0.48
+    ],
+    [
+     "F30",
+     0.488
+    ]
+   ],
+   "used_faq_ids": [],
+   "answer": null,
+   "grounded": null,
+   "check_points": [],
+   "error": null,
+   "tokens": {
+    "calls": 1,
+    "input": 1243,
+    "output": 330
+   },
+   "latency_ms": 4672,
+   "draft_ms": null,
+   "steps": [
+    "FAQ 검색",
+    "규칙 판단",
+    "LLM 판단",
+    "주문 본인 확인",
+    "상담원 이관"
+   ],
+   "wall_ms": 4672,
+   "checks": {
+    "decision": true,
+    "tool": true,
+    "faq": null,
+    "safe": null,
+    "no_promise": null,
+    "draft": null,
+    "no_error": true
+   }
+  },
+  {
+   "id": "S121",
+   "text": "유튜브 패션 크리에이터인데 귀사 신상품 협찬 및 브랜디드 콘텐츠 제휴 제안을 드리고 싶습니다. 마케팅 담당자님 이메일 주소 알 수 있을까요?",
+   "expected_decision": [
+    "담당자 연결"
+   ],
+   "expected_tool": [
+    "상담원 이관"
+   ],
+   "expected_faqs": [],
+   "point": "규칙: 기타 유형(이관형) → 담당자 연결",
+   "source": "seed_inquiries.csv INQ_0121",
+   "category": "기타",
+   "sentiment": "중립",
+   "run": 3,
+   "analysis": {
+    "category": "기타",
+    "confidence": 0.9334,
+    "sentiment": "중립",
+    "urgency": "보통",
+    "route": "이관형"
+   },
+   "decided_by": "규칙",
+   "decision": "담당자 연결",
+   "tool": "상담원 이관",
+   "reason": "기타 유형(이관형)",
+   "retrieved_faqs": [
+    [
+     "F39",
+     0.491
+    ],
+    [
+     "F26",
+     0.469
+    ],
+    [
+     "F48",
+     0.448
+    ]
+   ],
+   "used_faq_ids": [],
+   "answer": null,
+   "grounded": null,
+   "check_points": [],
+   "error": null,
+   "tokens": {
+    "calls": 0,
+    "input": 0,
+    "output": 0
+   },
+   "latency_ms": 30,
+   "draft_ms": null,
+   "steps": [
+    "FAQ 검색",
+    "규칙 판단",
+    "주문 본인 확인",
+    "상담원 이관"
+   ],
+   "wall_ms": 30,
+   "checks": {
+    "decision": true,
+    "tool": true,
+    "faq": null,
+    "safe": null,
+    "no_promise": null,
+    "draft": null,
+    "no_error": true
+   }
+  }
+ ]
+}
