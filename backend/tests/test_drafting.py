@@ -295,6 +295,20 @@ def test_shop_side_problem_line_only_for_damage(client, db, ai):
     assert "[쇼핑몰 쪽 문제] 파손·불량·오배송 문의 → 첫 문장에 짧게 사과할 것" in build_input(db, broken, [], None)
 
 
+def test_shop_side_problem_line_for_payment_error_and_lost_parcel(client, db, ai):
+    """중복 결제·분실 의심도 쇼핑몰 쪽 문제 → 사과 신호 (2026-11-28 초안 평가 D08: 중복 결제 초안에 사과 없음)"""
+    from backend.agents.drafting import build_input
+    ai["analyzer"].next = {"confidence": 0.6}
+    paid, _ = saved(db, post(client, content="하나 주문했는데 카드 결제 문자가 두 번 왔어요. 확인 부탁드립니다.").json()["inquiry_number"])
+    ai["analyzer"].next = {"confidence": 0.6}
+    lost, _ = saved(db, post(client, content="배송 완료라고 나오는데 문 앞에도 경비실에도 없어요.").json()["inquiry_number"])
+    ai["analyzer"].next = {"confidence": 0.6}
+    question, _ = saved(db, post(client, content="중복 결제는 어떻게 처리되나요?").json()["inquiry_number"])
+    assert "[쇼핑몰 쪽 문제] 결제 오류·중복 결제 문의" in build_input(db, paid, [], None)
+    assert "[쇼핑몰 쪽 문제] 배송 완료인데 받지 못함(분실 의심)" in build_input(db, lost, [], None)
+    assert "[쇼핑몰 쪽 문제]" not in build_input(db, question, [], None)
+
+
 def test_draft_made_meanwhile_is_reused_not_duplicated(client, db, ai):
     """[AI 초안 만들기]를 빠르게 두 번 눌러 AI가 쓰는 사이 다른 요청이 초안을 만들었으면, 새로 만들지 않고 그 자리에 씀
     (INQ-20261125-0911: 1초 차이 두 요청이 초안을 2개 만들고, 하나를 보낸 뒤 다른 하나가 답변 칸에 다시 나타났음)"""

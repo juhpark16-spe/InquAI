@@ -26,3 +26,24 @@ def test_lost_parcel_is_urgent(text):
 def test_ordinary_shipping_question_is_not_lost(text):
     assert not is_lost_parcel(text)
     assert get_urgency("배송", "중립", text) == "낮음"
+
+
+@pytest.mark.parametrize("text", [
+    "ORD-2026-1042 하나 주문했는데 카드 결제 문자가 두 번 왔어요. 확인 부탁드립니다.",
+    "같은 금액이 두 번 결제됐어요.",
+    "중복 결제가 됐는데 하나 취소해 주세요.",
+    "결제하다가 오류가 났는데 돈은 빠져나갔어요.",
+])
+def test_payment_error(text):
+    from backend.ai.rules import is_payment_error
+    assert is_payment_error(text)
+
+
+@pytest.mark.parametrize("text", [
+    "중복 결제는 어떻게 하나요?",   # 일반 질문 (일어난 일이 아님)
+    "두 번 결제하면 무이자 할부가 되나요?",
+    "현금영수증은 어떻게 발급받을 수 있나요?",
+])
+def test_not_payment_error(text):
+    from backend.ai.rules import is_payment_error
+    assert not is_payment_error(text)

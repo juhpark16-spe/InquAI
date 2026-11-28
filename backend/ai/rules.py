@@ -4,6 +4,8 @@
 확신도가 낮거나 강한 불만이면 이관형으로 바꾸는 판단은 에이전트(LangGraph)가 합니다.
 """
 
+import re
+
 # 처리 경로 4갈래
 ROUTE_LOOKUP = "조회형"      # 배송 조회 도구
 ROUTE_TICKET = "접수형"      # 티켓 접수 도구 (티켓 종류만 다르게 저장)
@@ -46,6 +48,12 @@ DELIVERED_EXPRESSIONS = ["배송완료", "배달완료", "배송이완료", "배
 NOT_RECEIVED_EXPRESSIONS = ["없어", "없습니다", "없네", "없는데", "없더", "못받", "안왔", "못찾", "받은게없", "어디로간"]
 LOST_EXPRESSIONS = ["분실된것같", "분실된거같", "분실된듯", "분실됐", "분실되었", "도난당", "누가가져간"]
 
+# 결제 오류·중복 결제가 실제로 일어남 (초안의 [쇼핑몰 쪽 문제] 사과 신호, 2026-11-28 초안 평가 D08)
+#   "카드 결제 문자가 두 번 왔어요"에 사과가 없었음. "중복 결제는 어떻게 하나요?" 같은 일반 질문은 일어난 일이 아니라 제외
+PAYMENT_ERROR = re.compile(r"(두번|중복|이중)(결제|승인)(됐|되었|되어|이됐|이되|가됐|가되|문자|내역|건이|이찍|이빠)"
+                           r"|결제(가|문자가|문자|내역이|내역에)?두번(됐|되|왔|나갔|찍|승인)"
+                           r"|(돈|금액)(이|은|만)?빠져나갔")
+
 
 def get_route(category: str) -> str:
     """유형의 기본 처리 경로. 정의되지 않은 유형은 상담원 이관."""
@@ -55,6 +63,11 @@ def get_route(category: str) -> str:
 def has_urgent_expression(text: str) -> bool:
     compact = "".join(text.split())
     return any(expr in compact for expr in URGENT_EXPRESSIONS) or is_lost_parcel(compact)
+
+
+def is_payment_error(text: str) -> bool:
+    """결제 오류·중복 결제가 실제로 일어났다는 문의인지 (띄어쓰기는 무시)"""
+    return bool(PAYMENT_ERROR.search("".join(text.split())))
 
 
 def is_lost_parcel(text: str) -> bool:

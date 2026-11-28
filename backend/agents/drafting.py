@@ -21,6 +21,7 @@ from langsmith import traceable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from backend.ai import rules
 from backend.ai.prompts import DRAFT_PROMPT, DRAFT_SCHEMA, customer_text, find_promises
 from backend.rag.category_boost import search_with_category
 from backend.database.models import (AdminAuditLog, Attachment, CustomerMessage, Inquiry, ReplyTemplate, Response, Ticket,
@@ -158,9 +159,14 @@ def build_input(db: Session, inquiry: Inquiry, faqs: list[dict], analysis: dict 
     labels = ", ".join(a.label for a in photos if a.label)
     # 사과가 필요한 쇼핑몰 쪽 문제를 분명히 알려 줌 (파손 문의에 사과를 빠뜨리거나, '생각보다 작아요' 같은 고객 사정에 사과하지 않게)
     follow_text = " ".join(m.content for m in db.scalars(select(CustomerMessage).where(CustomerMessage.inquiry_id == inquiry.id)))
+    whole = f"{inquiry.title} {inquiry.content} {follow_text}"
     if (any(a.label == "파손 부위" for a in photos) or inquiry.photo_request
             or photo_evidence.needs_photos(inquiry.title, f"{inquiry.content} {follow_text}")):
         parts.append("[쇼핑몰 쪽 문제] 파손·불량·오배송 문의 → 첫 문장에 짧게 사과할 것")
+    elif rules.is_payment_error(whole):   # 2026-11-28 초안 평가 D08: 중복 결제 문의에 사과가 없었음
+        parts.append("[쇼핑몰 쪽 문제] 결제 오류·중복 결제 문의 → 첫 문장에 짧게 사과할 것")
+    elif rules.is_lost_parcel(whole):
+        parts.append("[쇼핑몰 쪽 문제] 배송 완료인데 받지 못함(분실 의심) → 첫 문장에 짧게 사과할 것")
     if photos:
         parts.append(f"[첨부 사진] {len(photos)}장" + (f" ({labels})" if labels else "") + " (너는 사진을 볼 수 없음)")
     elif inquiry.photo_request:   # 파손 문의인데 고객이 사진을 나중에 보내기로 함 → 답변에서 사진을 먼저 요청
